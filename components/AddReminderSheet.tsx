@@ -11,6 +11,7 @@ import {
   Platform,
   ScrollView,
   Dimensions,
+  Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -24,10 +25,6 @@ interface AddReminderSheetProps {
   editReminder?: Reminder | null;
 }
 
-const timeOptions = [
-  '09:00', '10:00', '11:00', '12:00', '13:00', '14:00',
-  '15:00', '16:00', '17:00', '18:00', '19:00', '20:00'
-];
 
 const repeatOptions = [
   { value: 'none' as const, label: 'No repeat' },
@@ -45,6 +42,7 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
   const [repeat, setRepeat] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
@@ -62,6 +60,27 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
       setRepeat('none');
     }
   }, [editReminder, isOpen]);
+
+  useEffect(() => {
+    const keyboardWillShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+
+    const keyboardWillHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardWillShowListener.remove();
+      keyboardWillHideListener.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -118,6 +137,18 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
     }
   };
 
+  const handleTimeChange = (event: any, selectedTime?: Date) => {
+    setShowTimePicker(Platform.OS === 'ios');
+    if (selectedTime) {
+      const timeString = selectedTime.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+      setTime(timeString);
+    }
+  };
+
   const formatDate = (d: Date) => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
@@ -153,6 +184,7 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
           styles.sheet,
           {
             transform: [{ translateY: slideAnim }],
+            marginBottom: keyboardHeight,
           },
         ]}
       >
@@ -184,7 +216,6 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
             placeholderTextColor={colors.mutedForeground}
             value={title}
             onChangeText={setTitle}
-            autoFocus
           />
 
           {/* Date & Time Row */}
@@ -195,7 +226,10 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
                 styles.pickerButton,
                 date && styles.pickerButtonActive,
               ]}
-              onPress={() => setShowDatePicker(true)}
+              onPress={() => {
+                setShowDatePicker(!showDatePicker);
+                setShowTimePicker(false);
+              }}
             >
               <Ionicons
                 name="calendar-outline"
@@ -216,7 +250,10 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
                 styles.pickerButton,
                 time && styles.pickerButtonActive,
               ]}
-              onPress={() => setShowTimePicker(!showTimePicker)}
+              onPress={() => {
+                setShowTimePicker(!showTimePicker);
+                setShowDatePicker(false);
+              }}
             >
               <Ionicons
                 name="time-outline"
@@ -232,32 +269,16 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
             </TouchableOpacity>
           </View>
 
-          {/* Time Options */}
+          {/* Time Picker Modal */}
           {showTimePicker && (
-            <View style={styles.timeOptionsContainer}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {timeOptions.map((t) => (
-                  <TouchableOpacity
-                    key={t}
-                    style={[
-                      styles.timeOption,
-                      time === t && styles.timeOptionActive,
-                    ]}
-                    onPress={() => {
-                      setTime(t);
-                      setShowTimePicker(false);
-                    }}
-                  >
-                    <Text style={[
-                      styles.timeOptionText,
-                      time === t && styles.timeOptionTextActive,
-                    ]}>
-                      {t}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
+            <DateTimePicker
+              value={new Date()} // Default to current time, you could parse existing time if editing
+              mode="time"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={handleTimeChange}
+              textColor={colors.foreground}
+              themeVariant="light"
+            />
           )}
 
           {/* Date Picker Modal (Android shows inline) */}
@@ -265,9 +286,12 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
             <DateTimePicker
               value={date || new Date()}
               mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              display={Platform.OS === 'ios' ? 'inline' : 'default'}
               onChange={handleDateChange}
               minimumDate={new Date()}
+              textColor={colors.foreground}
+              themeVariant="light"
+
             />
           )}
 
@@ -410,28 +434,6 @@ const styles = StyleSheet.create({
   },
   pickerButtonTextActive: {
     color: colors.foreground,
-  },
-  timeOptionsContainer: {
-    marginBottom: spacing.lg,
-    marginTop: -spacing.sm,
-  },
-  timeOption: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    borderRadius: borderRadius.md,
-    backgroundColor: colors.muted,
-    marginRight: spacing.sm,
-  },
-  timeOptionActive: {
-    backgroundColor: colors.primary,
-  },
-  timeOptionText: {
-    fontFamily: typography.fontFamily.regular,
-    fontSize: typography.fontSize.base,
-    color: colors.foreground,
-  },
-  timeOptionTextActive: {
-    color: colors.primaryForeground,
   },
   repeatSection: {
     marginBottom: spacing.xl,
