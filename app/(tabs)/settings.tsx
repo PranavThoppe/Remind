@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -7,16 +7,20 @@ import {
   ScrollView,
   Animated,
   Platform,
+  Image,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows, spacing, borderRadius, typography } from '../../constants/theme';
+import { supabase } from '../../lib/supabase';
+import { User } from '@supabase/supabase-js';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(8)).current;
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
     Animated.parallel([
@@ -31,10 +35,24 @@ export default function SettingsScreen() {
         useNativeDriver: true,
       }),
     ]).start();
+
+    // Get current user
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+    };
+    getUser();
   }, []);
 
-  const handleSignOut = () => {
-    router.replace('/');
+  const handleSignOut = async () => {
+    console.log('Signing out...');
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error('Error signing out:', error.message);
+    } else {
+      console.log('Sign out successful');
+      router.replace('/');
+    }
   };
 
   const settingsItems = [
@@ -67,11 +85,22 @@ export default function SettingsScreen() {
           {/* Profile Card */}
           <View style={styles.profileCard}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarEmoji}>👤</Text>
+              {user?.user_metadata?.avatar_url ? (
+                <Image
+                  source={{ uri: user.user_metadata.avatar_url }}
+                  style={styles.avatarImage}
+                />
+              ) : (
+                <Text style={styles.avatarEmoji}>👤</Text>
+              )}
             </View>
             <View style={styles.profileInfo}>
-              <Text style={styles.profileName}>Demo User</Text>
-              <Text style={styles.profileEmail}>demo@example.com</Text>
+              <Text style={styles.profileName}>
+                {user?.user_metadata?.full_name || 'Remind User'}
+              </Text>
+              <Text style={styles.profileEmail}>
+                {user?.email || 'Not signed in'}
+              </Text>
             </View>
           </View>
 
@@ -178,6 +207,11 @@ const styles = StyleSheet.create({
   },
   avatarEmoji: {
     fontSize: 28,
+  },
+  avatarImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
   },
   profileInfo: {
     marginLeft: spacing.lg,
