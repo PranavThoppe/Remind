@@ -12,10 +12,16 @@ import {
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows, spacing, borderRadius, typography } from '../constants/theme';
+import { supabase } from '../lib/supabase';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function AuthScreen() {
   const [showEmailLogin, setShowEmailLogin] = useState(false);
   const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
   
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -36,6 +42,35 @@ export default function AuthScreen() {
         useNativeDriver: true,
       }),
     ]).start();
+
+    // Check for existing session and listen for auth changes
+    const checkSession = async () => {
+      console.log('Checking for existing session...');
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) {
+        console.error('Error getting session:', error);
+      }
+      if (session) {
+        console.log('Session found, redirecting to home');
+        router.replace('/(tabs)/home');
+      } else {
+        console.log('No active session found');
+      }
+    };
+
+    checkSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log('Auth state changed:', _event);
+      if (session) {
+        console.log('Session detected in onAuthStateChange, redirecting...');
+        router.replace('/(tabs)/home');
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -58,6 +93,64 @@ export default function AuthScreen() {
 
   const handleLogin = () => {
     router.replace('/(tabs)/home');
+  };
+
+  const handleGoogleLogin = async () => {
+    console.log('Google login button pressed');
+    setLoading(true);
+    try {
+      // Automatically generate the correct redirect URI for the environment
+      const redirectUri = AuthSession.makeRedirectUri({
+        scheme: 'remind',
+      });
+      console.log('Generated Redirect URI:', redirectUri);
+
+      console.log('Starting Supabase OAuth flow...');
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUri,
+          skipBrowserRedirect: true,
+        },
+      });
+
+      if (error) {
+        console.error('Supabase OAuth error:', error);
+        throw error;
+      }
+
+      console.log('OAuth URL received:', data?.url);
+      
+      if (data?.url) {
+        const result = await WebBrowser.openAuthSessionAsync(
+          data.url,
+          redirectUri
+        );
+        console.log('WebBrowser result:', result);
+
+        if (result.type === 'success' && result.url) {
+          const access_token = extractParam(result.url, 'access_token');
+          const refresh_token = extractParam(result.url, 'refresh_token');
+
+          if (access_token && refresh_token) {
+            console.log('Tokens extracted, setting session...');
+            const { error: sessionError } = await supabase.auth.setSession({
+              access_token,
+              refresh_token,
+            });
+
+            if (sessionError) throw sessionError;
+            console.log('Session successfully set!');
+          } else {
+            console.error('Failed to extract tokens from URL');
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error('Error signing in:', error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const isValidEmail = email.includes('@');
@@ -100,13 +193,16 @@ export default function AuthScreen() {
           {/* Google Sign In */}
           <TouchableOpacity
             style={styles.googleButton}
-            onPress={handleLogin}
+            onPress={handleGoogleLogin}
             activeOpacity={0.8}
+            disabled={loading}
           >
             <View style={styles.googleIcon}>
               <Text style={styles.googleIconText}>G</Text>
             </View>
-            <Text style={styles.googleButtonText}>Continue with Google</Text>
+            <Text style={styles.googleButtonText}>
+              {loading ? 'Connecting...' : 'Continue with Google'}
+            </Text>
           </TouchableOpacity>
 
           {/* Divider */}
@@ -322,3 +418,8 @@ const styles = StyleSheet.create({
     marginTop: 32,
   },
 });
+
+function extractParam(url: string, param: string) {
+  const match = url.match(new RegExp(`${param}=([^&]+)`));
+  return match ? match[1] : null;
+}
