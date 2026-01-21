@@ -58,12 +58,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (error) {
-        console.error('Error fetching profile:', error);
+        if (error.code === 'PGRST116') {
+          console.log('Profile not found, user might need to create one');
+          // We don't set an error here because it's a valid state (new user or deleted profile)
+        } else {
+          console.error('Error fetching profile:', error);
+        }
+        setProfile(null);
       } else {
         setProfile(data);
       }
     } catch (error) {
       console.error('Unexpected error fetching profile:', error);
+      setProfile(null);
     } finally {
       setLoading(false);
     }

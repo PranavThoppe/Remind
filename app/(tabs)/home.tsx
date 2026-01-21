@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,21 +6,37 @@ import {
   StyleSheet,
   Platform,
   ActivityIndicator,
+  RefreshControl,
+  TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ReminderCard } from '../../components/ReminderCard';
 import { EmptyState } from '../../components/EmptyState';
 import { FloatingAddButton } from '../../components/FloatingAddButton';
 import { AddReminderSheet } from '../../components/AddReminderSheet';
-import { colors, spacing, typography } from '../../constants/theme';
+import { colors, spacing, typography, borderRadius } from '../../constants/theme';
 import { Reminder } from '../../types/reminder';
 import { useReminders } from '../../hooks/useReminders';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { reminders, loading, addReminder, toggleComplete } = useReminders();
+  const { reminders, loading, addReminder, toggleComplete, refreshReminders, updateReminder } = useReminders();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
+  const [showRetry, setShowRetry] = useState(false);
+
+  // Show retry button if loading takes more than 5 seconds
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (loading) {
+      timer = setTimeout(() => {
+        setShowRetry(true);
+      }, 5000);
+    } else {
+      setShowRetry(false);
+    }
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   const activeReminders = reminders.filter(r => !r.completed);
 
@@ -73,12 +89,30 @@ export default function HomeScreen() {
       </View>
 
       {/* Content */}
-      {loading ? (
+      {loading && reminders.length === 0 ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
+          {showRetry && (
+            <TouchableOpacity 
+              style={styles.retryButton} 
+              onPress={() => refreshReminders()}
+            >
+              <Text style={styles.retryText}>Taking too long? Tap to retry</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : activeReminders.length === 0 ? (
-        <EmptyState type="active" />
+        <View style={{ flex: 1 }}>
+          <EmptyState type="active" />
+          <FlatList
+            data={[]}
+            renderItem={null}
+            refreshControl={
+              <RefreshControl refreshing={loading} onRefresh={refreshReminders} colors={[colors.primary]} />
+            }
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
       ) : (
         <FlatList
           data={activeReminders}
@@ -93,6 +127,9 @@ export default function HomeScreen() {
           )}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={loading} onRefresh={refreshReminders} colors={[colors.primary]} />
+          }
         />
       )}
 
@@ -135,6 +172,18 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: spacing.md,
+  },
+  retryButton: {
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    backgroundColor: `${colors.primary}10`,
+  },
+  retryText: {
+    fontFamily: typography.fontFamily.medium,
+    color: colors.primary,
+    fontSize: typography.fontSize.sm,
   },
   listContent: {
     paddingHorizontal: spacing.xl,

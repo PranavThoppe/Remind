@@ -5,6 +5,8 @@ import {
   FlatList,
   StyleSheet,
   Platform,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ReminderCard } from '../../components/ReminderCard';
@@ -12,36 +14,21 @@ import { EmptyState } from '../../components/EmptyState';
 import { AddReminderSheet } from '../../components/AddReminderSheet';
 import { colors, spacing, typography } from '../../constants/theme';
 import { Reminder } from '../../types/reminder';
-
-// Sample completed data for demo
-const sampleCompletedReminders: Reminder[] = [
-  {
-    id: '5',
-    title: 'Morning meditation',
-    time: '07:00',
-    repeat: 'daily',
-    completed: true,
-    createdAt: new Date(),
-  },
-  {
-    id: '6',
-    title: 'Submit expense report',
-    date: new Date(Date.now() - 86400000),
-    completed: true,
-    createdAt: new Date(),
-  },
-];
+import { useReminders } from '../../hooks/useReminders';
 
 export default function CompletedScreen() {
   const insets = useSafeAreaInsets();
-  const [reminders, setReminders] = useState<Reminder[]>(sampleCompletedReminders);
+  const { reminders, loading, toggleComplete, refreshReminders, updateReminder } = useReminders();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
 
+  const completedReminders = reminders.filter(r => r.completed);
+
   const handleComplete = (id: string) => {
-    setReminders(prev =>
-      prev.map(r => r.id === id ? { ...r, completed: !r.completed } : r)
-    );
+    const reminder = reminders.find(r => r.id === id);
+    if (reminder) {
+      toggleComplete(id, reminder.completed);
+    }
   };
 
   const handleEdit = (reminder: Reminder) => {
@@ -49,11 +36,9 @@ export default function CompletedScreen() {
     setIsSheetOpen(true);
   };
 
-  const handleSave = (data: Omit<Reminder, 'id' | 'createdAt' | 'completed'>) => {
+  const handleSave = async (data: Omit<Reminder, 'id' | 'user_id' | 'created_at' | 'completed'>) => {
     if (editingReminder) {
-      setReminders(prev =>
-        prev.map(r => r.id === editingReminder.id ? { ...r, ...data } : r)
-      );
+      await updateReminder(editingReminder.id, data);
     }
     setEditingReminder(null);
   };
@@ -69,16 +54,30 @@ export default function CompletedScreen() {
       <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
         <Text style={styles.title}>Completed</Text>
         <Text style={styles.subtitle}>
-          {reminders.length} {reminders.length === 1 ? 'task' : 'tasks'} done
+          {completedReminders.length} {completedReminders.length === 1 ? 'task' : 'tasks'} done
         </Text>
       </View>
 
       {/* Content */}
-      {reminders.length === 0 ? (
-        <EmptyState type="completed" />
+      {loading && reminders.length === 0 ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : completedReminders.length === 0 ? (
+        <View style={{ flex: 1 }}>
+          <EmptyState type="completed" />
+          <FlatList
+            data={[]}
+            renderItem={null}
+            refreshControl={
+              <RefreshControl refreshing={loading} onRefresh={refreshReminders} colors={[colors.primary]} />
+            }
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
       ) : (
         <FlatList
-          data={reminders}
+          data={completedReminders}
           keyExtractor={(item) => item.id}
           renderItem={({ item, index }) => (
             <ReminderCard
@@ -90,6 +89,9 @@ export default function CompletedScreen() {
           )}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={loading} onRefresh={refreshReminders} colors={[colors.primary]} />
+          }
         />
       )}
 
@@ -124,6 +126,11 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.base,
     color: colors.mutedForeground,
     marginTop: 2,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   listContent: {
     paddingHorizontal: spacing.xl,

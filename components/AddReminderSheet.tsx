@@ -117,6 +117,8 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
   const handleSave = () => {
     if (!title.trim()) return;
 
+    Keyboard.dismiss();
+
     // Format date as YYYY-MM-DD for Supabase
     const dateString = date ? date.toISOString().split('T')[0] : undefined;
 
@@ -211,7 +213,11 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
         </View>
 
         {/* Content */}
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          style={styles.content} 
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Title Input */}
           <TextInput
             style={styles.input}
