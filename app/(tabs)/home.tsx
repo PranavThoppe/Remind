@@ -5,6 +5,7 @@ import {
   FlatList,
   StyleSheet,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ReminderCard } from '../../components/ReminderCard';
@@ -13,55 +14,21 @@ import { FloatingAddButton } from '../../components/FloatingAddButton';
 import { AddReminderSheet } from '../../components/AddReminderSheet';
 import { colors, spacing, typography } from '../../constants/theme';
 import { Reminder } from '../../types/reminder';
-
-// Sample data for demo
-const sampleReminders: Reminder[] = [
-  {
-    id: '1',
-    title: 'Buy groceries for the week',
-    date: new Date(),
-    time: '10:00',
-    repeat: 'weekly',
-    completed: false,
-    createdAt: new Date(),
-  },
-  {
-    id: '2',
-    title: 'Call mom',
-    date: new Date(Date.now() + 86400000),
-    time: '18:00',
-    completed: false,
-    createdAt: new Date(),
-  },
-  {
-    id: '3',
-    title: 'Review project proposal',
-    date: new Date(Date.now() + 172800000),
-    completed: false,
-    createdAt: new Date(),
-  },
-  {
-    id: '4',
-    title: 'Morning meditation',
-    time: '07:00',
-    repeat: 'daily',
-    completed: false,
-    createdAt: new Date(),
-  },
-];
+import { useReminders } from '../../hooks/useReminders';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const [reminders, setReminders] = useState<Reminder[]>(sampleReminders);
+  const { reminders, loading, addReminder, toggleComplete } = useReminders();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
 
   const activeReminders = reminders.filter(r => !r.completed);
 
   const handleComplete = (id: string) => {
-    setReminders(prev =>
-      prev.map(r => r.id === id ? { ...r, completed: !r.completed } : r)
-    );
+    const reminder = reminders.find(r => r.id === id);
+    if (reminder) {
+      toggleComplete(id, reminder.completed);
+    }
   };
 
   const handleEdit = (reminder: Reminder) => {
@@ -69,19 +36,11 @@ export default function HomeScreen() {
     setIsSheetOpen(true);
   };
 
-  const handleSave = (data: Omit<Reminder, 'id' | 'createdAt' | 'completed'>) => {
+  const handleSave = async (data: Omit<Reminder, 'id' | 'user_id' | 'created_at' | 'completed'>) => {
     if (editingReminder) {
-      setReminders(prev =>
-        prev.map(r => r.id === editingReminder.id ? { ...r, ...data } : r)
-      );
+      await updateReminder(editingReminder.id, data);
     } else {
-      const newReminder: Reminder = {
-        ...data,
-        id: Date.now().toString(),
-        completed: false,
-        createdAt: new Date(),
-      };
-      setReminders(prev => [newReminder, ...prev]);
+      await addReminder(data);
     }
     setEditingReminder(null);
   };
@@ -114,7 +73,11 @@ export default function HomeScreen() {
       </View>
 
       {/* Content */}
-      {activeReminders.length === 0 ? (
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : activeReminders.length === 0 ? (
         <EmptyState type="active" />
       ) : (
         <FlatList
@@ -167,6 +130,11 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize['2xl'],
     color: colors.foreground,
     marginTop: 2,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   listContent: {
     paddingHorizontal: spacing.xl,
