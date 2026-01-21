@@ -21,7 +21,7 @@ import { Reminder } from '../types/reminder';
 interface AddReminderSheetProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (reminder: Omit<Reminder, 'id' | 'createdAt' | 'completed'>) => void;
+  onSave: (reminder: Omit<Reminder, 'id' | 'user_id' | 'created_at' | 'completed'>) => void;
   editReminder?: Reminder | null;
 }
 
@@ -50,7 +50,8 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
   useEffect(() => {
     if (editReminder) {
       setTitle(editReminder.title);
-      setDate(editReminder.date);
+      // Parse YYYY-MM-DD string back to Date object for the picker
+      setDate(editReminder.date ? new Date(editReminder.date + 'T00:00:00') : undefined);
       setTime(editReminder.time || '');
       setRepeat(editReminder.repeat || 'none');
     } else {
@@ -116,9 +117,14 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
   const handleSave = () => {
     if (!title.trim()) return;
 
+    Keyboard.dismiss();
+
+    // Format date as YYYY-MM-DD for Supabase
+    const dateString = date ? date.toISOString().split('T')[0] : undefined;
+
     onSave({
       title: title.trim(),
-      date,
+      date: dateString,
       time: time || undefined,
       repeat,
     });
@@ -140,11 +146,10 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
   const handleTimeChange = (event: any, selectedTime?: Date) => {
     setShowTimePicker(Platform.OS === 'ios');
     if (selectedTime) {
-      const timeString = selectedTime.toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      });
+      // Manually format to HH:mm to ensure Postgres compatibility
+      const hours = selectedTime.getHours().toString().padStart(2, '0');
+      const minutes = selectedTime.getMinutes().toString().padStart(2, '0');
+      const timeString = `${hours}:${minutes}`;
       setTime(timeString);
     }
   };
@@ -208,7 +213,11 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
         </View>
 
         {/* Content */}
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          style={styles.content} 
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Title Input */}
           <TextInput
             style={styles.input}

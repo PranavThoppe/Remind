@@ -1,67 +1,50 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
   FlatList,
   StyleSheet,
   Platform,
+  ActivityIndicator,
+  RefreshControl,
+  TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ReminderCard } from '../../components/ReminderCard';
 import { EmptyState } from '../../components/EmptyState';
 import { FloatingAddButton } from '../../components/FloatingAddButton';
 import { AddReminderSheet } from '../../components/AddReminderSheet';
-import { colors, spacing, typography } from '../../constants/theme';
+import { colors, spacing, typography, borderRadius } from '../../constants/theme';
 import { Reminder } from '../../types/reminder';
-
-// Sample data for demo
-const sampleReminders: Reminder[] = [
-  {
-    id: '1',
-    title: 'Buy groceries for the week',
-    date: new Date(),
-    time: '10:00',
-    repeat: 'weekly',
-    completed: false,
-    createdAt: new Date(),
-  },
-  {
-    id: '2',
-    title: 'Call mom',
-    date: new Date(Date.now() + 86400000),
-    time: '18:00',
-    completed: false,
-    createdAt: new Date(),
-  },
-  {
-    id: '3',
-    title: 'Review project proposal',
-    date: new Date(Date.now() + 172800000),
-    completed: false,
-    createdAt: new Date(),
-  },
-  {
-    id: '4',
-    title: 'Morning meditation',
-    time: '07:00',
-    repeat: 'daily',
-    completed: false,
-    createdAt: new Date(),
-  },
-];
+import { useReminders } from '../../hooks/useReminders';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const [reminders, setReminders] = useState<Reminder[]>(sampleReminders);
+  const { reminders, loading, addReminder, toggleComplete, refreshReminders, updateReminder } = useReminders();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
+  const [showRetry, setShowRetry] = useState(false);
+
+  // Show retry button if loading takes more than 5 seconds
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (loading) {
+      timer = setTimeout(() => {
+        setShowRetry(true);
+      }, 5000);
+    } else {
+      setShowRetry(false);
+    }
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   const activeReminders = reminders.filter(r => !r.completed);
 
   const handleComplete = (id: string) => {
-    setReminders(prev =>
-      prev.map(r => r.id === id ? { ...r, completed: !r.completed } : r)
-    );
+    const reminder = reminders.find(r => r.id === id);
+    if (reminder) {
+      toggleComplete(id, reminder.completed);
+    }
   };
 
   const handleEdit = (reminder: Reminder) => {
@@ -69,19 +52,11 @@ export default function HomeScreen() {
     setIsSheetOpen(true);
   };
 
-  const handleSave = (data: Omit<Reminder, 'id' | 'createdAt' | 'completed'>) => {
+  const handleSave = async (data: Omit<Reminder, 'id' | 'user_id' | 'created_at' | 'completed'>) => {
     if (editingReminder) {
-      setReminders(prev =>
-        prev.map(r => r.id === editingReminder.id ? { ...r, ...data } : r)
-      );
+      await updateReminder(editingReminder.id, data);
     } else {
-      const newReminder: Reminder = {
-        ...data,
-        id: Date.now().toString(),
-        completed: false,
-        createdAt: new Date(),
-      };
-      setReminders(prev => [newReminder, ...prev]);
+      await addReminder(data);
     }
     setEditingReminder(null);
   };
@@ -114,8 +89,30 @@ export default function HomeScreen() {
       </View>
 
       {/* Content */}
-      {activeReminders.length === 0 ? (
-        <EmptyState type="active" />
+      {loading && reminders.length === 0 ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          {showRetry && (
+            <TouchableOpacity 
+              style={styles.retryButton} 
+              onPress={() => refreshReminders()}
+            >
+              <Text style={styles.retryText}>Taking too long? Tap to retry</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : activeReminders.length === 0 ? (
+        <View style={{ flex: 1 }}>
+          <EmptyState type="active" />
+          <FlatList
+            data={[]}
+            renderItem={null}
+            refreshControl={
+              <RefreshControl refreshing={loading} onRefresh={refreshReminders} colors={[colors.primary]} />
+            }
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
       ) : (
         <FlatList
           data={activeReminders}
@@ -130,6 +127,9 @@ export default function HomeScreen() {
           )}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={loading} onRefresh={refreshReminders} colors={[colors.primary]} />
+          }
         />
       )}
 
@@ -167,6 +167,23 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize['2xl'],
     color: colors.foreground,
     marginTop: 2,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  retryButton: {
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    backgroundColor: `${colors.primary}10`,
+  },
+  retryText: {
+    fontFamily: typography.fontFamily.medium,
+    color: colors.primary,
+    fontSize: typography.fontSize.sm,
   },
   listContent: {
     paddingHorizontal: spacing.xl,

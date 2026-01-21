@@ -1,11 +1,12 @@
 export interface Reminder {
   id: string;
+  user_id: string;
   title: string;
-  date?: Date;
+  date?: string;
   time?: string;
   repeat?: 'none' | 'daily' | 'weekly' | 'monthly';
   completed: boolean;
-  createdAt: Date;
+  created_at: string;
 }
 
 export interface Profile {
