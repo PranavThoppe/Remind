@@ -159,7 +159,6 @@ export function ReminderCard({ reminder, onComplete, onEdit, index }: ReminderCa
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: spacing.md,
   },
   containerCompleted: {
     opacity: 0.6,

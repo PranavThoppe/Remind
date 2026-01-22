@@ -16,6 +16,7 @@
     "@react-native-community/datetimepicker": "8.4.4",
     "@supabase/supabase-js": "^2.90.1",
     "@types/react": "~19.1.10",
+    "date-fns": "^4.1.0",
     "expo": "~54.0.32",
     "expo-auth-session": "~7.0.10",
     "expo-constants": "~18.0.13",
