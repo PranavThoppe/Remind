@@ -17,6 +17,7 @@ import { DaySection } from '../../components/DaySection';
 import { EmptyState } from '../../components/EmptyState';
 import { FloatingAddButton } from '../../components/FloatingAddButton';
 import { AddReminderSheet } from '../../components/AddReminderSheet';
+import { WeekForecast } from '../../components/WeekForecast';
 import { colors, spacing, typography, borderRadius } from '../../constants/theme';
 import { Reminder } from '../../types/reminder';
 import { useReminders } from '../../hooks/useReminders';
@@ -27,6 +28,7 @@ export default function HomeScreen() {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
   const [showRetry, setShowRetry] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'week'>('list');
 
   // Show retry button if loading takes more than 5 seconds
   useEffect(() => {
@@ -129,8 +131,30 @@ export default function HomeScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
-        <Text style={styles.dateText}>{formatDate()}</Text>
-        <Text style={styles.greeting}>{greeting()} ✨</Text>
+        <View style={styles.headerTop}>
+          <View>
+            <Text style={styles.dateText}>{formatDate()}</Text>
+            <Text style={styles.greeting}>{greeting()} ✨</Text>
+          </View>
+          
+          {/* View Mode Toggle */}
+          <View style={styles.toggleContainer}>
+            <TouchableOpacity
+              style={[styles.toggleButton, viewMode === 'list' && styles.toggleButtonActive]}
+              onPress={() => setViewMode('list')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.toggleText, viewMode === 'list' && styles.toggleTextActive]}>List</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.toggleButton, viewMode === 'week' && styles.toggleButtonActive]}
+              onPress={() => setViewMode('week')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.toggleText, viewMode === 'week' && styles.toggleTextActive]}>Week</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
 
       {/* Content */}
@@ -158,6 +182,20 @@ export default function HomeScreen() {
             style={StyleSheet.absoluteFill}
           />
         </View>
+      ) : viewMode === 'week' ? (
+        <ScrollView
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={loading} onRefresh={refreshReminders} colors={[colors.primary]} />
+          }
+        >
+          <WeekForecast
+            reminders={activeReminders}
+            onReminderClick={handleEdit}
+            onComplete={handleComplete}
+          />
+        </ScrollView>
       ) : (
         <FlatList
           data={groupedReminders}
@@ -229,6 +267,45 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xl,
     backgroundColor: colors.background,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: colors.muted,
+    padding: 4,
+    borderRadius: borderRadius.md,
+    gap: 4,
+  },
+  toggleButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.sm,
+  },
+  toggleButtonActive: {
+    backgroundColor: colors.card,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  toggleText: {
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    color: colors.mutedForeground,
+  },
+  toggleTextActive: {
+    color: colors.foreground,
   },
   dateText: {
     fontFamily: typography.fontFamily.regular,
