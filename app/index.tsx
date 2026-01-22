@@ -42,35 +42,6 @@ export default function AuthScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-
-    // Check for existing session and listen for auth changes
-    const checkSession = async () => {
-      console.log('Checking for existing session...');
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error) {
-        console.error('Error getting session:', error);
-      }
-      if (session) {
-        console.log('Session found, redirecting to home');
-        router.replace('/(tabs)/home');
-      } else {
-        console.log('No active session found');
-      }
-    };
-
-    checkSession();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log('Auth state changed:', _event);
-      if (session) {
-        console.log('Session detected in onAuthStateChange, redirecting...');
-        router.replace('/(tabs)/home');
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   useEffect(() => {

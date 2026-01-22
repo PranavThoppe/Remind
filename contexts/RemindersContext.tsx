@@ -16,18 +16,23 @@ interface RemindersContextType {
 const RemindersContext = createContext<RemindersContextType | undefined>(undefined);
 
 export function RemindersProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchReminders = useCallback(async () => {
+    // Don't fetch if auth is still loading or if we don't have a user
+    if (authLoading) return;
+    
     if (!user) {
+      setReminders([]);
       setLoading(false);
       return;
     }
 
     setLoading(true);
     try {
+      console.log('Fetching reminders for user:', user.id);
       const { data, error } = await supabase
         .from('reminders')
         .select('*')
@@ -46,7 +51,7 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, authLoading]);
 
   useEffect(() => {
     fetchReminders();

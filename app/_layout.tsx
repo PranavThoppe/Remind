@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import {
@@ -10,8 +10,38 @@ import {
   Inter_700Bold,
 } from '@expo-google-fonts/inter';
 import { colors } from '../constants/theme';
-import { AuthProvider } from '../contexts/AuthContext';
+import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { RemindersProvider } from '../contexts/RemindersContext';
+
+function AuthGuard({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (loading) return;
+
+    const inAuthGroup = segments[0] === '(tabs)';
+
+    if (!user && inAuthGroup) {
+      // Redirect to the sign-in page if user is not authenticated and trying to access tabs
+      router.replace('/');
+    } else if (user && !inAuthGroup) {
+      // Redirect to the home page if user is authenticated and trying to access auth screens
+      router.replace('/(tabs)/home');
+    }
+  }, [user, loading, segments]);
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  return <>{children}</>;
+}
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
@@ -37,19 +67,21 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <RemindersProvider>
-        <StatusBar style="dark" />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: colors.background },
-            animation: 'fade',
-          }}
-        >
-          <Stack.Screen name="index" />
-          <Stack.Screen name="(tabs)" />
-        </Stack>
-      </RemindersProvider>
+      <AuthGuard>
+        <RemindersProvider>
+          <StatusBar style="dark" />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: colors.background },
+              animation: 'fade',
+            }}
+          >
+            <Stack.Screen name="index" />
+            <Stack.Screen name="(tabs)" />
+          </Stack>
+        </RemindersProvider>
+      </AuthGuard>
     </AuthProvider>
   );
 }

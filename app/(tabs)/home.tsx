@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,9 +8,12 @@ import {
   ActivityIndicator,
   RefreshControl,
   TouchableOpacity,
+  ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { startOfDay, isSameDay } from 'date-fns';
 import { ReminderCard } from '../../components/ReminderCard';
+import { DaySection } from '../../components/DaySection';
 import { EmptyState } from '../../components/EmptyState';
 import { FloatingAddButton } from '../../components/FloatingAddButton';
 import { AddReminderSheet } from '../../components/AddReminderSheet';
@@ -39,6 +42,48 @@ export default function HomeScreen() {
   }, [loading]);
 
   const activeReminders = reminders.filter(r => !r.completed);
+
+  // Group active reminders by day in chronological order
+  const groupedReminders = useMemo(() => {
+    const groups: { date: Date; reminders: Reminder[] }[] = [];
+    
+    // Separate reminders with and without dates
+    const withDate = activeReminders.filter(r => r.date);
+    const withoutDate = activeReminders.filter(r => !r.date);
+    
+    // Sort reminders with dates chronologically
+    const sortedWithDate = [...withDate].sort((a, b) => {
+      const dateA = a.date ? new Date(a.date).getTime() : 0;
+      const dateB = b.date ? new Date(b.date).getTime() : 0;
+      if (dateA !== dateB) return dateA - dateB;
+      // If same date, sort by time
+      if (a.time && b.time) return a.time.localeCompare(b.time);
+      return 0;
+    });
+
+    // Group by day
+    sortedWithDate.forEach(reminder => {
+      const reminderDate = startOfDay(new Date(reminder.date!));
+      const existingGroup = groups.find(g => isSameDay(g.date, reminderDate));
+      if (existingGroup) {
+        existingGroup.reminders.push(reminder);
+      } else {
+        groups.push({ date: reminderDate, reminders: [reminder] });
+      }
+    });
+
+    // Add reminders without dates to "Anytime" group at the end
+    if (withoutDate.length > 0) {
+      // Sort by time if available
+      const sortedWithoutDate = [...withoutDate].sort((a, b) => {
+        if (a.time && b.time) return a.time.localeCompare(b.time);
+        return 0;
+      });
+      groups.push({ date: new Date(9999, 0, 1), reminders: sortedWithoutDate }); // Far future date for "Anytime"
+    }
+
+    return groups;
+  }, [activeReminders]);
 
   const handleComplete = (id: string) => {
     const reminder = reminders.find(r => r.id === id);
@@ -115,16 +160,44 @@ export default function HomeScreen() {
         </View>
       ) : (
         <FlatList
-          data={activeReminders}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item, index }) => (
-            <ReminderCard
-              reminder={item}
-              onComplete={handleComplete}
-              onEdit={handleEdit}
-              index={index}
-            />
-          )}
+          data={groupedReminders}
+          keyExtractor={(item) => item.date.toISOString()}
+          renderItem={({ item, index: groupIndex }) => {
+            const startIndex = groupedReminders
+              .slice(0, groupIndex)
+              .reduce((acc, g) => acc + g.reminders.length, 0);
+            
+            const isAnytime = item.date.getFullYear() === 9999;
+            
+            if (isAnytime) {
+              return (
+                <View style={styles.anytimeSection}>
+                  <Text style={styles.sectionHeader}>Anytime</Text>
+                  <View style={styles.remindersList}>
+                    {item.reminders.map((reminder, index) => (
+                      <ReminderCard
+                        key={reminder.id}
+                        reminder={reminder}
+                        onComplete={handleComplete}
+                        onEdit={handleEdit}
+                        index={startIndex + index}
+                      />
+                    ))}
+                  </View>
+                </View>
+              );
+            }
+            
+            return (
+              <DaySection
+                date={item.date}
+                reminders={item.reminders}
+                onComplete={handleComplete}
+                onEdit={handleEdit}
+                startIndex={startIndex}
+              />
+            );
+          }}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -188,5 +261,20 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: spacing.xl,
     paddingBottom: Platform.OS === 'ios' ? 120 : 100,
+  },
+  anytimeSection: {
+    marginBottom: spacing.xl,
+  },
+  sectionHeader: {
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    color: colors.mutedForeground,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  remindersList: {
+    gap: spacing.md,
   },
 });
