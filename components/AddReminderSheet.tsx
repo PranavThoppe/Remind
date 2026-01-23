@@ -60,6 +60,9 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
       setTime('');
       setRepeat('none');
     }
+    // Reset picker visibility when sheet is opened or closed
+    setShowDatePicker(false);
+    setShowTimePicker(false);
   }, [editReminder, isOpen]);
 
   useEffect(() => {
@@ -119,8 +122,8 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
 
     Keyboard.dismiss();
 
-    // Format date as YYYY-MM-DD for Supabase
-    const dateString = date ? date.toISOString().split('T')[0] : undefined;
+    // Format date as YYYY-MM-DD for Supabase (default to today if not set)
+    const dateString = (date || new Date()).toISOString().split('T')[0];
 
     onSave({
       title: title.trim(),
@@ -143,6 +146,14 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
     }
   };
 
+  const getTimeDate = () => {
+    if (!time) return new Date();
+    const [hours, minutes] = time.split(':').map(Number);
+    const d = new Date();
+    d.setHours(hours, minutes, 0, 0);
+    return d;
+  };
+
   const handleTimeChange = (event: any, selectedTime?: Date) => {
     setShowTimePicker(Platform.OS === 'ios');
     if (selectedTime) {
@@ -157,6 +168,14 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
   const formatDate = (d: Date) => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+  };
+
+  const formatDisplayTime = (timeStr: string) => {
+    if (!timeStr) return 'Add time';
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const displayHours = hours % 12 || 12;
+    return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
   };
 
   if (!isOpen) return null;
@@ -273,7 +292,7 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
                 styles.pickerButtonText,
                 time && styles.pickerButtonTextActive,
               ]}>
-                {time || 'Add time'}
+                {formatDisplayTime(time)}
               </Text>
             </TouchableOpacity>
           </View>
@@ -281,8 +300,9 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
           {/* Time Picker Modal */}
           {showTimePicker && (
             <DateTimePicker
-              value={new Date()} // Default to current time, you could parse existing time if editing
+              value={getTimeDate()}
               mode="time"
+              is24Hour={false}
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               onChange={handleTimeChange}
               textColor={colors.foreground}
