@@ -24,7 +24,7 @@ import { useReminders } from '../../hooks/useReminders';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { reminders, loading, addReminder, toggleComplete, refreshReminders, updateReminder } = useReminders();
+  const { reminders, loading, addReminder, toggleComplete, refreshReminders, updateReminder, deleteReminder } = useReminders();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
   const [showRetry, setShowRetry] = useState(false);
@@ -55,8 +55,8 @@ export default function HomeScreen() {
     
     // Sort reminders with dates chronologically
     const sortedWithDate = [...withDate].sort((a, b) => {
-      const dateA = a.date ? new Date(a.date).getTime() : 0;
-      const dateB = b.date ? new Date(b.date).getTime() : 0;
+      const dateA = a.date ? new Date(a.date + 'T00:00:00').getTime() : 0;
+      const dateB = b.date ? new Date(b.date + 'T00:00:00').getTime() : 0;
       if (dateA !== dateB) return dateA - dateB;
       // If same date, sort by time
       if (a.time && b.time) return a.time.localeCompare(b.time);
@@ -65,7 +65,7 @@ export default function HomeScreen() {
 
     // Group by day
     sortedWithDate.forEach(reminder => {
-      const reminderDate = startOfDay(new Date(reminder.date!));
+      const reminderDate = startOfDay(new Date(reminder.date! + 'T00:00:00'));
       const existingGroup = groups.find(g => isSameDay(g.date, reminderDate));
       if (existingGroup) {
         existingGroup.reminders.push(reminder);
@@ -97,6 +97,10 @@ export default function HomeScreen() {
   const handleEdit = (reminder: Reminder) => {
     setEditingReminder(reminder);
     setIsSheetOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    await deleteReminder(id);
   };
 
   const handleSave = async (data: Omit<Reminder, 'id' | 'user_id' | 'created_at' | 'completed'>) => {
@@ -194,6 +198,7 @@ export default function HomeScreen() {
             reminders={activeReminders}
             onReminderClick={handleEdit}
             onComplete={handleComplete}
+            onDelete={handleDelete}
           />
         </ScrollView>
       ) : (
@@ -218,6 +223,7 @@ export default function HomeScreen() {
                         reminder={reminder}
                         onComplete={handleComplete}
                         onEdit={handleEdit}
+                        onDelete={handleDelete}
                         index={startIndex + index}
                       />
                     ))}
@@ -232,6 +238,7 @@ export default function HomeScreen() {
                 reminders={item.reminders}
                 onComplete={handleComplete}
                 onEdit={handleEdit}
+                onDelete={handleDelete}
                 startIndex={startIndex}
               />
             );

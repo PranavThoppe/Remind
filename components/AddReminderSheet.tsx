@@ -122,8 +122,12 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
 
     Keyboard.dismiss();
 
-    // Format date as YYYY-MM-DD for Supabase (default to today if not set)
-    const dateString = (date || new Date()).toISOString().split('T')[0];
+    // Format date as YYYY-MM-DD for Supabase (default to today if not set) using local time
+    const d = date || new Date();
+    const year = d.getFullYear();
+    const month = (d.getMonth() + 1).toString().padStart(2, '0');
+    const day = d.getDate().toString().padStart(2, '0');
+    const dateString = `${year}-${month}-${day}`;
 
     onSave({
       title: title.trim(),

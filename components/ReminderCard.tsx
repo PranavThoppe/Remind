@@ -7,6 +7,7 @@ import {
   Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Swipeable } from 'react-native-gesture-handler';
 import { colors, shadows, spacing, borderRadius, typography } from '../constants/theme';
 import { Reminder } from '../types/reminder';
 
@@ -14,13 +15,15 @@ interface ReminderCardProps {
   reminder: Reminder;
   onComplete: (id: string) => void;
   onEdit: (reminder: Reminder) => void;
+  onDelete?: (id: string) => void;
   index: number;
 }
 
-export function ReminderCard({ reminder, onComplete, onEdit, index }: ReminderCardProps) {
+export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: ReminderCardProps) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(8)).current;
   const checkScaleAnim = useRef(new Animated.Value(1)).current;
+  const swipeableRef = useRef<Swipeable>(null);
 
   useEffect(() => {
     Animated.parallel([
@@ -88,80 +91,113 @@ export function ReminderCard({ reminder, onComplete, onEdit, index }: ReminderCa
     }
   };
 
-  return (
-    <Animated.View
-      style={[
-        styles.container,
-        {
-          opacity: fadeAnim,
-          transform: [{ translateY: slideAnim }],
-        },
-        reminder.completed && styles.containerCompleted,
-      ]}
-    >
+  const renderRightActions = (
+    progress: Animated.AnimatedInterpolation<number>,
+    dragX: Animated.AnimatedInterpolation<number>
+  ) => {
+    const scale = dragX.interpolate({
+      inputRange: [-80, 0],
+      outputRange: [1, 0],
+      extrapolate: 'clamp',
+    });
+
+    return (
       <TouchableOpacity
-        style={styles.card}
-        onPress={() => onEdit(reminder)}
-        activeOpacity={0.9}
+        onPress={() => {
+          swipeableRef.current?.close();
+          onDelete?.(reminder.id);
+        }}
+        style={styles.deleteAction}
+        activeOpacity={0.7}
       >
-        <View style={styles.content}>
-          {/* Checkbox */}
-          <TouchableOpacity
-            onPress={handleComplete}
-            activeOpacity={0.7}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Animated.View
-              style={[
-                styles.checkbox,
-                reminder.completed && styles.checkboxCompleted,
-                { transform: [{ scale: checkScaleAnim }] },
-              ]}
-            >
-              {reminder.completed && (
-                <Ionicons name="checkmark" size={14} color={colors.successForeground} strokeWidth={3} />
-              )}
-            </Animated.View>
-          </TouchableOpacity>
+        <Animated.View style={{ transform: [{ scale }] }}>
+          <Ionicons name="trash-outline" size={24} color={colors.background} />
+        </Animated.View>
+      </TouchableOpacity>
+    );
+  };
 
-          {/* Text Content */}
-          <View style={styles.textContent}>
-            <Text
-              style={[
-                styles.title,
-                reminder.completed && styles.titleCompleted,
-              ]}
+  return (
+    <Swipeable
+      ref={swipeableRef}
+      renderRightActions={renderRightActions}
+      friction={2}
+      rightThreshold={40}
+    >
+      <Animated.View
+        style={[
+          styles.container,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          },
+          reminder.completed && styles.containerCompleted,
+        ]}
+      >
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => onEdit(reminder)}
+          activeOpacity={0.9}
+        >
+          <View style={styles.content}>
+            {/* Checkbox */}
+            <TouchableOpacity
+              onPress={handleComplete}
+              activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              {reminder.title}
-            </Text>
+              <Animated.View
+                style={[
+                  styles.checkbox,
+                  reminder.completed && styles.checkboxCompleted,
+                  { transform: [{ scale: checkScaleAnim }] },
+                ]}
+              >
+                {reminder.completed && (
+                  <Ionicons name="checkmark" size={14} color={colors.successForeground} strokeWidth={3} />
+                )}
+              </Animated.View>
+            </TouchableOpacity>
 
-            {/* Meta Info */}
-            <View style={styles.metaContainer}>
-              {reminder.date && (
-                <View style={styles.metaItem}>
-                  <Ionicons name="calendar-outline" size={14} color={colors.mutedForeground} />
-                  <Text style={styles.metaText}>{formatDate(reminder.date)}</Text>
-                </View>
-              )}
-              {reminder.time && (
-                <View style={styles.metaItem}>
-                  <Ionicons name="time-outline" size={14} color={colors.mutedForeground} />
-                  <Text style={styles.metaText}>{formatTime(reminder.time)}</Text>
-                </View>
-              )}
-              {reminder.repeat && reminder.repeat !== 'none' && (
-                <View style={styles.metaItem}>
-                  <Ionicons name="repeat" size={14} color={colors.primary} />
-                  <Text style={[styles.metaText, styles.metaTextPrimary]}>
-                    {getRepeatLabel(reminder.repeat)}
-                  </Text>
-                </View>
-              )}
+            {/* Text Content */}
+            <View style={styles.textContent}>
+              <Text
+                style={[
+                  styles.title,
+                  reminder.completed && styles.titleCompleted,
+                ]}
+              >
+                {reminder.title}
+              </Text>
+
+              {/* Meta Info */}
+              <View style={styles.metaContainer}>
+                {reminder.date && (
+                  <View style={styles.metaItem}>
+                    <Ionicons name="calendar-outline" size={14} color={colors.mutedForeground} />
+                    <Text style={styles.metaText}>{formatDate(reminder.date)}</Text>
+                  </View>
+                )}
+                {reminder.time && (
+                  <View style={styles.metaItem}>
+                    <Ionicons name="time-outline" size={14} color={colors.mutedForeground} />
+                    <Text style={styles.metaText}>{formatTime(reminder.time)}</Text>
+                  </View>
+                )}
+                {reminder.repeat && reminder.repeat !== 'none' && (
+                  <View style={styles.metaItem}>
+                    <Ionicons name="repeat" size={14} color={colors.primary} />
+                    <Text style={[styles.metaText, styles.metaTextPrimary]}>
+                      {getRepeatLabel(reminder.repeat)}
+                    </Text>
+                  </View>
+                )}
+              </View>
             </View>
           </View>
-        </View>
-      </TouchableOpacity>
-    </Animated.View>
+        </TouchableOpacity>
+      </Animated.View>
+    </Swipeable>
   );
 }
 
@@ -227,5 +263,14 @@ const styles = StyleSheet.create({
   },
   metaTextPrimary: {
     color: colors.primary,
+  },
+  deleteAction: {
+    backgroundColor: colors.destructive,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    height: '100%',
+    borderRadius: borderRadius.lg,
+    marginLeft: spacing.md,
   },
 });

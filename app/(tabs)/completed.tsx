@@ -18,7 +18,7 @@ import { useReminders } from '../../hooks/useReminders';
 
 export default function CompletedScreen() {
   const insets = useSafeAreaInsets();
-  const { reminders, loading, toggleComplete, refreshReminders, updateReminder } = useReminders();
+  const { reminders, loading, toggleComplete, refreshReminders, updateReminder, deleteReminder } = useReminders();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
 
@@ -34,6 +34,10 @@ export default function CompletedScreen() {
   const handleEdit = (reminder: Reminder) => {
     setEditingReminder(reminder);
     setIsSheetOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    await deleteReminder(id);
   };
 
   const handleSave = async (data: Omit<Reminder, 'id' | 'user_id' | 'created_at' | 'completed'>) => {
@@ -84,6 +88,7 @@ export default function CompletedScreen() {
               reminder={item}
               onComplete={handleComplete}
               onEdit={handleEdit}
+              onDelete={handleDelete}
               index={index}
             />
           )}
