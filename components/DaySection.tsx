@@ -10,10 +10,11 @@ interface DaySectionProps {
   reminders: Reminder[];
   onComplete: (id: string) => void;
   onEdit: (reminder: Reminder) => void;
+  onDelete?: (id: string) => void;
   startIndex: number;
 }
 
-export const DaySection = ({ date, reminders, onComplete, onEdit, startIndex }: DaySectionProps) => {
+export const DaySection = ({ date, reminders, onComplete, onEdit, onDelete, startIndex }: DaySectionProps) => {
   const getDateLabel = (date: Date) => {
     if (isToday(date)) return 'Today';
     if (isTomorrow(date)) return 'Tomorrow';
@@ -32,6 +33,7 @@ export const DaySection = ({ date, reminders, onComplete, onEdit, startIndex }: 
             reminder={reminder}
             onComplete={onComplete}
             onEdit={onEdit}
+            onDelete={onDelete}
             index={startIndex + index}
           />
         ))}
