@@ -71,6 +71,14 @@ export function ReminderCard({ reminder, onComplete, onEdit, index }: ReminderCa
     return `${months[date.getMonth()]} ${date.getDate()}`;
   };
 
+  const formatTime = (timeStr: string) => {
+    if (!timeStr) return '';
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const displayHours = hours % 12 || 12;
+    return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+  };
+
   const getRepeatLabel = (repeat: string) => {
     switch (repeat) {
       case 'daily': return 'Daily';
@@ -138,7 +146,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, index }: ReminderCa
               {reminder.time && (
                 <View style={styles.metaItem}>
                   <Ionicons name="time-outline" size={14} color={colors.mutedForeground} />
-                  <Text style={styles.metaText}>{reminder.time}</Text>
+                  <Text style={styles.metaText}>{formatTime(reminder.time)}</Text>
                 </View>
               )}
               {reminder.repeat && reminder.repeat !== 'none' && (

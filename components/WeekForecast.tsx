@@ -38,6 +38,14 @@ export const WeekForecast = ({ reminders, onReminderClick, onComplete }: WeekFor
     return format(date, 'EEEE');
   };
 
+  const formatTime = (timeStr: string) => {
+    if (!timeStr) return '';
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const displayHours = hours % 12 || 12;
+    return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+  };
+
   return (
     <View style={styles.container}>
       {days.map((date, index) => {
@@ -99,7 +107,7 @@ export const WeekForecast = ({ reminders, onReminderClick, onComplete }: WeekFor
                       {reminder.time && (
                         <View style={styles.timeContainer}>
                           <Ionicons name="time-outline" size={12} color={colors.mutedForeground} />
-                          <Text style={styles.timeText}>{reminder.time}</Text>
+                          <Text style={styles.timeText}>{formatTime(reminder.time)}</Text>
                         </View>
                       )}
                     </View>
