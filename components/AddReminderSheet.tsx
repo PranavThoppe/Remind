@@ -117,6 +117,11 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
     }
   }, [isOpen]);
 
+  const handleClose = () => {
+    Keyboard.dismiss();
+    onClose();
+  };
+
   const handleSave = () => {
     if (!title.trim()) return;
 
@@ -140,7 +145,7 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
     setDate(undefined);
     setTime('');
     setRepeat('none');
-    onClose();
+    handleClose();
   };
 
   const handleDateChange = (event: any, selectedDate?: Date) => {
@@ -189,7 +194,7 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
       transparent
       visible={isOpen}
       animationType="none"
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
       {/* Backdrop */}
       <Animated.View
@@ -203,7 +208,7 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
           },
         ]}
       >
-        <Pressable style={styles.backdropPressable} onPress={onClose} />
+        <Pressable style={styles.backdropPressable} onPress={handleClose} />
       </Animated.View>
 
       {/* Sheet */}
@@ -228,7 +233,7 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
           </Text>
           <TouchableOpacity
             style={styles.closeButton}
-            onPress={onClose}
+            onPress={handleClose}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <Ionicons name="close" size={24} color={colors.mutedForeground} />
@@ -259,6 +264,7 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
                 date && styles.pickerButtonActive,
               ]}
               onPress={() => {
+                Keyboard.dismiss();
                 setShowDatePicker(!showDatePicker);
                 setShowTimePicker(false);
               }}
@@ -283,6 +289,7 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
                 time && styles.pickerButtonActive,
               ]}
               onPress={() => {
+                Keyboard.dismiss();
                 setShowTimePicker(!showTimePicker);
                 setShowDatePicker(false);
               }}
@@ -342,7 +349,10 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
                     styles.repeatOption,
                     repeat === option.value && styles.repeatOptionActive,
                   ]}
-                  onPress={() => setRepeat(option.value)}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setRepeat(option.value);
+                  }}
                 >
                   <Text style={[
                     styles.repeatOptionText,

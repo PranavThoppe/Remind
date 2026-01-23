@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { addDays, addWeeks, addMonths, format, parseISO } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { Reminder } from '../types/reminder';
@@ -57,6 +58,30 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
     fetchReminders();
   }, [fetchReminders]);
 
+  const getNextDate = (dateStr: string | undefined, repeat: 'daily' | 'weekly' | 'monthly'): string | undefined => {
+    // We use T00:00:00 to ensure it's parsed as local time
+    const baseDate = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
+    
+    if (isNaN(baseDate.getTime())) return undefined;
+    
+    let nextDate: Date;
+    switch (repeat) {
+      case 'daily':
+        nextDate = addDays(baseDate, 1);
+        break;
+      case 'weekly':
+        nextDate = addWeeks(baseDate, 1);
+        break;
+      case 'monthly':
+        nextDate = addMonths(baseDate, 1);
+        break;
+      default:
+        return undefined;
+    }
+    
+    return format(nextDate, 'yyyy-MM-dd');
+  };
+
   const addReminder = async (newReminder: Omit<Reminder, 'id' | 'user_id' | 'created_at' | 'completed'>) => {
     if (!user) return { data: null, error: new Error('User not authenticated') };
 
@@ -84,18 +109,53 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleComplete = async (id: string, currentStatus: boolean) => {
+    const reminder = reminders.find((r) => r.id === id);
+    if (!reminder) return { error: new Error('Reminder not found') };
+
+    const newStatus = !currentStatus;
+
     try {
-      const { error } = await supabase
+      // 1. Update current reminder
+      const { error: updateError } = await supabase
         .from('reminders')
-        .update({ completed: !currentStatus })
+        .update({ completed: newStatus })
         .eq('id', id);
 
-      if (!error) {
-        setReminders((prev) =>
-          prev.map((r) => (r.id === id ? { ...r, completed: !currentStatus } : r))
-        );
+      if (updateError) return { error: updateError };
+
+      // Update local state for the current reminder
+      let updatedReminders = reminders.map((r) =>
+        r.id === id ? { ...r, completed: newStatus } : r
+      );
+
+      // 2. Handle repeating logic if marking as completed
+      if (newStatus && reminder.repeat && reminder.repeat !== 'none') {
+        const nextDate = getNextDate(reminder.date, reminder.repeat);
+        
+        const nextReminder = {
+          title: reminder.title,
+          date: nextDate,
+          time: reminder.time,
+          repeat: reminder.repeat,
+          user_id: user?.id,
+          completed: false,
+        };
+
+        const { data: nextData, error: insertError } = await supabase
+          .from('reminders')
+          .insert([nextReminder])
+          .select()
+          .single();
+
+        if (!insertError && nextData) {
+          updatedReminders = [nextData, ...updatedReminders];
+        } else if (insertError) {
+          console.error('Error creating next repeating reminder:', insertError);
+        }
       }
-      return { error };
+
+      setReminders(updatedReminders);
+      return { error: null };
     } catch (error) {
       console.error('Unexpected error toggling reminder:', error);
       return { error };
