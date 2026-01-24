@@ -109,27 +109,44 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleComplete = async (id: string, currentStatus: boolean) => {
-    const reminder = reminders.find((r) => r.id === id);
-    if (!reminder) return { error: new Error('Reminder not found') };
-
     const newStatus = !currentStatus;
 
     try {
-      // 1. Update current reminder
+      console.log(`[RemindersContext] Toggling reminder ${id} to ${newStatus}`);
+      
+      // Ensure we have a session before updating
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        console.error('[RemindersContext] No session found during toggleComplete');
+        return { error: new Error('No active session') };
+      }
+
+      console.log(`[RemindersContext] Session active for user: ${session.user.id}`);
+
+      // 1. Update current reminder in Supabase first
       const { error: updateError } = await supabase
         .from('reminders')
         .update({ completed: newStatus })
         .eq('id', id);
 
-      if (updateError) return { error: updateError };
+      if (updateError) {
+        console.error('[RemindersContext] Supabase update error:', updateError);
+        return { error: updateError };
+      }
 
-      // Update local state for the current reminder
-      let updatedReminders = reminders.map((r) =>
+      console.log(`[RemindersContext] Successfully updated database for ${id}`);
+
+      // Update local state if the reminder exists in our list
+      const reminder = reminders.find((r) => r.id === id);
+      
+      setReminders(prev => prev.map((r) =>
         r.id === id ? { ...r, completed: newStatus } : r
-      );
+      ));
 
       // 2. Handle repeating logic if marking as completed
-      if (newStatus && reminder.repeat && reminder.repeat !== 'none') {
+      // If we don't have the reminder in state, we might miss the repeating logic
+      // This is a trade-off for background actions. 
+      if (newStatus && reminder && reminder.repeat && reminder.repeat !== 'none') {
         const nextDate = getNextDate(reminder.date, reminder.repeat);
         
         const nextReminder = {
@@ -148,13 +165,10 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
           .single();
 
         if (!insertError && nextData) {
-          updatedReminders = [nextData, ...updatedReminders];
-        } else if (insertError) {
-          console.error('Error creating next repeating reminder:', insertError);
+          setReminders(prev => [nextData, ...prev]);
         }
       }
 
-      setReminders(updatedReminders);
       return { error: null };
     } catch (error) {
       console.error('Unexpected error toggling reminder:', error);

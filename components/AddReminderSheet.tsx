@@ -17,11 +17,12 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { colors, shadows, spacing, borderRadius, typography } from '../constants/theme';
 import { Reminder } from '../types/reminder';
+import { scheduleReminderNotification } from '../lib/notifications';
 
 interface AddReminderSheetProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (reminder: Omit<Reminder, 'id' | 'user_id' | 'created_at' | 'completed'>) => void;
+  onSave: (reminder: Omit<Reminder, 'id' | 'user_id' | 'created_at' | 'completed'>) => Promise<any>;
   editReminder?: Reminder | null;
 }
 
@@ -122,7 +123,7 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
     onClose();
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!title.trim()) return;
 
     Keyboard.dismiss();
@@ -134,12 +135,23 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
     const day = d.getDate().toString().padStart(2, '0');
     const dateString = `${year}-${month}-${day}`;
 
-    onSave({
+    const { data: savedReminder, error } = await onSave({
       title: title.trim(),
       date: dateString,
       time: time || undefined,
       repeat,
-    });
+    }) as any;
+
+    // Schedule notification
+    if (!error && savedReminder && dateString) {
+      scheduleReminderNotification(
+        title.trim(),
+        dateString,
+        time || undefined,
+        repeat,
+        savedReminder.id // Pass the ID for completion logic
+      ).catch(error => console.error('Failed to schedule notification:', error));
+    }
 
     setTitle('');
     setDate(undefined);

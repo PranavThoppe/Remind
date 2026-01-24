@@ -12,7 +12,59 @@ import {
 } from '@expo-google-fonts/inter';
 import { colors } from '../constants/theme';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
-import { RemindersProvider } from '../contexts/RemindersContext';
+import { RemindersProvider, useRemindersContext } from '../contexts/RemindersContext';
+import { initializeNotifications, scheduleReminderNotification } from '../lib/notifications';
+import * as Notifications from 'expo-notifications';
+import { format, addMinutes } from 'date-fns';
+
+function NotificationHandler() {
+  const { toggleComplete } = useRemindersContext();
+  const { user, loading: authLoading } = useAuth();
+
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener(async (response) => {
+      const actionId = response.actionIdentifier;
+      // Explicitly type the notification data
+      const data = response.notification.request.content.data as { title?: string; id?: string };
+      const { title, id } = data;
+
+      console.log('--- Notification Action ---');
+      console.log('Action:', actionId);
+      console.log('Reminder ID:', id);
+
+      if (actionId === 'complete' && id) {
+        console.log(`Attempting to mark "${title || 'Unknown'}" as complete...`);
+        
+        // toggleComplete now handles its own session check inside
+        const result = await toggleComplete(id, false);
+        if (result.error) {
+          console.error('Failed to mark as complete. Full Error:', JSON.stringify(result.error, null, 2));
+        } else {
+          console.log(`Successfully marked "${title || 'Unknown'}" as complete`);
+        }
+      } else if (actionId === 'snooze-30' || actionId === 'snooze-60') {
+        if (!title) {
+          console.error('Cannot snooze: Title is missing from notification data');
+          return;
+        }
+
+        const minutes = actionId === 'snooze-30' ? 30 : 60;
+        const now = new Date();
+        const snoozeDate = addMinutes(now, minutes);
+        
+        const newDate = format(snoozeDate, 'yyyy-MM-dd');
+        const newTime = format(snoozeDate, 'HH:mm');
+
+        await scheduleReminderNotification(title, newDate, newTime, 'none');
+        console.log(`Snoozed "${title}" for ${minutes} minutes`);
+      }
+    });
+
+    return () => subscription.remove();
+  }, [toggleComplete]);
+
+  return null;
+}
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -58,6 +110,10 @@ export default function RootLayout() {
     }
   }, [fontError]);
 
+  useEffect(() => {
+    initializeNotifications().catch(console.error);
+  }, []);
+
   if (!fontsLoaded && !fontError) {
     return (
       <View style={styles.loadingContainer}>
@@ -71,6 +127,7 @@ export default function RootLayout() {
       <AuthProvider>
         <AuthGuard>
           <RemindersProvider>
+            <NotificationHandler />
             <StatusBar style="dark" />
             <Stack
               screenOptions={{

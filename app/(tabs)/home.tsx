@@ -104,12 +104,14 @@ export default function HomeScreen() {
   };
 
   const handleSave = async (data: Omit<Reminder, 'id' | 'user_id' | 'created_at' | 'completed'>) => {
+    let result;
     if (editingReminder) {
-      await updateReminder(editingReminder.id, data);
+      result = await updateReminder(editingReminder.id, data);
     } else {
-      await addReminder(data);
+      result = await addReminder(data);
     }
     setEditingReminder(null);
+    return result;
   };
 
   const handleCloseSheet = () => {
