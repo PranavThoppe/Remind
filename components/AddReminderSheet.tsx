@@ -18,6 +18,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { colors, shadows, spacing, borderRadius, typography } from '../constants/theme';
 import { Reminder } from '../types/reminder';
 import { scheduleReminderNotification } from '../lib/notifications';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface AddReminderSheetProps {
   isOpen: boolean;
@@ -41,9 +42,13 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
   const [date, setDate] = useState<Date | undefined>();
   const [time, setTime] = useState('');
   const [repeat, setRepeat] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none');
+  const [tagId, setTagId] = useState<string | undefined>();
+  const [priorityId, setPriorityId] = useState<string | undefined>();
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  const { tags, priorities } = useSettings();
 
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
@@ -55,11 +60,15 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
       setDate(editReminder.date ? new Date(editReminder.date + 'T00:00:00') : undefined);
       setTime(editReminder.time || '');
       setRepeat(editReminder.repeat || 'none');
+      setTagId(editReminder.tag_id);
+      setPriorityId(editReminder.priority_id);
     } else {
       setTitle('');
       setDate(undefined);
       setTime('');
       setRepeat('none');
+      setTagId(undefined);
+      setPriorityId(undefined);
     }
     // Reset picker visibility when sheet is opened or closed
     setShowDatePicker(false);
@@ -140,6 +149,8 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
       date: dateString,
       time: time || undefined,
       repeat,
+      tag_id: tagId,
+      priority_id: priorityId,
     }) as any;
 
     // Schedule notification
@@ -377,6 +388,66 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
             </View>
           </View>
 
+          {/* Tag Selection */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="pricetag-outline" size={18} color={colors.mutedForeground} />
+              <Text style={styles.sectionLabel}>Tag</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
+              <TouchableOpacity
+                style={[styles.tagOption, !tagId && styles.tagOptionActive]}
+                onPress={() => setTagId(undefined)}
+              >
+                <Text style={[styles.tagText, !tagId && styles.tagTextActive]}>None</Text>
+              </TouchableOpacity>
+              {tags.map((tag) => (
+                <TouchableOpacity
+                  key={tag.id}
+                  style={[
+                    styles.tagOption,
+                    tagId === tag.id && { backgroundColor: tag.color, borderColor: tag.color },
+                  ]}
+                  onPress={() => setTagId(tag.id)}
+                >
+                  <View style={[styles.tagDot, { backgroundColor: tagId === tag.id ? 'white' : tag.color }]} />
+                  <Text style={[styles.tagText, tagId === tag.id && { color: 'white' }]}>
+                    {tag.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          {/* Priority Selection */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="flag-outline" size={18} color={colors.mutedForeground} />
+              <Text style={styles.sectionLabel}>Priority</Text>
+            </View>
+            <View style={styles.priorityOptions}>
+              {priorities.map((priority) => (
+                <TouchableOpacity
+                  key={priority.id}
+                  style={[
+                    styles.priorityOption,
+                    priorityId === priority.id && { backgroundColor: `${priority.color}15`, borderColor: priority.color },
+                  ]}
+                  onPress={() => setPriorityId(priority.id)}
+                >
+                  <Ionicons 
+                    name={priorityId === priority.id ? "flag" : "flag-outline"} 
+                    size={16} 
+                    color={priority.color} 
+                  />
+                  <Text style={[styles.priorityText, { color: priority.color }]}>
+                    {priority.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
           {/* Save Button */}
           <TouchableOpacity
             style={[
@@ -541,5 +612,74 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.lg,
     color: colors.primaryForeground,
+  },
+  section: {
+    marginBottom: spacing.xl,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  sectionLabel: {
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.base,
+    color: colors.mutedForeground,
+  },
+  horizontalScroll: {
+    marginHorizontal: -spacing.xl,
+    paddingHorizontal: spacing.xl,
+  },
+  tagOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.muted,
+    marginRight: spacing.sm,
+    backgroundColor: colors.card,
+  },
+  tagOptionActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  tagDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: spacing.sm,
+  },
+  tagText: {
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.base,
+    color: colors.mutedForeground,
+  },
+  tagTextActive: {
+    color: 'white',
+  },
+  priorityOptions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    flexWrap: 'wrap',
+  },
+  priorityOption: {
+    flex: 1,
+    minWidth: '45%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.muted,
+    backgroundColor: colors.card,
+  },
+  priorityText: {
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.base,
   },
 });

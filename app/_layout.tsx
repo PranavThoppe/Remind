@@ -13,6 +13,7 @@ import {
 import { colors } from '../constants/theme';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { RemindersProvider, useRemindersContext } from '../contexts/RemindersContext';
+import { SettingsProvider } from '../contexts/SettingsContext';
 import { initializeNotifications, scheduleReminderNotification } from '../lib/notifications';
 import * as Notifications from 'expo-notifications';
 import { format, addMinutes } from 'date-fns';
@@ -74,13 +75,13 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading) return;
 
-    const inAuthGroup = segments[0] === '(tabs)';
+    const isPublicRoute = segments[0] === undefined || segments[0] === 'index';
 
-    if (!user && inAuthGroup) {
-      // Redirect to the sign-in page if user is not authenticated and trying to access tabs
+    if (!user && !isPublicRoute) {
+      // Redirect to the sign-in page if user is not authenticated and trying to access a private route
       router.replace('/');
-    } else if (user && !inAuthGroup) {
-      // Redirect to the home page if user is authenticated and trying to access auth screens
+    } else if (user && isPublicRoute) {
+      // Redirect to the home page if user is authenticated and trying to access an auth screen
       router.replace('/(tabs)/home');
     }
   }, [user, loading, segments]);
@@ -126,20 +127,22 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
         <AuthGuard>
-          <RemindersProvider>
-            <NotificationHandler />
-            <StatusBar style="dark" />
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: colors.background },
-                animation: 'fade',
-              }}
-            >
-              <Stack.Screen name="index" />
-              <Stack.Screen name="(tabs)" />
-            </Stack>
-          </RemindersProvider>
+          <SettingsProvider>
+            <RemindersProvider>
+              <NotificationHandler />
+              <StatusBar style="dark" />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: colors.background },
+                  animation: 'fade',
+                }}
+              >
+                <Stack.Screen name="index" />
+                <Stack.Screen name="(tabs)" />
+              </Stack>
+            </RemindersProvider>
+          </SettingsProvider>
         </AuthGuard>
       </AuthProvider>
     </GestureHandlerRootView>

@@ -8,18 +8,63 @@ import {
   Animated,
   Platform,
   Image,
+  Switch,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, shadows, spacing, borderRadius, typography } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSettings } from '../../contexts/SettingsContext';
+
+interface SettingItemProps {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value?: string;
+  onPress?: () => void;
+  isLast?: boolean;
+  rightElement?: React.ReactNode;
+}
+
+const SettingItem = ({ icon, label, value, onPress, isLast, rightElement }: SettingItemProps) => (
+  <TouchableOpacity
+    style={[styles.settingItem, !isLast && styles.settingItemBorder]}
+    onPress={onPress}
+    disabled={!onPress}
+    activeOpacity={0.7}
+  >
+    <View style={styles.settingItemLeft}>
+      <View style={[styles.iconContainer, { backgroundColor: `${colors.primary}10` }]}>
+        <Ionicons name={icon} size={20} color={colors.primary} />
+      </View>
+      <Text style={styles.settingLabel}>{label}</Text>
+    </View>
+    <View style={styles.settingItemRight}>
+      {rightElement ? (
+        rightElement
+      ) : (
+        <>
+          {value && <Text style={styles.settingValue}>{value}</Text>}
+          <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+        </>
+      )}
+    </View>
+  </TouchableOpacity>
+);
+
+const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
+  <View style={styles.section}>
+    <Text style={styles.sectionTitle}>{title}</Text>
+    <View style={styles.sectionCard}>{children}</View>
+  </View>
+);
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(8)).current;
   const { user, profile, signOut } = useAuth();
+  const { notificationsEnabled, setNotificationsEnabled } = useSettings();
 
   useEffect(() => {
     Animated.parallel([
@@ -45,12 +90,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const settingsItems = [
-    { label: 'Notifications', value: '', icon: 'notifications-outline' as const },
-    { label: 'Appearance', value: 'Light', icon: 'sunny-outline' as const },
-    { label: 'About', value: 'v1.0.0', icon: 'information-circle-outline' as const },
-  ];
-
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -72,7 +111,7 @@ export default function SettingsScreen() {
             },
           ]}
         >
-          {/* Profile Card */}
+          {/* Profile Section */}
           <View style={styles.profileCard}>
             <View style={styles.avatar}>
               {profile?.avatar_url || user?.user_metadata?.avatar_url ? (
@@ -94,40 +133,59 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-          {/* Settings List */}
-          <View style={styles.settingsList}>
-            {settingsItems.map((item, index) => (
-              <TouchableOpacity
-                key={item.label}
-                style={[
-                  styles.settingsItem,
-                  index === 0 && styles.settingsItemFirst,
-                  index === settingsItems.length - 1 && styles.settingsItemLast,
-                ]}
-                activeOpacity={0.7}
-              >
-                <View style={styles.settingsItemLeft}>
-                  <Ionicons
-                    name={item.icon}
-                    size={22}
-                    color={colors.foreground}
-                    style={styles.settingsIcon}
-                  />
-                  <Text style={styles.settingsLabel}>{item.label}</Text>
-                </View>
-                <View style={styles.settingsItemRight}>
-                  {item.value && (
-                    <Text style={styles.settingsValue}>{item.value}</Text>
-                  )}
-                  <Ionicons
-                    name="chevron-forward"
-                    size={20}
-                    color={colors.mutedForeground}
-                  />
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {/* Personalization Section */}
+          <Section title="Personalization">
+            <SettingItem
+              icon="pricetag-outline"
+              label="Tags"
+              onPress={() => router.push('/settings/tags')}
+            />
+            <SettingItem
+              icon="flag-outline"
+              label="Priority Levels"
+              onPress={() => router.push('/settings/priority')}
+              isLast
+            />
+          </Section>
+
+          {/* App Settings Section */}
+          <Section title="App Settings">
+            <SettingItem
+              icon="notifications-outline"
+              label="Notifications"
+              rightElement={
+                <Switch
+                  value={notificationsEnabled}
+                  onValueChange={setNotificationsEnabled}
+                  trackColor={{ false: colors.muted, true: colors.primary }}
+                  thumbColor={Platform.OS === 'ios' ? undefined : colors.card}
+                />
+              }
+            />
+            <SettingItem
+              icon="sunny-outline"
+              label="Appearance"
+              value="Light"
+              onPress={() => {}}
+            />
+            <SettingItem
+              icon="time-outline"
+              label="Date & Time"
+              onPress={() => router.push('/settings/datetime')}
+              isLast
+            />
+          </Section>
+
+          {/* Support Section */}
+          <Section title="Support">
+            <SettingItem
+              icon="information-circle-outline"
+              label="About"
+              value="v1.0.0"
+              onPress={() => {}}
+              isLast
+            />
+          </Section>
 
           {/* Sign Out Button */}
           <TouchableOpacity
@@ -161,7 +219,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.lg,
     backgroundColor: colors.background,
   },
   title: {
@@ -184,31 +242,32 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderRadius: borderRadius.xl,
     padding: spacing.xl,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.xl,
     ...shadows.card,
   },
   avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: `${colors.primary}15`,
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarEmoji: {
-    fontSize: 28,
+    fontSize: 32,
   },
   avatarImage: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
   },
   profileInfo: {
     marginLeft: spacing.lg,
+    flex: 1,
   },
   profileName: {
     fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.lg,
+    fontSize: typography.fontSize.xl,
     color: colors.foreground,
   },
   profileEmail: {
@@ -217,48 +276,58 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     marginTop: 2,
   },
-  settingsList: {
+  section: {
+    marginBottom: spacing.xl,
+  },
+  sectionTitle: {
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    color: colors.mutedForeground,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: spacing.sm,
+    marginLeft: spacing.xs,
+  },
+  sectionCard: {
     backgroundColor: colors.card,
     borderRadius: borderRadius.xl,
-    marginBottom: spacing.lg,
     ...shadows.card,
+    overflow: 'hidden',
   },
-  settingsItem: {
+  settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing.lg,
+  },
+  settingItemBorder: {
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  settingsItemFirst: {
-    borderTopLeftRadius: borderRadius.xl,
-    borderTopRightRadius: borderRadius.xl,
-  },
-  settingsItemLast: {
-    borderBottomWidth: 0,
-    borderBottomLeftRadius: borderRadius.xl,
-    borderBottomRightRadius: borderRadius.xl,
-  },
-  settingsItemLeft: {
+  settingItemLeft: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  settingsIcon: {
+  iconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: spacing.md,
   },
-  settingsLabel: {
+  settingLabel: {
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.lg,
     color: colors.foreground,
   },
-  settingsItemRight: {
+  settingItemRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
   },
-  settingsValue: {
+  settingValue: {
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.base,
     color: colors.mutedForeground,
@@ -270,6 +339,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderRadius: borderRadius.xl,
     padding: spacing.lg,
+    marginTop: spacing.md,
     ...shadows.card,
   },
   signOutIcon: {
@@ -282,9 +352,9 @@ const styles = StyleSheet.create({
   },
   versionText: {
     fontFamily: typography.fontFamily.regular,
-    fontSize: typography.fontSize.sm,
+    fontSize: typography.fontSize.xs,
     color: colors.mutedForeground,
     textAlign: 'center',
-    marginTop: spacing['2xl'],
+    marginTop: spacing['3xl'],
   },
 });

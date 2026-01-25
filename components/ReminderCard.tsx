@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { colors, shadows, spacing, borderRadius, typography } from '../constants/theme';
 import { Reminder } from '../types/reminder';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface ReminderCardProps {
   reminder: Reminder;
@@ -24,6 +25,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
   const slideAnim = useRef(new Animated.Value(8)).current;
   const checkScaleAnim = useRef(new Animated.Value(1)).current;
   const swipeableRef = useRef<Swipeable>(null);
+  const { tags, priorities } = useSettings();
 
   useEffect(() => {
     Animated.parallel([
@@ -90,6 +92,9 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
       default: return '';
     }
   };
+
+  const tag = tags.find(t => t.id === reminder.tag_id);
+  const priority = priorities.find(p => p.id === reminder.priority_id);
 
   const renderRightActions = (
     progress: Animated.AnimatedInterpolation<number>,
@@ -161,14 +166,32 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
 
             {/* Text Content */}
             <View style={styles.textContent}>
-              <Text
-                style={[
-                  styles.title,
-                  reminder.completed && styles.titleCompleted,
-                ]}
-              >
-                {reminder.title}
-              </Text>
+              <View style={styles.titleRow}>
+                <Text
+                  style={[
+                    styles.title,
+                    reminder.completed && styles.titleCompleted,
+                  ]}
+                >
+                  {reminder.title}
+                </Text>
+                {priority && (
+                  <View style={[styles.priorityBadge, { backgroundColor: `${priority.color}15` }]}>
+                    <Ionicons name="flag" size={10} color={priority.color} />
+                    <Text style={[styles.priorityBadgeText, { color: priority.color }]}>
+                      {priority.name}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Tag */}
+              {tag && (
+                <View style={[styles.tagBadge, { backgroundColor: tag.color }]}>
+                  <View style={styles.tagDot} />
+                  <Text style={styles.tagBadgeText}>{tag.name}</Text>
+                </View>
+              )}
 
               {/* Meta Info */}
               <View style={styles.metaContainer}>
@@ -240,10 +263,50 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.lg,
     color: colors.foreground,
     lineHeight: 22,
+    flex: 1,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   titleCompleted: {
     textDecorationLine: 'line-through',
     color: colors.mutedForeground,
+  },
+  priorityBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  priorityBadgeText: {
+    fontFamily: typography.fontFamily.bold,
+    fontSize: 10,
+    textTransform: 'uppercase',
+  },
+  tagBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginTop: spacing.xs,
+  },
+  tagDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'white',
+    marginRight: 6,
+  },
+  tagBadgeText: {
+    fontFamily: typography.fontFamily.medium,
+    fontSize: 12,
+    color: 'white',
   },
   metaContainer: {
     flexDirection: 'row',

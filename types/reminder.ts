@@ -7,6 +7,8 @@ export interface Reminder {
   repeat?: 'none' | 'daily' | 'weekly' | 'monthly';
   completed: boolean;
   created_at: string;
+  tag_id?: string;
+  priority_id?: string;
 }
 
 export interface Profile {
