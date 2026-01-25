@@ -83,23 +83,39 @@ export async function scheduleReminderNotification(
   id?: string
 ): Promise<string | null> {
   try {
-    const triggerDate = new Date(`${date}T${time || '09:00'}:00`);
+    const [year, month, day] = date.split('-').map(Number);
+    const timeParts = (time || '09:00').split(':').map(Number);
+    const hour = isNaN(timeParts[0]) ? 9 : timeParts[0];
+    const minute = isNaN(timeParts[1]) ? 0 : timeParts[1];
+
+    const triggerDate = new Date(year, month - 1, day, hour, minute);
     
-    // If the time is in the past, don't schedule
-    if (triggerDate.getTime() <= Date.now()) {
-      console.log('Skipping notification for past date/time');
+    // Check if date is valid
+    if (isNaN(triggerDate.getTime())) {
+      console.error('[Notifications] Invalid date/time for notification:', { date, time, year, month, day, hour, minute });
+      return null;
+    }
+    
+    const isRepeating = repeat && repeat !== 'none';
+    const isPast = triggerDate.getTime() <= Date.now();
+
+    // For one-time notifications, skip if in the past
+    if (!isRepeating && isPast) {
+      console.log('[Notifications] Skipping one-time notification for past date/time:', triggerDate.toLocaleString());
       return null;
     }
 
     let trigger: Notifications.NotificationTriggerInput;
 
-    if (repeat && repeat !== 'none') {
+    if (isRepeating) {
+      // For repeating notifications, Expo's CALENDAR trigger handles the "next occurrence" 
+      // automatically based on the components provided.
       switch (repeat) {
         case 'daily':
           trigger = {
             type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
-            hour: triggerDate.getHours(),
-            minute: triggerDate.getMinutes(),
+            hour,
+            minute,
             repeats: true,
           };
           break;
@@ -107,8 +123,8 @@ export async function scheduleReminderNotification(
           trigger = {
             type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
             weekday: triggerDate.getDay() + 1, // 1 is Sunday in expo-notifications
-            hour: triggerDate.getHours(),
-            minute: triggerDate.getMinutes(),
+            hour,
+            minute,
             repeats: true,
           };
           break;
@@ -116,8 +132,8 @@ export async function scheduleReminderNotification(
           trigger = {
             type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
             day: triggerDate.getDate(),
-            hour: triggerDate.getHours(),
-            minute: triggerDate.getMinutes(),
+            hour,
+            minute,
             repeats: true,
           };
           break;
@@ -133,6 +149,8 @@ export async function scheduleReminderNotification(
         date: triggerDate,
       };
     }
+
+    console.log(`[Notifications] Scheduling notification: "${title}" at ${triggerDate.toLocaleString()} (Repeat: ${repeat || 'none'})`);
 
     const identifier = await Notifications.scheduleNotificationAsync({
       content: {

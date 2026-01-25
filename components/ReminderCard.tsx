@@ -25,7 +25,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
   const slideAnim = useRef(new Animated.Value(8)).current;
   const checkScaleAnim = useRef(new Animated.Value(1)).current;
   const swipeableRef = useRef<Swipeable>(null);
-  const { tags, priorities } = useSettings();
+  const { tags } = useSettings();
 
   useEffect(() => {
     Animated.parallel([
@@ -70,12 +70,6 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
     }, 200);
   };
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr + 'T00:00:00');
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${months[date.getMonth()]} ${date.getDate()}`;
-  };
-
   const formatTime = (timeStr: string) => {
     if (!timeStr) return '';
     const [hours, minutes] = timeStr.split(':').map(Number);
@@ -84,17 +78,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
     return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
   };
 
-  const getRepeatLabel = (repeat: string) => {
-    switch (repeat) {
-      case 'daily': return 'Daily';
-      case 'weekly': return 'Weekly';
-      case 'monthly': return 'Monthly';
-      default: return '';
-    }
-  };
-
   const tag = tags.find(t => t.id === reminder.tag_id);
-  const priority = priorities.find(p => p.id === reminder.priority_id);
 
   const renderRightActions = (
     progress: Animated.AnimatedInterpolation<number>,
@@ -140,11 +124,25 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
         ]}
       >
         <TouchableOpacity
-          style={styles.card}
+          style={[
+            styles.card,
+            tag && !reminder.completed && {
+              backgroundColor: `${tag.color}08`,
+              borderLeftWidth: 1,
+              borderLeftColor: tag.color,
+              borderRightWidth: 1,
+              borderRightColor: tag.color,
+              paddingLeft: spacing.lg - 4,
+              borderBottomWidth: 1,
+              borderBottomColor: tag.color,
+              borderTopWidth: 1,
+              borderTopColor: tag.color,
+            }
+          ]}
           onPress={() => onEdit(reminder)}
           activeOpacity={0.9}
         >
-          <View style={styles.content}>
+          <View style={[styles.content, !reminder.time && { alignItems: 'center' }]}>
             {/* Checkbox */}
             <TouchableOpacity
               onPress={handleComplete}
@@ -155,6 +153,8 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
                 style={[
                   styles.checkbox,
                   reminder.completed && styles.checkboxCompleted,
+                  tag && !reminder.completed && { borderColor: tag.color },
+                  !reminder.time && { marginTop: 0 },
                   { transform: [{ scale: checkScaleAnim }] },
                 ]}
               >
@@ -172,47 +172,23 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
                     styles.title,
                     reminder.completed && styles.titleCompleted,
                   ]}
+                  numberOfLines={1}
                 >
                   {reminder.title}
                 </Text>
-                {priority && (
-                  <View style={[styles.priorityBadge, { backgroundColor: `${priority.color}15` }]}>
-                    <Ionicons name="flag" size={10} color={priority.color} />
-                    <Text style={[styles.priorityBadgeText, { color: priority.color }]}>
-                      {priority.name}
-                    </Text>
+                {tag && (
+                  <View style={[styles.tagBadgeSmall, { backgroundColor: `${tag.color}15` }]}>
+                    <Text style={[styles.tagTextSmall, { color: tag.color }]}>{tag.name}</Text>
                   </View>
                 )}
               </View>
 
-              {/* Tag */}
-              {tag && (
-                <View style={[styles.tagBadge, { backgroundColor: tag.color }]}>
-                  <View style={styles.tagDot} />
-                  <Text style={styles.tagBadgeText}>{tag.name}</Text>
-                </View>
-              )}
-
               {/* Meta Info */}
               <View style={styles.metaContainer}>
-                {reminder.date && (
-                  <View style={styles.metaItem}>
-                    <Ionicons name="calendar-outline" size={14} color={colors.mutedForeground} />
-                    <Text style={styles.metaText}>{formatDate(reminder.date)}</Text>
-                  </View>
-                )}
                 {reminder.time && (
                   <View style={styles.metaItem}>
                     <Ionicons name="time-outline" size={14} color={colors.mutedForeground} />
                     <Text style={styles.metaText}>{formatTime(reminder.time)}</Text>
-                  </View>
-                )}
-                {reminder.repeat && reminder.repeat !== 'none' && (
-                  <View style={styles.metaItem}>
-                    <Ionicons name="repeat" size={14} color={colors.primary} />
-                    <Text style={[styles.metaText, styles.metaTextPrimary]}>
-                      {getRepeatLabel(reminder.repeat)}
-                    </Text>
                   </View>
                 )}
               </View>
@@ -234,6 +210,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderRadius: borderRadius.lg,
     padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: 'transparent',
     ...shadows.card,
   },
   content: {
@@ -263,50 +241,28 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.lg,
     color: colors.foreground,
     lineHeight: 22,
-    flex: 1,
+    flexShrink: 1,
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+    flexWrap: 'nowrap',
+  },
+  tagBadgeSmall: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'center',
+  },
+  tagTextSmall: {
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: 10,
+    textTransform: 'uppercase',
   },
   titleCompleted: {
     textDecorationLine: 'line-through',
     color: colors.mutedForeground,
-  },
-  priorityBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  priorityBadgeText: {
-    fontFamily: typography.fontFamily.bold,
-    fontSize: 10,
-    textTransform: 'uppercase',
-  },
-  tagBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-    marginTop: spacing.xs,
-  },
-  tagDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'white',
-    marginRight: 6,
-  },
-  tagBadgeText: {
-    fontFamily: typography.fontFamily.medium,
-    fontSize: 12,
-    color: 'white',
   },
   metaContainer: {
     flexDirection: 'row',
@@ -323,9 +279,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.sm,
     color: colors.mutedForeground,
-  },
-  metaTextPrimary: {
-    color: colors.primary,
   },
   deleteAction: {
     backgroundColor: colors.destructive,
