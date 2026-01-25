@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { colors, spacing, typography, borderRadius, shadows } from '../constants/theme';
 import { Reminder } from '../types/reminder';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface WeekForecastProps {
   reminders: Reminder[];
@@ -17,6 +18,7 @@ export const WeekForecast = ({ reminders, onReminderClick, onComplete, onDelete 
   const today = startOfDay(new Date());
   const days = Array.from({ length: 7 }, (_, i) => addDays(today, i));
   const swipeableRefs = useRef<{ [key: string]: Swipeable | null }>({});
+  const { tags } = useSettings();
 
   const getRemindersForDay = (date: Date) => {
     return reminders
@@ -112,46 +114,75 @@ export const WeekForecast = ({ reminders, onReminderClick, onComplete, onDelete 
             {/* Reminders List */}
             {dayReminders.length > 0 ? (
               <View style={styles.remindersList}>
-                {dayReminders.map((reminder) => (
-                  <Swipeable
-                    key={reminder.id}
-                    ref={(el) => (swipeableRefs.current[reminder.id] = el)}
-                    renderRightActions={(progress, dragX) => 
-                      renderRightActions(reminder.id, progress, dragX)
-                    }
-                    friction={2}
-                    rightThreshold={30}
-                  >
-                    <TouchableOpacity
-                      onPress={() => onReminderClick?.(reminder)}
-                      style={styles.reminderItem}
-                      activeOpacity={0.7}
+                {dayReminders.map((reminder) => {
+                  const tag = tags.find(t => t.id === reminder.tag_id);
+                  return (
+                    <Swipeable
+                      key={reminder.id}
+                      ref={(el) => (swipeableRefs.current[reminder.id] = el)}
+                      renderRightActions={(progress, dragX) => 
+                        renderRightActions(reminder.id, progress, dragX)
+                      }
+                      friction={2}
+                      rightThreshold={30}
                     >
-                      {/* Checkbox */}
                       <TouchableOpacity
-                        onPress={() => onComplete?.(reminder.id)}
-                        style={[styles.checkbox, reminder.completed && styles.checkboxCompleted]}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        onPress={() => onReminderClick?.(reminder)}
+                        style={[
+                          styles.reminderItem,
+                          tag && !reminder.completed && { backgroundColor: `${tag.color}10` }
+                        ]}
+                        activeOpacity={0.7}
                       >
-                        {reminder.completed && (
-                          <Ionicons name="checkmark" size={12} color={colors.successForeground} strokeWidth={3} />
-                        )}
+                        {/* Checkbox */}
+                        <TouchableOpacity
+                          onPress={() => onComplete?.(reminder.id)}
+                          style={[
+                            styles.checkbox, 
+                            reminder.completed && styles.checkboxCompleted,
+                            tag && !reminder.completed && { borderColor: tag.color }
+                          ]}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          {reminder.completed && (
+                            <Ionicons name="checkmark" size={12} color={colors.successForeground} strokeWidth={3} />
+                          )}
+                        </TouchableOpacity>
+                        
+                        <View style={styles.reminderContent}>
+                          <Text 
+                            style={[
+                              styles.reminderTitle, 
+                              reminder.completed && styles.completedText,
+                              tag && !reminder.completed && { color: tag.color }
+                            ]} 
+                            numberOfLines={1}
+                          >
+                            {reminder.title}
+                          </Text>
+                          {reminder.time && (
+                            <View style={styles.timeContainer}>
+                              <Ionicons 
+                                name="time-outline" 
+                                size={12} 
+                                color={tag && !reminder.completed ? tag.color : colors.mutedForeground} 
+                                style={{ opacity: tag && !reminder.completed ? 0.7 : 1 }}
+                              />
+                              <Text 
+                                style={[
+                                  styles.timeText,
+                                  tag && !reminder.completed && { color: tag.color, opacity: 0.7 }
+                                ]}
+                              >
+                                {formatTime(reminder.time)}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
                       </TouchableOpacity>
-                      
-                      <View style={styles.reminderContent}>
-                        <Text style={[styles.reminderTitle, reminder.completed && styles.completedText]} numberOfLines={1}>
-                          {reminder.title}
-                        </Text>
-                        {reminder.time && (
-                          <View style={styles.timeContainer}>
-                            <Ionicons name="time-outline" size={12} color={colors.mutedForeground} />
-                            <Text style={styles.timeText}>{formatTime(reminder.time)}</Text>
-                          </View>
-                        )}
-                      </View>
-                    </TouchableOpacity>
-                  </Swipeable>
-                ))}
+                    </Swipeable>
+                  );
+                })}
               </View>
             ) : (
               <Text style={styles.emptyText}>No reminders</Text>

@@ -43,12 +43,11 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
   const [time, setTime] = useState('');
   const [repeat, setRepeat] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none');
   const [tagId, setTagId] = useState<string | undefined>();
-  const [priorityId, setPriorityId] = useState<string | undefined>();
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
-  const { tags, priorities } = useSettings();
+  const { tags } = useSettings();
 
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
@@ -61,14 +60,12 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
       setTime(editReminder.time || '');
       setRepeat(editReminder.repeat || 'none');
       setTagId(editReminder.tag_id);
-      setPriorityId(editReminder.priority_id);
     } else {
       setTitle('');
       setDate(undefined);
       setTime('');
       setRepeat('none');
       setTagId(undefined);
-      setPriorityId(undefined);
     }
     // Reset picker visibility when sheet is opened or closed
     setShowDatePicker(false);
@@ -144,24 +141,33 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
     const day = d.getDate().toString().padStart(2, '0');
     const dateString = `${year}-${month}-${day}`;
 
-    const { data: savedReminder, error } = await onSave({
+    const result = await onSave({
       title: title.trim(),
       date: dateString,
       time: time || undefined,
       repeat,
       tag_id: tagId,
-      priority_id: priorityId,
     }) as any;
+
+    const savedReminder = result?.data;
+    const error = result?.error;
+
+    if (error) {
+      console.error('[AddReminderSheet] Error saving reminder:', error);
+    }
 
     // Schedule notification
     if (!error && savedReminder && dateString) {
+      console.log('[AddReminderSheet] Scheduling notification for saved reminder:', savedReminder.id);
       scheduleReminderNotification(
         title.trim(),
         dateString,
         time || undefined,
         repeat,
         savedReminder.id // Pass the ID for completion logic
-      ).catch(error => console.error('Failed to schedule notification:', error));
+      ).catch(err => console.error('[AddReminderSheet] Failed to schedule notification:', err));
+    } else {
+      console.log('[AddReminderSheet] Skipping notification scheduling:', { hasError: !!error, hasSavedReminder: !!savedReminder, hasDateString: !!dateString });
     }
 
     setTitle('');
@@ -419,35 +425,6 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
             </ScrollView>
           </View>
 
-          {/* Priority Selection */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="flag-outline" size={18} color={colors.mutedForeground} />
-              <Text style={styles.sectionLabel}>Priority</Text>
-            </View>
-            <View style={styles.priorityOptions}>
-              {priorities.map((priority) => (
-                <TouchableOpacity
-                  key={priority.id}
-                  style={[
-                    styles.priorityOption,
-                    priorityId === priority.id && { backgroundColor: `${priority.color}15`, borderColor: priority.color },
-                  ]}
-                  onPress={() => setPriorityId(priority.id)}
-                >
-                  <Ionicons 
-                    name={priorityId === priority.id ? "flag" : "flag-outline"} 
-                    size={16} 
-                    color={priority.color} 
-                  />
-                  <Text style={[styles.priorityText, { color: priority.color }]}>
-                    {priority.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
           {/* Save Button */}
           <TouchableOpacity
             style={[
@@ -659,27 +636,5 @@ const styles = StyleSheet.create({
   },
   tagTextActive: {
     color: 'white',
-  },
-  priorityOptions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    flexWrap: 'wrap',
-  },
-  priorityOption: {
-    flex: 1,
-    minWidth: '45%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.lg,
-    borderWidth: 1,
-    borderColor: colors.muted,
-    backgroundColor: colors.card,
-  },
-  priorityText: {
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.base,
   },
 });
