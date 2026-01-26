@@ -77,6 +77,8 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
       (e) => {
         setKeyboardHeight(e.endCoordinates.height);
+        setShowDatePicker(false);
+        setShowTimePicker(false);
       }
     );
 
@@ -282,6 +284,10 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
             placeholderTextColor={colors.mutedForeground}
             value={title}
             onChangeText={setTitle}
+            onFocus={() => {
+              setShowDatePicker(false);
+              setShowTimePicker(false);
+            }}
           />
 
           {/* Date & Time Row */}
