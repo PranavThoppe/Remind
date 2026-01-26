@@ -6,13 +6,17 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, shadows, borderRadius } from '../constants/theme';
+import { shadows, borderRadius } from '../constants/theme';
+import { useTheme } from '../hooks/useTheme';
 
 interface FloatingAddButtonProps {
   onPress: () => void;
 }
 
 export function FloatingAddButton({ onPress }: FloatingAddButtonProps) {
+  const { colors } = useTheme();
+  const styles = createStyles(colors);
+  
   const scaleAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -62,7 +66,7 @@ export function FloatingAddButton({ onPress }: FloatingAddButtonProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     position: 'absolute',
     right: 20,

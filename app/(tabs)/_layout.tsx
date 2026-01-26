@@ -1,14 +1,17 @@
 import { Tabs } from 'expo-router';
 import { View, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, shadows, typography } from '../../constants/theme';
+import { shadows, typography } from '../../constants/theme';
+import { useTheme } from '../../hooks/useTheme';
 
 type TabIconProps = {
   name: keyof typeof Ionicons.glyphMap;
   focused: boolean;
+  colors: any;
 };
 
-function TabIcon({ name, focused }: TabIconProps) {
+function TabIcon({ name, focused, colors }: TabIconProps) {
+  const styles = createStyles(colors);
   return (
     <View style={styles.iconContainer}>
       <Ionicons
@@ -22,6 +25,9 @@ function TabIcon({ name, focused }: TabIconProps) {
 }
 
 export default function TabLayout() {
+  const { colors, isDark } = useTheme();
+  const styles = createStyles(colors);
+
   return (
     <Tabs
       screenOptions={{
@@ -38,7 +44,7 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ focused }) => (
-            <TabIcon name={focused ? 'home' : 'home-outline'} focused={focused} />
+            <TabIcon name={focused ? 'home' : 'home-outline'} focused={focused} colors={colors} />
           ),
         }}
       />
@@ -47,7 +53,7 @@ export default function TabLayout() {
         options={{
           title: 'Done',
           tabBarIcon: ({ focused }) => (
-            <TabIcon name={focused ? 'checkmark-circle' : 'checkmark-circle-outline'} focused={focused} />
+            <TabIcon name={focused ? 'checkmark-circle' : 'checkmark-circle-outline'} focused={focused} colors={colors} />
           ),
         }}
       />
@@ -56,7 +62,7 @@ export default function TabLayout() {
         options={{
           title: 'Settings',
           tabBarIcon: ({ focused }) => (
-            <TabIcon name={focused ? 'settings' : 'settings-outline'} focused={focused} />
+            <TabIcon name={focused ? 'settings' : 'settings-outline'} focused={focused} colors={colors} />
           ),
         }}
       />
@@ -64,9 +70,9 @@ export default function TabLayout() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   tabBar: {
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    backgroundColor: colors.card,
     borderTopColor: colors.border,
     borderTopWidth: 1,
     height: Platform.OS === 'ios' ? 88 : 64,
@@ -80,6 +86,8 @@ const styles = StyleSheet.create({
         right: 0,
       },
     }),
+    elevation: 0,
+    shadowOpacity: 0,
   },
   tabBarLabel: {
     fontFamily: typography.fontFamily.medium,

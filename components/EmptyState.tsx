@@ -1,13 +1,17 @@
 import { useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, typography } from '../constants/theme';
+import { spacing, typography } from '../constants/theme';
+import { useTheme } from '../hooks/useTheme';
 
 interface EmptyStateProps {
   type: 'active' | 'completed';
 }
 
 export function EmptyState({ type }: EmptyStateProps) {
+  const { colors } = useTheme();
+  const styles = createStyles(colors);
+  
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(8)).current;
 
@@ -57,7 +61,7 @@ export function EmptyState({ type }: EmptyStateProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',

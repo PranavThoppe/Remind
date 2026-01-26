@@ -11,12 +11,16 @@ import {
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
+import { spacing, typography, borderRadius, shadows } from '../../constants/theme';
 import { PRESET_COLORS, Tag } from '../../types/settings';
 import { useSettings } from '../../contexts/SettingsContext';
+import { useTheme } from '../../hooks/useTheme';
 
 export default function TagsScreen() {
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useTheme();
+  const styles = createStyles(colors);
+  
   const { tags, addTag, updateTag, deleteTag } = useSettings();
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -102,6 +106,7 @@ export default function TagsScreen() {
             <TextInput
               style={styles.input}
               placeholder="Tag Name"
+              placeholderTextColor={colors.mutedForeground}
               value={tagName}
               onChangeText={setTagName}
               autoFocus
@@ -170,7 +175,7 @@ export default function TagsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -223,6 +228,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.base,
+    color: colors.foreground,
     marginBottom: spacing.lg,
   },
   label: {

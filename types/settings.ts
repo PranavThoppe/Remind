@@ -1,3 +1,5 @@
+export type ThemeType = 'system' | 'light' | 'dark';
+
 export interface Tag {
   id: string;
   name: string;

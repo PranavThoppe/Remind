@@ -12,12 +12,16 @@ import {
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
+import { spacing, typography, borderRadius, shadows } from '../../constants/theme';
 import { PRESET_COLORS, PriorityLevel } from '../../types/settings';
 import { useSettings } from '../../contexts/SettingsContext';
+import { useTheme } from '../../hooks/useTheme';
 
 export default function PriorityScreen() {
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useTheme();
+  const styles = createStyles(colors);
+  
   const { priorities, addPriority, updatePriority, deletePriority } = useSettings();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
@@ -132,6 +136,7 @@ export default function PriorityScreen() {
             <TextInput
               style={styles.input}
               placeholder="Priority Name (e.g. High, P1, Urgent)"
+              placeholderTextColor={colors.mutedForeground}
               value={priorityName}
               onChangeText={setPriorityName}
               autoFocus
@@ -232,7 +237,7 @@ export default function PriorityScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -296,6 +301,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.base,
+    color: colors.foreground,
     marginBottom: spacing.lg,
   },
   label: {

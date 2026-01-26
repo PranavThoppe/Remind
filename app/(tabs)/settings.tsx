@@ -13,9 +13,11 @@ import {
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, shadows, spacing, borderRadius, typography } from '../../constants/theme';
+import { shadows, spacing, borderRadius, typography } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../contexts/SettingsContext';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeType } from '../../types/settings';
 
 interface SettingItemProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -24,47 +26,58 @@ interface SettingItemProps {
   onPress?: () => void;
   isLast?: boolean;
   rightElement?: React.ReactNode;
+  colors: any;
 }
 
-const SettingItem = ({ icon, label, value, onPress, isLast, rightElement }: SettingItemProps) => (
-  <TouchableOpacity
-    style={[styles.settingItem, !isLast && styles.settingItemBorder]}
-    onPress={onPress}
-    disabled={!onPress}
-    activeOpacity={0.7}
-  >
-    <View style={styles.settingItemLeft}>
-      <View style={[styles.iconContainer, { backgroundColor: `${colors.primary}10` }]}>
-        <Ionicons name={icon} size={20} color={colors.primary} />
+const SettingItem = ({ icon, label, value, onPress, isLast, rightElement, colors }: SettingItemProps) => {
+  const styles = createStyles(colors);
+  return (
+    <TouchableOpacity
+      style={[styles.settingItem, !isLast && styles.settingItemBorder]}
+      onPress={onPress}
+      disabled={!onPress}
+      activeOpacity={0.7}
+    >
+      <View style={styles.settingItemLeft}>
+        <View style={[styles.iconContainer, { backgroundColor: `${colors.primary}15` }]}>
+          <Ionicons name={icon} size={20} color={colors.primary} />
+        </View>
+        <Text style={styles.settingLabel}>{label}</Text>
       </View>
-      <Text style={styles.settingLabel}>{label}</Text>
-    </View>
-    <View style={styles.settingItemRight}>
-      {rightElement ? (
-        rightElement
-      ) : (
-        <>
-          {value && <Text style={styles.settingValue}>{value}</Text>}
-          <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
-        </>
-      )}
-    </View>
-  </TouchableOpacity>
-);
+      <View style={styles.settingItemRight}>
+        {rightElement ? (
+          rightElement
+        ) : (
+          <>
+            {value && <Text style={styles.settingValue}>{value}</Text>}
+            <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+          </>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+};
 
-const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <View style={styles.section}>
-    <Text style={styles.sectionTitle}>{title}</Text>
-    <View style={styles.sectionCard}>{children}</View>
-  </View>
-);
+const Section = ({ title, children, colors }: { title: string; children: React.ReactNode; colors: any }) => {
+  const styles = createStyles(colors);
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <View style={styles.sectionCard}>{children}</View>
+    </View>
+  );
+};
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useTheme();
+  const styles = createStyles(colors);
+  
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(8)).current;
   const { user, profile, signOut } = useAuth();
-  const { notificationsEnabled, setNotificationsEnabled } = useSettings();
+  const { notificationsEnabled, setNotificationsEnabled, theme, setTheme } = useSettings();
+  const [showThemeSelector, setShowThemeSelector] = useState(false);
 
   useEffect(() => {
     Animated.parallel([
@@ -87,6 +100,14 @@ export default function SettingsScreen() {
       router.replace('/');
     } catch (error: any) {
       console.error('Error signing out:', error.message);
+    }
+  };
+
+  const getThemeLabel = (t: ThemeType) => {
+    switch (t) {
+      case 'system': return 'System';
+      case 'light': return 'Light';
+      case 'dark': return 'Dark';
     }
   };
 
@@ -134,22 +155,24 @@ export default function SettingsScreen() {
           </View>
 
           {/* Personalization Section */}
-          <Section title="Personalization">
+          <Section title="Personalization" colors={colors}>
             <SettingItem
               icon="pricetag-outline"
               label="Tags"
               onPress={() => router.push('/settings/tags')}
+              colors={colors}
             />
             <SettingItem
               icon="flag-outline"
               label="Priority Levels"
               onPress={() => router.push('/settings/priority')}
               isLast
+              colors={colors}
             />
           </Section>
 
           {/* App Settings Section */}
-          <Section title="App Settings">
+          <Section title="App Settings" colors={colors}>
             <SettingItem
               icon="notifications-outline"
               label="Notifications"
@@ -161,29 +184,63 @@ export default function SettingsScreen() {
                   thumbColor={Platform.OS === 'ios' ? undefined : colors.card}
                 />
               }
+              colors={colors}
             />
             <SettingItem
-              icon="sunny-outline"
+              icon={isDark ? "moon-outline" : "sunny-outline"}
               label="Appearance"
-              value="Light"
-              onPress={() => {}}
+              value={getThemeLabel(theme)}
+              onPress={() => setShowThemeSelector(!showThemeSelector)}
+              colors={colors}
             />
+            
+            {showThemeSelector && (
+              <View style={styles.themeSelector}>
+                {(['system', 'light', 'dark'] as ThemeType[]).map((t) => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[
+                      styles.themeOption,
+                      theme === t && styles.themeOptionActive
+                    ]}
+                    onPress={() => {
+                      setTheme(t);
+                      // On some systems Appearance changes don't trigger immediately, 
+                      // but here we rely on SettingsContext -> useTheme
+                    }}
+                  >
+                    <Text style={[
+                      styles.themeOptionText,
+                      theme === t && styles.themeOptionTextActive
+                    ]}>
+                      {getThemeLabel(t)}
+                    </Text>
+                    {theme === t && (
+                      <Ionicons name="checkmark" size={18} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
             <SettingItem
               icon="time-outline"
               label="Date & Time"
               onPress={() => router.push('/settings/datetime')}
               isLast
+              colors={colors}
             />
           </Section>
 
           {/* Support Section */}
-          <Section title="Support">
+          <Section title="Support" colors={colors}>
             <SettingItem
               icon="information-circle-outline"
               label="About"
               value="v1.0.0"
               onPress={() => {}}
               isLast
+              colors={colors}
             />
           </Section>
 
@@ -212,7 +269,7 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -331,6 +388,30 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.base,
     color: colors.mutedForeground,
+  },
+  themeSelector: {
+    backgroundColor: colors.secondary,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
+  },
+  themeOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
+  },
+  themeOptionActive: {
+    backgroundColor: colors.background,
+  },
+  themeOptionText: {
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.base,
+    color: colors.mutedForeground,
+  },
+  themeOptionTextActive: {
+    color: colors.foreground,
   },
   signOutButton: {
     flexDirection: 'row',

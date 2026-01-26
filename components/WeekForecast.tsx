@@ -1,11 +1,12 @@
 import React, { useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
-import { format, startOfDay, addDays, isSameDay, parseISO } from 'date-fns';
+import { format, startOfDay, addDays, isSameDay } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
-import { colors, spacing, typography, borderRadius, shadows } from '../constants/theme';
+import { spacing, typography, borderRadius, shadows } from '../constants/theme';
 import { Reminder } from '../types/reminder';
 import { useSettings } from '../contexts/SettingsContext';
+import { useTheme } from '../hooks/useTheme';
 
 interface WeekForecastProps {
   reminders: Reminder[];
@@ -15,6 +16,9 @@ interface WeekForecastProps {
 }
 
 export const WeekForecast = ({ reminders, onReminderClick, onComplete, onDelete }: WeekForecastProps) => {
+  const { colors, isDark } = useTheme();
+  const styles = createStyles(colors);
+  
   const today = startOfDay(new Date());
   const days = Array.from({ length: 7 }, (_, i) => addDays(today, i));
   const swipeableRefs = useRef<{ [key: string]: Swipeable | null }>({});
@@ -72,7 +76,7 @@ export const WeekForecast = ({ reminders, onReminderClick, onComplete, onDelete 
         activeOpacity={0.7}
       >
         <Animated.View style={{ transform: [{ scale }] }}>
-          <Ionicons name="trash-outline" size={20} color={colors.background} />
+          <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
         </Animated.View>
       </TouchableOpacity>
     );
@@ -131,7 +135,7 @@ export const WeekForecast = ({ reminders, onReminderClick, onComplete, onDelete 
                         onPress={() => onReminderClick?.(reminder)}
                         style={[
                           styles.reminderItem,
-                          tag && !reminder.completed && { backgroundColor: `${tag.color}10` }
+                          tag && !reminder.completed && { backgroundColor: `${tag.color}15` }
                         ]}
                         activeOpacity={0.7}
                       >
@@ -202,7 +206,7 @@ export const WeekForecast = ({ reminders, onReminderClick, onComplete, onDelete 
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     gap: spacing.md,
   },
@@ -212,9 +216,9 @@ const styles = StyleSheet.create({
     ...shadows.soft,
   },
   todayCard: {
-    backgroundColor: `${colors.primary}08`,
+    backgroundColor: `${colors.primary}15`,
     borderWidth: 1,
-    borderColor: `${colors.primary}20`,
+    borderColor: `${colors.primary}30`,
   },
   otherDayCard: {
     backgroundColor: colors.card,
@@ -249,7 +253,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.full,
   },
   todayBadge: {
-    backgroundColor: `${colors.primary}20`,
+    backgroundColor: `${colors.primary}25`,
   },
   otherBadge: {
     backgroundColor: colors.muted,

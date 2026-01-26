@@ -11,14 +11,18 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, shadows, spacing, borderRadius, typography } from '../constants/theme';
+import { shadows, spacing, borderRadius, typography } from '../constants/theme';
 import { supabase } from '../lib/supabase';
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
+import { useTheme } from '../hooks/useTheme';
 
 WebBrowser.maybeCompleteAuthSession();
 
 export default function AuthScreen() {
+  const { colors, isDark } = useTheme();
+  const styles = createStyles(colors);
+  
   const [showEmailLogin, setShowEmailLogin] = useState(false);
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
@@ -245,7 +249,7 @@ export default function AuthScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
