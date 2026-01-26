@@ -8,6 +8,7 @@ export interface Reminder {
   completed: boolean;
   created_at: string;
   tag_id?: string;
+  priority_id?: string;
 }
 
 export interface Profile {

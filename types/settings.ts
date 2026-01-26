@@ -8,7 +8,7 @@ export interface PriorityLevel {
   id: string;
   name: string;
   color: string;
-  order: number;
+  rank: number;
 }
 
 export const PRESET_COLORS = [
