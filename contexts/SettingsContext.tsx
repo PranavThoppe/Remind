@@ -10,7 +10,9 @@ interface SettingsContextType {
   updateTag: (id: string, name: string, color: string) => Promise<void>;
   deleteTag: (id: string) => Promise<void>;
   priorities: PriorityLevel[];
-  updatePriority: (id: string, name: string, color: string) => Promise<void>;
+  addPriority: (name: string, color: string, rank: number) => Promise<void>;
+  updatePriority: (id: string, name: string, color: string, rank?: number) => Promise<void>;
+  deletePriority: (id: string) => Promise<void>;
   notificationsEnabled: boolean;
   setNotificationsEnabled: (enabled: boolean) => Promise<void>;
   timeFormat: '12h' | '24h';
@@ -32,22 +34,16 @@ const STORAGE_KEYS = {
   RELATIVE_DATES: 'settings_relative_dates',
 };
 
-const DEFAULT_PRIORITIES: PriorityLevel[] = [
-  { id: '1', name: 'Low', color: '#3B82F6', order: 1 },
-  { id: '2', name: 'Medium', color: '#F59E0B', order: 2 },
-  { id: '3', name: 'High', color: '#EC4899', order: 3 },
-  { id: '4', name: 'Urgent', color: '#E54D4D', order: 4 },
-];
-
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [tags, setTags] = useState<Tag[]>(DEFAULT_TAGS);
-  const [priorities, setPriorities] = useState<PriorityLevel[]>(DEFAULT_PRIORITIES);
+  const [priorities, setPriorities] = useState<PriorityLevel[]>([]);
   const [notificationsEnabled, setNotificationsEnabledState] = useState(true);
   const [timeFormat, setTimeFormatState] = useState<'12h' | '24h'>('12h');
   const [weekStart, setWeekStartState] = useState<'Sunday' | 'Monday'>('Sunday');
   const [showRelativeDates, setShowRelativeDatesState] = useState(true);
   const [loadingTags, setLoadingTags] = useState(false);
+  const [loadingPriorities, setLoadingPriorities] = useState(false);
 
   const fetchTags = useCallback(async () => {
     if (!user) {
@@ -75,6 +71,32 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
+  const fetchPriorities = useCallback(async () => {
+    if (!user) {
+      setPriorities([]);
+      return;
+    }
+
+    setLoadingPriorities(true);
+    try {
+      const { data, error } = await supabase
+        .from('priorities')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('rank', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching priorities:', error);
+      } else if (data) {
+        setPriorities(data);
+      }
+    } catch (error) {
+      console.error('Unexpected error fetching priorities:', error);
+    } finally {
+      setLoadingPriorities(false);
+    }
+  }, [user]);
+
   useEffect(() => {
     loadSettings();
   }, []);
@@ -83,25 +105,24 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     fetchTags();
   }, [fetchTags]);
 
+  useEffect(() => {
+    fetchPriorities();
+  }, [fetchPriorities]);
+
   const loadSettings = async () => {
     try {
       const [
-        savedTags,
-        savedPriorities,
         savedNotifications,
         savedTimeFormat,
         savedWeekStart,
         savedRelativeDates,
       ] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEYS.TAGS),
-        AsyncStorage.getItem(STORAGE_KEYS.PRIORITIES),
         AsyncStorage.getItem(STORAGE_KEYS.NOTIFICATIONS),
         AsyncStorage.getItem(STORAGE_KEYS.TIME_FORMAT),
         AsyncStorage.getItem(STORAGE_KEYS.WEEK_START),
         AsyncStorage.getItem(STORAGE_KEYS.RELATIVE_DATES),
       ]);
 
-      if (savedPriorities) setPriorities(JSON.parse(savedPriorities));
       if (savedNotifications) setNotificationsEnabledState(JSON.parse(savedNotifications));
       if (savedTimeFormat) setTimeFormatState(JSON.parse(savedTimeFormat));
       if (savedWeekStart) setWeekStartState(JSON.parse(savedWeekStart));
@@ -113,7 +134,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
   const addTag = async (name: string, color: string) => {
     if (!user) {
-      // Local only if not logged in
       const newTags = [...tags, { id: Date.now().toString(), name, color }];
       setTags(newTags);
       return;
@@ -173,10 +193,59 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const updatePriority = async (id: string, name: string, color: string) => {
-    const newPriorities = priorities.map((p) => (p.id === id ? { ...p, name, color } : p));
-    setPriorities(newPriorities);
-    await AsyncStorage.setItem(STORAGE_KEYS.PRIORITIES, JSON.stringify(newPriorities));
+  const addPriority = async (name: string, color: string, rank: number) => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('priorities')
+        .insert([{ name, color, rank, user_id: user.id }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      if (data) setPriorities(prev => [...prev, data].sort((a, b) => a.rank - b.rank));
+    } catch (error) {
+      console.error('Error adding priority:', error);
+      throw error;
+    }
+  };
+
+  const updatePriority = async (id: string, name: string, color: string, rank?: number) => {
+    if (!user) return;
+
+    try {
+      const updates: any = { name, color };
+      if (rank !== undefined) updates.rank = rank;
+
+      const { error } = await supabase
+        .from('priorities')
+        .update(updates)
+        .eq('id', id);
+
+      if (error) throw error;
+      setPriorities(prev => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)).sort((a, b) => a.rank - b.rank));
+    } catch (error) {
+      console.error('Error updating priority:', error);
+      throw error;
+    }
+  };
+
+  const deletePriority = async (id: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('priorities')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      setPriorities(prev => prev.filter((p) => p.id !== id));
+    } catch (error) {
+      console.error('Error deleting priority:', error);
+      throw error;
+    }
   };
 
   const setNotificationsEnabled = async (enabled: boolean) => {
@@ -205,7 +274,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     updateTag,
     deleteTag,
     priorities,
+    addPriority,
     updatePriority,
+    deletePriority,
     notificationsEnabled,
     setNotificationsEnabled,
     timeFormat,
@@ -225,4 +296,4 @@ export const useSettings = () => {
     throw new Error('useSettings must be used within a SettingsProvider');
   }
   return context;
-};
+}

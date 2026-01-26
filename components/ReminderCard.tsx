@@ -25,7 +25,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
   const slideAnim = useRef(new Animated.Value(8)).current;
   const checkScaleAnim = useRef(new Animated.Value(1)).current;
   const swipeableRef = useRef<Swipeable>(null);
-  const { tags } = useSettings();
+  const { tags, priorities } = useSettings();
 
   useEffect(() => {
     Animated.parallel([
@@ -79,6 +79,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
   };
 
   const tag = tags.find(t => t.id === reminder.tag_id);
+  const priority = priorities.find(p => p.id === reminder.priority_id);
 
   const renderRightActions = (
     progress: Animated.AnimatedInterpolation<number>,
@@ -142,6 +143,14 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
           onPress={() => onEdit(reminder)}
           activeOpacity={0.9}
         >
+          {priority && (
+            <>
+              <View style={[styles.priorityTriangle, { borderTopColor: priority.color }]} />
+              <View style={styles.priorityRankContainer}>
+                <Text style={styles.priorityRankText}>{priority.rank}</Text>
+              </View>
+            </>
+          )}
           <View style={[styles.content, !reminder.time && { alignItems: 'center' }]}>
             {/* Checkbox */}
             <TouchableOpacity
@@ -166,7 +175,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
 
             {/* Text Content */}
             <View style={styles.textContent}>
-              <View style={styles.titleRow}>
+              <View style={[styles.titleRow, priority && { paddingRight: 24 }]}>
                 <Text
                   style={[
                     styles.title,
@@ -177,9 +186,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
                   {reminder.title}
                 </Text>
                 {tag && (
-                  <View style={[styles.tagBadgeSmall, { backgroundColor: `${tag.color}15` }]}>
-                    <Text style={[styles.tagTextSmall, { color: tag.color }]}>{tag.name}</Text>
-                  </View>
+                  <View style={[styles.tagBadgeSmall, { backgroundColor: tag.color }]} />
                 )}
               </View>
 
@@ -211,8 +218,32 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
     padding: spacing.lg,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: colors.border,
+    overflow: 'hidden',
     ...shadows.card,
+  },
+  priorityTriangle: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 0,
+    height: 0,
+    borderStyle: 'solid',
+    borderTopWidth: 40,
+    borderLeftWidth: 40,
+    borderLeftColor: 'transparent',
+    zIndex: 1,
+  },
+  priorityRankContainer: {
+    position: 'absolute',
+    top: 6,
+    right: 8,
+    zIndex: 2,
+  },
+  priorityRankText: {
+    fontFamily: typography.fontFamily.bold,
+    fontSize: 11,
+    color: 'white',
   },
   content: {
     flexDirection: 'row',
@@ -250,15 +281,10 @@ const styles = StyleSheet.create({
     flexWrap: 'nowrap',
   },
   tagBadgeSmall: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    width: 8,
+    height: 8,
     borderRadius: 4,
     alignSelf: 'center',
-  },
-  tagTextSmall: {
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: 10,
-    textTransform: 'uppercase',
   },
   titleCompleted: {
     textDecorationLine: 'line-through',

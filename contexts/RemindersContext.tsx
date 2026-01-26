@@ -154,6 +154,8 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
           date: nextDate,
           time: reminder.time,
           repeat: reminder.repeat,
+          tag_id: reminder.tag_id,
+          priority_id: reminder.priority_id,
           user_id: user?.id,
           completed: false,
         };

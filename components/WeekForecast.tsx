@@ -18,7 +18,7 @@ export const WeekForecast = ({ reminders, onReminderClick, onComplete, onDelete 
   const today = startOfDay(new Date());
   const days = Array.from({ length: 7 }, (_, i) => addDays(today, i));
   const swipeableRefs = useRef<{ [key: string]: Swipeable | null }>({});
-  const { tags } = useSettings();
+  const { tags, priorities } = useSettings();
 
   const getRemindersForDay = (date: Date) => {
     return reminders
@@ -116,6 +116,7 @@ export const WeekForecast = ({ reminders, onReminderClick, onComplete, onDelete 
               <View style={styles.remindersList}>
                 {dayReminders.map((reminder) => {
                   const tag = tags.find(t => t.id === reminder.tag_id);
+                  const priority = priorities.find(p => p.id === reminder.priority_id);
                   return (
                     <Swipeable
                       key={reminder.id}
@@ -179,6 +180,13 @@ export const WeekForecast = ({ reminders, onReminderClick, onComplete, onDelete 
                             </View>
                           )}
                         </View>
+
+                        {/* Priority Circle */}
+                        {priority && (
+                          <View style={[styles.priorityCircle, { backgroundColor: priority.color }]}>
+                            <Text style={styles.priorityRankText}>{priority.rank}</Text>
+                          </View>
+                        )}
                       </TouchableOpacity>
                     </Swipeable>
                   );
@@ -317,5 +325,18 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: borderRadius.lg,
     marginLeft: spacing.sm,
+  },
+  priorityCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: spacing.sm,
+  },
+  priorityRankText: {
+    fontFamily: typography.fontFamily.bold,
+    fontSize: 10,
+    color: 'white',
   },
 });

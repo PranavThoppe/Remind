@@ -7,6 +7,7 @@ import {
   ScrollView,
   TextInput,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,27 +18,83 @@ import { useSettings } from '../../contexts/SettingsContext';
 
 export default function PriorityScreen() {
   const insets = useSafeAreaInsets();
-  const { priorities, updatePriority } = useSettings();
+  const { priorities, addPriority, updatePriority, deletePriority } = useSettings();
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
   const [priorityName, setPriorityName] = useState('');
-  const [selectedColor, setSelectedColor] = useState(PRESET_COLORS[0].color);
+  const [selectedColor, setSelectedColor] = useState('#EF4444'); // Default to red
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleUpdatePriority = async () => {
+  const handleSavePriority = async () => {
     if (!priorityName.trim()) {
       Alert.alert('Error', 'Priority name cannot be empty');
       return;
     }
-    if (editingId) {
-      await updatePriority(editingId, priorityName.trim(), selectedColor);
+
+    setIsSaving(true);
+    try {
+      if (isAdding) {
+        const nextRank = priorities.length > 0 
+          ? Math.max(...priorities.map(p => p.rank)) + 1 
+          : 1;
+        await addPriority(priorityName.trim(), selectedColor, nextRank);
+        setIsAdding(false);
+      } else if (editingId) {
+        await updatePriority(editingId, priorityName.trim(), selectedColor);
+        setEditingId(null);
+      }
+      
+      setPriorityName('');
+      setSelectedColor('#EF4444');
+    } catch (error: any) {
+      console.error('Failed to save priority:', error);
+      Alert.alert('Error', 'Failed to save priority. Please check your connection and try again.');
+    } finally {
+      setIsSaving(false);
     }
-    setEditingId(null);
-    setPriorityName('');
+  };
+
+  const handleDeletePriority = (id: string) => {
+    Alert.alert(
+      'Delete Priority',
+      'Are you sure you want to delete this priority level? Reminders using this priority will no longer show it.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setIsSaving(true);
+            try {
+              await deletePriority(id);
+              setEditingId(null);
+              setPriorityName('');
+            } catch (error: any) {
+              console.error('Failed to delete priority:', error);
+              Alert.alert('Error', 'Failed to delete priority. Please try again.');
+            } finally {
+              setIsSaving(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const startEdit = (priority: PriorityLevel) => {
+    if (isSaving) return;
+    setIsAdding(false);
     setEditingId(priority.id);
     setPriorityName(priority.name);
     setSelectedColor(priority.color);
+  };
+
+  const startAdd = () => {
+    if (isSaving) return;
+    setEditingId(null);
+    setIsAdding(true);
+    setPriorityName('');
+    setSelectedColor('#EF4444'); // Default red for new ones
   };
 
   return (
@@ -48,7 +105,9 @@ export default function PriorityScreen() {
           <Ionicons name="chevron-back" size={24} color={colors.foreground} />
         </TouchableOpacity>
         <Text style={styles.title}>Priority Levels</Text>
-        <View style={{ width: 24 }} />
+        <TouchableOpacity onPress={startAdd} style={styles.addButton} disabled={isSaving}>
+          <Ionicons name="add" size={24} color={isSaving ? colors.mutedForeground : colors.primary} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -57,18 +116,26 @@ export default function PriorityScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.description}>
-          Customize the names and colors for each priority level.
+          Define priority levels (1, 2, 3...) for your reminders. New levels default to red.
         </Text>
 
-        {editingId && (
+        {(editingId || isAdding) && (
           <View style={styles.editCard}>
-            <Text style={styles.editTitle}>Edit Level</Text>
+            <View style={styles.editHeader}>
+              <Text style={styles.editTitle}>{isAdding ? 'Add Priority' : 'Edit Priority'}</Text>
+              {!isAdding && editingId && (
+                <TouchableOpacity onPress={() => handleDeletePriority(editingId)} disabled={isSaving}>
+                  <Ionicons name="trash-outline" size={20} color={isSaving ? colors.mutedForeground : colors.destructive} />
+                </TouchableOpacity>
+              )}
+            </View>
             <TextInput
               style={styles.input}
-              placeholder="Priority Name"
+              placeholder="Priority Name (e.g. High, P1, Urgent)"
               value={priorityName}
               onChangeText={setPriorityName}
               autoFocus
+              editable={!isSaving}
             />
             <Text style={styles.label}>Select Color</Text>
             <View style={styles.colorGrid}>
@@ -81,45 +148,84 @@ export default function PriorityScreen() {
                     selectedColor === item.color && styles.selectedColor,
                   ]}
                   onPress={() => setSelectedColor(item.color)}
+                  disabled={isSaving}
                 >
                   {selectedColor === item.color && (
                     <Ionicons name="checkmark" size={16} color="white" />
                   )}
                 </TouchableOpacity>
               ))}
+              {!PRESET_COLORS.some(c => c.color === '#EF4444') && (
+                <TouchableOpacity
+                  style={[
+                    styles.colorOption,
+                    { backgroundColor: '#EF4444' },
+                    selectedColor === '#EF4444' && styles.selectedColor,
+                  ]}
+                  onPress={() => setSelectedColor('#EF4444')}
+                  disabled={isSaving}
+                >
+                  {selectedColor === '#EF4444' && (
+                    <Ionicons name="checkmark" size={16} color="white" />
+                  )}
+                </TouchableOpacity>
+              )}
             </View>
             <View style={styles.formButtons}>
               <TouchableOpacity
                 style={styles.cancelButton}
-                onPress={() => setEditingId(null)}
+                onPress={() => {
+                  setEditingId(null);
+                  setIsAdding(false);
+                }}
+                disabled={isSaving}
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.saveButton} onPress={handleUpdatePriority}>
-                <Text style={styles.saveButtonText}>Save Changes</Text>
+              <TouchableOpacity 
+                style={[styles.saveButton, isSaving && { opacity: 0.7 }]} 
+                onPress={handleSavePriority}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <Text style={styles.saveButtonText}>{isAdding ? 'Add' : 'Save'}</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
         )}
 
         <View style={styles.prioritiesList}>
-          {priorities.map((priority) => (
-            <TouchableOpacity
-              key={priority.id}
-              style={[
-                styles.priorityItem,
-                editingId === priority.id && styles.activePriorityItem,
-              ]}
-              onPress={() => startEdit(priority)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.priorityInfo}>
-                <View style={[styles.priorityColor, { backgroundColor: priority.color }]} />
-                <Text style={styles.priorityName}>{priority.name}</Text>
-              </View>
-              <Ionicons name="pencil-outline" size={20} color={colors.mutedForeground} />
-            </TouchableOpacity>
-          ))}
+          {priorities.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No priorities defined yet.</Text>
+              <TouchableOpacity onPress={startAdd} disabled={isSaving}>
+                <Text style={styles.emptyStateLink}>Add your first priority level</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            priorities.map((priority) => (
+              <TouchableOpacity
+                key={priority.id}
+                style={[
+                  styles.priorityItem,
+                  editingId === priority.id && styles.activePriorityItem,
+                ]}
+                onPress={() => startEdit(priority)}
+                activeOpacity={0.7}
+                disabled={isSaving}
+              >
+                <View style={styles.priorityInfo}>
+                  <Text style={styles.priorityRank}>{priority.rank}.</Text>
+                  <View style={[styles.priorityColor, { backgroundColor: priority.color }]} />
+                  <Text style={styles.priorityName}>{priority.name}</Text>
+                </View>
+                <Ionicons name="pencil-outline" size={20} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            ))
+          )}
         </View>
       </ScrollView>
     </View>
@@ -141,6 +247,9 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   backButton: {
+    padding: spacing.xs,
+  },
+  addButton: {
     padding: spacing.xs,
   },
   title: {
@@ -168,11 +277,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
     ...shadows.card,
   },
+  editHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
   editTitle: {
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.lg,
     color: colors.foreground,
-    marginBottom: spacing.md,
   },
   input: {
     backgroundColor: colors.background,
@@ -226,6 +340,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.xl,
     borderRadius: borderRadius.md,
+    minWidth: 80,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   saveButtonText: {
     fontFamily: typography.fontFamily.semibold,
@@ -253,6 +371,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
   },
+  priorityRank: {
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.lg,
+    color: colors.primary,
+    width: 24,
+  },
   priorityColor: {
     width: 20,
     height: 20,
@@ -262,5 +386,20 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.lg,
     color: colors.foreground,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
+  },
+  emptyStateText: {
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.base,
+    color: colors.mutedForeground,
+    marginBottom: spacing.sm,
+  },
+  emptyStateLink: {
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.base,
+    color: colors.primary,
   },
 });

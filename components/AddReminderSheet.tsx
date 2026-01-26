@@ -43,11 +43,12 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
   const [time, setTime] = useState('');
   const [repeat, setRepeat] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none');
   const [tagId, setTagId] = useState<string | undefined>();
+  const [priorityId, setPriorityId] = useState<string | undefined>();
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
-  const { tags } = useSettings();
+  const { tags, priorities } = useSettings();
 
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
@@ -60,12 +61,14 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
       setTime(editReminder.time || '');
       setRepeat(editReminder.repeat || 'none');
       setTagId(editReminder.tag_id);
+      setPriorityId(editReminder.priority_id);
     } else {
       setTitle('');
       setDate(undefined);
       setTime('');
       setRepeat('none');
       setTagId(undefined);
+      setPriorityId(undefined);
     }
     // Reset picker visibility when sheet is opened or closed
     setShowDatePicker(false);
@@ -149,6 +152,7 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
       time: time || undefined,
       repeat,
       tag_id: tagId,
+      priority_id: priorityId,
     }) as any;
 
     const savedReminder = result?.data;
@@ -176,6 +180,8 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
     setDate(undefined);
     setTime('');
     setRepeat('none');
+    setTagId(undefined);
+    setPriorityId(undefined);
     handleClose();
   };
 
@@ -399,6 +405,44 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
               ))}
             </View>
           </View>
+
+          {/* Priority Selection */}
+          {priorities.length > 0 && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="flag-outline" size={18} color={colors.mutedForeground} />
+                <Text style={styles.sectionLabel}>Priority</Text>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
+                <TouchableOpacity
+                  style={[styles.tagOption, !priorityId && styles.tagOptionActive]}
+                  onPress={() => setPriorityId(undefined)}
+                >
+                  <Text style={[styles.tagText, !priorityId && styles.tagTextActive]}>None</Text>
+                </TouchableOpacity>
+                {priorities.map((priority) => (
+                  <TouchableOpacity
+                    key={priority.id}
+                    style={[
+                      styles.tagOption,
+                      priorityId === priority.id && { backgroundColor: priority.color, borderColor: priority.color },
+                    ]}
+                    onPress={() => setPriorityId(priority.id)}
+                  >
+                    <Text style={[
+                      styles.priorityRankText,
+                      priorityId === priority.id && { color: 'white' }
+                    ]}>
+                      {priority.rank}
+                    </Text>
+                    <Text style={[styles.tagText, priorityId === priority.id && { color: 'white' }]}>
+                      {priority.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
 
           {/* Tag Selection */}
           <View style={styles.section}>
@@ -642,5 +686,11 @@ const styles = StyleSheet.create({
   },
   tagTextActive: {
     color: 'white',
+  },
+  priorityRankText: {
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    marginRight: spacing.xs,
+    color: colors.primary,
   },
 });
