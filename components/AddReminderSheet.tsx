@@ -15,10 +15,11 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { colors, shadows, spacing, borderRadius, typography } from '../constants/theme';
+import { spacing, borderRadius, typography, shadows } from '../constants/theme';
 import { Reminder } from '../types/reminder';
 import { scheduleReminderNotification } from '../lib/notifications';
 import { useSettings } from '../contexts/SettingsContext';
+import { useTheme } from '../hooks/useTheme';
 
 interface AddReminderSheetProps {
   isOpen: boolean;
@@ -38,6 +39,9 @@ const repeatOptions = [
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddReminderSheetProps) {
+  const { colors, isDark } = useTheme();
+  const styles = createStyles(colors);
+  
   const [title, setTitle] = useState('');
   const [date, setDate] = useState<Date | undefined>();
   const [time, setTime] = useState('');
@@ -240,7 +244,7 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
           {
             opacity: backdropAnim.interpolate({
               inputRange: [0, 1],
-              outputRange: [0, 0.2],
+              outputRange: [0, 0.4],
             }),
           },
         ]}
@@ -358,7 +362,7 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
               onChange={handleTimeChange}
               textColor={colors.foreground}
-              themeVariant="light"
+              themeVariant={isDark ? 'dark' : 'light'}
             />
           )}
 
@@ -371,8 +375,7 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
               onChange={handleDateChange}
               minimumDate={new Date()}
               textColor={colors.foreground}
-              themeVariant="light"
-
+              themeVariant={isDark ? 'dark' : 'light'}
             />
           )}
 
@@ -498,10 +501,10 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: colors.foreground,
+    backgroundColor: '#000000',
   },
   backdropPressable: {
     flex: 1,
@@ -551,8 +554,8 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: borderRadius.lg,
     borderWidth: 1,
-    borderColor: colors.muted,
-    backgroundColor: `${colors.muted}30`,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
     paddingHorizontal: spacing.lg,
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.lg,
@@ -573,8 +576,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     borderRadius: borderRadius.lg,
     borderWidth: 1,
-    borderColor: colors.muted,
-    backgroundColor: `${colors.muted}30`,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
   },
   pickerButtonActive: {
     borderColor: `${colors.primary}30`,
@@ -610,7 +613,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: spacing.md,
     borderRadius: borderRadius.lg,
-    backgroundColor: `${colors.muted}50`,
+    backgroundColor: colors.secondary,
     alignItems: 'center',
   },
   repeatOptionActive: {
@@ -665,7 +668,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: borderRadius.full,
     borderWidth: 1,
-    borderColor: colors.muted,
+    borderColor: colors.border,
     marginRight: spacing.sm,
     backgroundColor: colors.card,
   },

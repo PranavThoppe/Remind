@@ -3,7 +3,8 @@ import { format, isToday, isTomorrow } from 'date-fns';
 import { View, Text, StyleSheet } from 'react-native';
 import { ReminderCard } from './ReminderCard';
 import { Reminder } from '../types/reminder';
-import { colors, spacing, typography } from '../constants/theme';
+import { spacing, typography } from '../constants/theme';
+import { useTheme } from '../hooks/useTheme';
 
 interface DaySectionProps {
   date: Date;
@@ -15,6 +16,9 @@ interface DaySectionProps {
 }
 
 export const DaySection = ({ date, reminders, onComplete, onEdit, onDelete, startIndex }: DaySectionProps) => {
+  const { colors } = useTheme();
+  const styles = createStyles(colors);
+
   const getDateLabel = (date: Date) => {
     if (isToday(date)) return 'Today';
     if (isTomorrow(date)) return 'Tomorrow';
@@ -42,7 +46,7 @@ export const DaySection = ({ date, reminders, onComplete, onEdit, onDelete, star
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     marginBottom: spacing.xl,
   },

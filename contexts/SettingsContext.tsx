@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Tag, PriorityLevel, DEFAULT_TAGS, PRESET_COLORS } from '../types/settings';
+import { Tag, PriorityLevel, DEFAULT_TAGS, ThemeType } from '../types/settings';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 
@@ -21,6 +21,8 @@ interface SettingsContextType {
   setWeekStart: (day: 'Sunday' | 'Monday') => Promise<void>;
   showRelativeDates: boolean;
   setShowRelativeDates: (show: boolean) => Promise<void>;
+  theme: ThemeType;
+  setTheme: (theme: ThemeType) => Promise<void>;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -32,6 +34,7 @@ const STORAGE_KEYS = {
   TIME_FORMAT: 'settings_time_format',
   WEEK_START: 'settings_week_start',
   RELATIVE_DATES: 'settings_relative_dates',
+  THEME: 'settings_theme',
 };
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
@@ -42,6 +45,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [timeFormat, setTimeFormatState] = useState<'12h' | '24h'>('12h');
   const [weekStart, setWeekStartState] = useState<'Sunday' | 'Monday'>('Sunday');
   const [showRelativeDates, setShowRelativeDatesState] = useState(true);
+  const [theme, setThemeState] = useState<ThemeType>('system');
   const [loadingTags, setLoadingTags] = useState(false);
   const [loadingPriorities, setLoadingPriorities] = useState(false);
 
@@ -116,17 +120,20 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         savedTimeFormat,
         savedWeekStart,
         savedRelativeDates,
+        savedTheme,
       ] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.NOTIFICATIONS),
         AsyncStorage.getItem(STORAGE_KEYS.TIME_FORMAT),
         AsyncStorage.getItem(STORAGE_KEYS.WEEK_START),
         AsyncStorage.getItem(STORAGE_KEYS.RELATIVE_DATES),
+        AsyncStorage.getItem(STORAGE_KEYS.THEME),
       ]);
 
       if (savedNotifications) setNotificationsEnabledState(JSON.parse(savedNotifications));
       if (savedTimeFormat) setTimeFormatState(JSON.parse(savedTimeFormat));
       if (savedWeekStart) setWeekStartState(JSON.parse(savedWeekStart));
       if (savedRelativeDates) setShowRelativeDatesState(JSON.parse(savedRelativeDates));
+      if (savedTheme) setThemeState(JSON.parse(savedTheme));
     } catch (error) {
       console.error('Error loading settings:', error);
     }
@@ -268,6 +275,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.setItem(STORAGE_KEYS.RELATIVE_DATES, JSON.stringify(show));
   };
 
+  const setTheme = async (newTheme: ThemeType) => {
+    setThemeState(newTheme);
+    await AsyncStorage.setItem(STORAGE_KEYS.THEME, JSON.stringify(newTheme));
+  };
+
   const value = {
     tags,
     addTag,
@@ -285,6 +297,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     setWeekStart,
     showRelativeDates,
     setShowRelativeDates,
+    theme,
+    setTheme,
   };
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;

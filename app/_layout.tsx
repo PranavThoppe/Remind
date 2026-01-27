@@ -10,7 +10,7 @@ import {
   Inter_600SemiBold,
   Inter_700Bold,
 } from '@expo-google-fonts/inter';
-import { colors } from '../constants/theme';
+import { useTheme } from '../hooks/useTheme';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { RemindersProvider, useRemindersContext } from '../contexts/RemindersContext';
 import { SettingsProvider } from '../contexts/SettingsContext';
@@ -87,17 +87,23 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   }, [user, loading, segments]);
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
+    return <LoadingScreen />;
   }
 
   return <>{children}</>;
 }
 
-export default function RootLayout() {
+function LoadingScreen() {
+  const { colors } = useTheme();
+  return (
+    <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+      <ActivityIndicator size="large" color={colors.primary} />
+    </View>
+  );
+}
+
+function RootContent() {
+  const { colors, isDark } = useTheme();
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -116,34 +122,38 @@ export default function RootLayout() {
   }, []);
 
   if (!fontsLoaded && !fontError) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
+    return <LoadingScreen />;
   }
 
   return (
+    <>
+      <NotificationHandler />
+      <StatusBar style={isDark ? "light" : "dark"} />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: colors.background },
+          animation: 'fade',
+        }}
+      >
+        <Stack.Screen name="index" />
+        <Stack.Screen name="(tabs)" />
+      </Stack>
+    </>
+  );
+}
+
+export default function RootLayout() {
+  return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
-        <AuthGuard>
-          <SettingsProvider>
+        <SettingsProvider>
+          <AuthGuard>
             <RemindersProvider>
-              <NotificationHandler />
-              <StatusBar style="dark" />
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor: colors.background },
-                  animation: 'fade',
-                }}
-              >
-                <Stack.Screen name="index" />
-                <Stack.Screen name="(tabs)" />
-              </Stack>
+              <RootContent />
             </RemindersProvider>
-          </SettingsProvider>
-        </AuthGuard>
+          </AuthGuard>
+        </SettingsProvider>
       </AuthProvider>
     </GestureHandlerRootView>
   );
@@ -154,6 +164,5 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: colors.background,
   },
 });

@@ -1,3 +1,5 @@
+export type ThemeType = 'system' | 'light' | 'dark';
+
 export interface Tag {
   id: string;
   name: string;
@@ -19,6 +21,8 @@ export const PRESET_COLORS = [
   { name: 'Blue', color: '#3B82F6' },
   { name: 'Violet', color: '#8B5CF6' },
   { name: 'Pink', color: '#EC4899' },
+  { name: 'Brown', color: '#92400E' },
+  { name: 'Gray', color: '#6B7280' },
 ];
 
 export const DEFAULT_TAGS: Tag[] = [

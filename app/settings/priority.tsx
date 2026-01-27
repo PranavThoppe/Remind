@@ -12,18 +12,24 @@ import {
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, spacing, typography, borderRadius, shadows } from '../../constants/theme';
+import { spacing, typography, borderRadius, shadows } from '../../constants/theme';
 import { PRESET_COLORS, PriorityLevel } from '../../types/settings';
 import { useSettings } from '../../contexts/SettingsContext';
+import { useTheme } from '../../hooks/useTheme';
+import { ColorPicker } from '../../components/ColorPicker';
 
 export default function PriorityScreen() {
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useTheme();
+  const styles = createStyles(colors);
+  
   const { priorities, addPriority, updatePriority, deletePriority } = useSettings();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [priorityName, setPriorityName] = useState('');
   const [selectedColor, setSelectedColor] = useState('#EF4444'); // Default to red
   const [isSaving, setIsSaving] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
 
   const handleSavePriority = async () => {
     if (!priorityName.trim()) {
@@ -132,45 +138,22 @@ export default function PriorityScreen() {
             <TextInput
               style={styles.input}
               placeholder="Priority Name (e.g. High, P1, Urgent)"
+              placeholderTextColor={colors.mutedForeground}
               value={priorityName}
               onChangeText={setPriorityName}
               autoFocus
               editable={!isSaving}
             />
-            <Text style={styles.label}>Select Color</Text>
-            <View style={styles.colorGrid}>
-              {PRESET_COLORS.map((item) => (
-                <TouchableOpacity
-                  key={item.color}
-                  style={[
-                    styles.colorOption,
-                    { backgroundColor: item.color },
-                    selectedColor === item.color && styles.selectedColor,
-                  ]}
-                  onPress={() => setSelectedColor(item.color)}
-                  disabled={isSaving}
-                >
-                  {selectedColor === item.color && (
-                    <Ionicons name="checkmark" size={16} color="white" />
-                  )}
-                </TouchableOpacity>
-              ))}
-              {!PRESET_COLORS.some(c => c.color === '#EF4444') && (
-                <TouchableOpacity
-                  style={[
-                    styles.colorOption,
-                    { backgroundColor: '#EF4444' },
-                    selectedColor === '#EF4444' && styles.selectedColor,
-                  ]}
-                  onPress={() => setSelectedColor('#EF4444')}
-                  disabled={isSaving}
-                >
-                  {selectedColor === '#EF4444' && (
-                    <Ionicons name="checkmark" size={16} color="white" />
-                  )}
-                </TouchableOpacity>
-              )}
-            </View>
+            <Text style={styles.label}>Color</Text>
+            <TouchableOpacity 
+              style={[styles.colorPreview, { backgroundColor: selectedColor }]}
+              onPress={() => setShowPicker(true)}
+              disabled={isSaving}
+            >
+              <Ionicons name="color-palette" size={20} color="white" style={{ textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }} />
+              <Text style={styles.colorPreviewText}>Change Color</Text>
+            </TouchableOpacity>
+
             <View style={styles.formButtons}>
               <TouchableOpacity
                 style={styles.cancelButton}
@@ -228,11 +211,19 @@ export default function PriorityScreen() {
           )}
         </View>
       </ScrollView>
+
+      <ColorPicker
+        visible={showPicker}
+        onClose={() => setShowPicker(false)}
+        selectedColor={selectedColor}
+        onSelect={setSelectedColor}
+        colors={colors}
+      />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -296,6 +287,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.base,
+    color: colors.foreground,
     marginBottom: spacing.lg,
   },
   label: {
@@ -304,22 +296,23 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     marginBottom: spacing.sm,
   },
-  colorGrid: {
+  colorPreview: {
+    height: 48,
+    borderRadius: borderRadius.md,
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-    marginBottom: spacing.xl,
-  },
-  colorOption: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.xl,
+    ...shadows.soft,
   },
-  selectedColor: {
-    borderWidth: 2,
-    borderColor: colors.foreground,
+  colorPreviewText: {
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.base,
+    color: 'white',
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   formButtons: {
     flexDirection: 'row',

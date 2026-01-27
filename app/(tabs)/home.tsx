@@ -18,12 +18,16 @@ import { EmptyState } from '../../components/EmptyState';
 import { FloatingAddButton } from '../../components/FloatingAddButton';
 import { AddReminderSheet } from '../../components/AddReminderSheet';
 import { WeekForecast } from '../../components/WeekForecast';
-import { colors, spacing, typography, borderRadius } from '../../constants/theme';
+import { spacing, typography, borderRadius } from '../../constants/theme';
 import { Reminder } from '../../types/reminder';
 import { useReminders } from '../../hooks/useReminders';
+import { useTheme } from '../../hooks/useTheme';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useTheme();
+  const styles = createStyles(colors);
+  
   const { reminders, loading, addReminder, toggleComplete, refreshReminders, updateReminder, deleteReminder } = useReminders();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
@@ -267,7 +271,7 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

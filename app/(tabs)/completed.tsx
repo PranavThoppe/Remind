@@ -12,12 +12,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ReminderCard } from '../../components/ReminderCard';
 import { EmptyState } from '../../components/EmptyState';
 import { AddReminderSheet } from '../../components/AddReminderSheet';
-import { colors, spacing, typography } from '../../constants/theme';
+import { spacing, typography } from '../../constants/theme';
 import { Reminder } from '../../types/reminder';
 import { useReminders } from '../../hooks/useReminders';
+import { useTheme } from '../../hooks/useTheme';
 
 export default function CompletedScreen() {
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useTheme();
+  const styles = createStyles(colors);
+  
   const { reminders, loading, toggleComplete, refreshReminders, updateReminder, deleteReminder } = useReminders();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
@@ -111,7 +115,7 @@ export default function CompletedScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

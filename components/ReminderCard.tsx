@@ -8,9 +8,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
-import { colors, shadows, spacing, borderRadius, typography } from '../constants/theme';
+import { spacing, borderRadius, typography, shadows } from '../constants/theme';
 import { Reminder } from '../types/reminder';
 import { useSettings } from '../contexts/SettingsContext';
+import { useTheme } from '../hooks/useTheme';
 
 interface ReminderCardProps {
   reminder: Reminder;
@@ -21,6 +22,9 @@ interface ReminderCardProps {
 }
 
 export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: ReminderCardProps) {
+  const { colors, isDark } = useTheme();
+  const styles = createStyles(colors);
+  
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(8)).current;
   const checkScaleAnim = useRef(new Animated.Value(1)).current;
@@ -101,7 +105,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
         activeOpacity={0.7}
       >
         <Animated.View style={{ transform: [{ scale }] }}>
-          <Ionicons name="trash-outline" size={24} color={colors.background} />
+          <Ionicons name="trash-outline" size={24} color="#FFFFFF" />
         </Animated.View>
       </TouchableOpacity>
     );
@@ -128,7 +132,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
           style={[
             styles.card,
             tag && !reminder.completed && {
-              backgroundColor: `${tag.color}08`,
+              backgroundColor: `${tag.color}${isDark ? '15' : '08'}`,
               borderLeftWidth: 1,
               borderLeftColor: tag.color,
               borderRightWidth: 1,
@@ -207,7 +211,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any) => StyleSheet.create({
   container: {
   },
   containerCompleted: {
