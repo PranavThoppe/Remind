@@ -15,6 +15,7 @@ import { spacing, typography, borderRadius, shadows } from '../../constants/them
 import { PRESET_COLORS, Tag } from '../../types/settings';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useTheme } from '../../hooks/useTheme';
+import { ColorPicker } from '../../components/ColorPicker';
 
 export default function TagsScreen() {
   const insets = useSafeAreaInsets();
@@ -26,6 +27,7 @@ export default function TagsScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tagName, setTagName] = useState('');
   const [selectedColor, setSelectedColor] = useState(PRESET_COLORS[0].color);
+  const [showPicker, setShowPicker] = useState(false);
 
   const handleAddTag = async () => {
     if (!tagName.trim()) {
@@ -111,24 +113,15 @@ export default function TagsScreen() {
               onChangeText={setTagName}
               autoFocus
             />
-            <Text style={styles.label}>Select Color</Text>
-            <View style={styles.colorGrid}>
-              {PRESET_COLORS.map((item) => (
-                <TouchableOpacity
-                  key={item.color}
-                  style={[
-                    styles.colorOption,
-                    { backgroundColor: item.color },
-                    selectedColor === item.color && styles.selectedColor,
-                  ]}
-                  onPress={() => setSelectedColor(item.color)}
-                >
-                  {selectedColor === item.color && (
-                    <Ionicons name="checkmark" size={16} color="white" />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
+            <Text style={styles.label}>Color</Text>
+            <TouchableOpacity 
+              style={[styles.colorPreview, { backgroundColor: selectedColor }]}
+              onPress={() => setShowPicker(true)}
+            >
+              <Ionicons name="color-palette" size={20} color="white" style={{ textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }} />
+              <Text style={styles.colorPreviewText}>Change Color</Text>
+            </TouchableOpacity>
+
             <View style={styles.formButtons}>
               <TouchableOpacity style={styles.cancelButton} onPress={resetForm}>
                 <Text style={styles.cancelButtonText}>Cancel</Text>
@@ -171,6 +164,14 @@ export default function TagsScreen() {
           )}
         </View>
       </ScrollView>
+
+      <ColorPicker
+        visible={showPicker}
+        onClose={() => setShowPicker(false)}
+        selectedColor={selectedColor}
+        onSelect={setSelectedColor}
+        colors={colors}
+      />
     </View>
   );
 }
@@ -237,22 +238,23 @@ const createStyles = (colors: any) => StyleSheet.create({
     color: colors.mutedForeground,
     marginBottom: spacing.sm,
   },
-  colorGrid: {
+  colorPreview: {
+    height: 48,
+    borderRadius: borderRadius.md,
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-    marginBottom: spacing.xl,
-  },
-  colorOption: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.xl,
+    ...shadows.soft,
   },
-  selectedColor: {
-    borderWidth: 2,
-    borderColor: colors.foreground,
+  colorPreviewText: {
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.base,
+    color: 'white',
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   formButtons: {
     flexDirection: 'row',
