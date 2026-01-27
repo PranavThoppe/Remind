@@ -85,38 +85,48 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
   const tag = tags.find(t => t.id === reminder.tag_id);
   const priority = priorities.find(p => p.id === reminder.priority_id);
 
+  // Render red background with animated trash icon
+  // Icon opacity increases as user swipes further, indicating deletion on full swipe
   const renderRightActions = (
     progress: Animated.AnimatedInterpolation<number>,
     dragX: Animated.AnimatedInterpolation<number>
   ) => {
-    const scale = dragX.interpolate({
-      inputRange: [-80, 0],
-      outputRange: [1, 0],
+    // Icon fades in as user swipes (more visible = closer to deletion)
+    const iconOpacity = dragX.interpolate({
+      inputRange: [-100, -50, 0],
+      outputRange: [1, 0.5, 0],
+      extrapolate: 'clamp',
+    });
+
+    const iconScale = dragX.interpolate({
+      inputRange: [-100, -50, 0],
+      outputRange: [1.2, 0.8, 0.5],
       extrapolate: 'clamp',
     });
 
     return (
-      <TouchableOpacity
-        onPress={() => {
-          swipeableRef.current?.close();
-          onDelete?.(reminder.id);
-        }}
-        style={styles.deleteAction}
-        activeOpacity={0.7}
-      >
-        <Animated.View style={{ transform: [{ scale }] }}>
-          <Ionicons name="trash-outline" size={24} color="#FFFFFF" />
+      <View style={styles.deleteBackground}>
+        <Animated.View style={{ opacity: iconOpacity, transform: [{ scale: iconScale }] }}>
+          <Ionicons name="trash-outline" size={28} color="#FFFFFF" />
         </Animated.View>
-      </TouchableOpacity>
+      </View>
     );
   };
-
+  
   return (
     <Swipeable
       ref={swipeableRef}
       renderRightActions={renderRightActions}
       friction={2}
-      rightThreshold={40}
+      rightThreshold={100}
+      overshootFriction={8}
+      onSwipeableWillOpen={(direction) => {
+        // Fires when about to fully open - requires deliberate full swipe
+        if (direction === 'right') {
+          swipeableRef.current?.close();
+          onDelete?.(reminder.id);
+        }
+      }}
     >
       <Animated.View
         style={[
@@ -310,7 +320,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: typography.fontSize.sm,
     color: colors.mutedForeground,
   },
-  deleteAction: {
+  deleteBackground: {
     backgroundColor: colors.destructive,
     justifyContent: 'center',
     alignItems: 'center',
