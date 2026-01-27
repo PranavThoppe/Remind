@@ -1,80 +1,80 @@
-// Theme constants matching the Lovable Demo design system
-// Based on the warm coral palette from swift-reminder
+// Theme constants - Premium AI design system
+// Based on the indigo/purple palette (Claude / Perplexity vibes)
 
 export const lightColors = {
-  // Primary - Warm coral accent
-  primary: '#E8826A',
-  primaryLight: '#F5B8A8',
+  // Primary - Indigo accent (premium AI feel)
+  primary: '#6366F1',
+  primaryLight: '#A5B4FC',
   primaryForeground: '#FFFFFF',
 
-  // Background - Warm off-white
-  background: '#FDFBF9',
-  foreground: '#2D2824',
+  // Background - Cool neutral
+  background: '#FAFAFA',
+  foreground: '#1F2937',
 
-  // Card - Pure white with subtle warmth
+  // Card - Pure white
   card: '#FFFFFF',
-  cardForeground: '#2D2824',
+  cardForeground: '#1F2937',
 
   // Muted colors
-  muted: '#EDE9E5',
-  mutedForeground: '#8A8178',
+  muted: '#F3F4F6',
+  mutedForeground: '#6B7280',
 
   // Secondary
-  secondary: '#F0EBE7',
-  secondaryForeground: '#3D3830',
+  secondary: '#F9FAFB',
+  secondaryForeground: '#374151',
 
   // Success - Green for completed items
-  success: '#2EB872',
+  success: '#10B981',
   successForeground: '#FFFFFF',
 
   // Destructive - Red for delete/sign out
-  destructive: '#E54D4D',
+  destructive: '#EF4444',
   destructiveForeground: '#FFFFFF',
 
   // Border
-  border: '#E8E3DE',
-  input: '#E8E3DE',
+  border: '#E5E7EB',
+  input: '#E5E7EB',
 
   // Ring focus
-  ring: '#E8826A',
+  ring: '#6366F1',
 };
 
 export const darkColors = {
-  // Primary - Warm coral accent (kept same or slightly adjusted for contrast)
-  primary: '#E8826A',
-  primaryLight: '#B05C49',
+  // Primary - Indigo accent (premium AI feel)
+  primary: '#6366F1',
+  primaryLight: '#818CF8',
   primaryForeground: '#FFFFFF',
 
-  // Background - Deep warm grey
-  background: '#1A1816',
-  foreground: '#F0EBE7',
+  // Background - Deep cool grey
+  background: '#111827',
+  foreground: '#F9FAFB',
 
   // Card - Slightly lighter than background
-  card: '#24211E',
-  cardForeground: '#F0EBE7',
+  card: '#1F2937',
+  cardForeground: '#F9FAFB',
 
   // Muted colors
-  muted: '#2D2824',
-  mutedForeground: '#A39990',
+  muted: '#374151',
+  mutedForeground: '#9CA3AF',
 
   // Secondary
-  secondary: '#2D2824',
-  secondaryForeground: '#E8E3DE',
+  secondary: '#374151',
+  secondaryForeground: '#F3F4F6',
 
-  // Success - Green for completed items (kept same or slightly adjusted)
-  success: '#34D399',
+  // Success - Green for completed items
+  success: '#10B981',
   successForeground: '#064E3B',
 
   // Destructive - Red for delete/sign out
-  destructive: '#F87171',
+  destructive: '#EF4444',
   destructiveForeground: '#7F1D1D',
 
   // Border
-  border: '#2D2824',
-  input: '#2D2824',
+  border: '#374151',
+  input: '#374151',
 
   // Ring focus
-  ring: '#E8826A',
+  ring: '#6366F1',
 };
 
 // getThemeColors helper
@@ -103,7 +103,7 @@ export const shadows = {
     elevation: 6,
   },
   fab: {
-    shadowColor: '#E8826A',
+    shadowColor: '#6366F1',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
