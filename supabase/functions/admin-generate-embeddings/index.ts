@@ -60,6 +60,8 @@ serve(async (req) => {
       .select(`
         id,
         title,
+        date,
+        time,
         tag_id,
         tags (
           name
@@ -99,9 +101,12 @@ serve(async (req) => {
     // Process each reminder
     for (const reminder of reminders) {
       try {
-        // Create text to embed (include tag if available)
+        // Create text to embed (include tag and date if available)
         const tagName = (reminder as any).tags?.name
-        const contentToEmbed = tagName ? `${reminder.title} [${tagName}]` : reminder.title
+        let contentToEmbed = reminder.title
+        if (tagName) contentToEmbed += ` [Tag: ${tagName}]`
+        if (reminder.date) contentToEmbed += ` [Date: ${reminder.date}]`
+        if (reminder.time) contentToEmbed += ` [Time: ${reminder.time}]`
 
         console.log(`[Processing] Reminder ${reminder.id}: "${contentToEmbed}"`)
 
