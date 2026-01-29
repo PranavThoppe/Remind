@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { spacing, borderRadius, typography, shadows } from '../constants/theme';
 import { Reminder } from '../types/reminder';
+import { ModalFieldUpdates } from '../types/ai-chat';
 import { scheduleReminderNotification } from '../lib/notifications';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTheme } from '../hooks/useTheme';
@@ -26,6 +27,9 @@ interface AddReminderSheetProps {
   onClose: () => void;
   onSave: (reminder: Omit<Reminder, 'id' | 'user_id' | 'created_at' | 'completed'>) => Promise<any>;
   editReminder?: Reminder | null;
+  // Live mode props for AI chat integration
+  liveMode?: boolean;
+  externalFields?: ModalFieldUpdates;
 }
 
 
@@ -38,7 +42,14 @@ const repeatOptions = [
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddReminderSheetProps) {
+export function AddReminderSheet({
+  isOpen,
+  onClose,
+  onSave,
+  editReminder,
+  liveMode,
+  externalFields,
+}: AddReminderSheetProps) {
   const { colors, isDark } = useTheme();
   const styles = createStyles(colors);
   
@@ -56,6 +67,31 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
 
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
+
+  // Field animations for live mode
+  const fieldAnimations = useRef({
+    title: new Animated.Value(1),
+    date: new Animated.Value(1),
+    time: new Animated.Value(1),
+    tag: new Animated.Value(1),
+    priority: new Animated.Value(1),
+  }).current;
+
+  const animateFieldUpdate = (field: keyof typeof fieldAnimations) => {
+    // Pulse animation: scale up slightly then back
+    Animated.sequence([
+      Animated.timing(fieldAnimations[field], {
+        toValue: 1.03,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(fieldAnimations[field], {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
 
   useEffect(() => {
     if (editReminder) {
@@ -78,6 +114,44 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
     setShowDatePicker(false);
     setShowTimePicker(false);
   }, [editReminder, isOpen]);
+
+  // Effect for live updates in conversational mode
+  useEffect(() => {
+    if (liveMode && externalFields && isOpen) {
+      // Update title with animation
+      if (externalFields.title !== undefined && externalFields.title !== title) {
+        setTitle(externalFields.title);
+        animateFieldUpdate('title');
+      }
+      
+      // Update date with animation
+      if (externalFields.date !== undefined) {
+        const newDate = new Date(externalFields.date + 'T00:00:00');
+        if (!date || newDate.getTime() !== date.getTime()) {
+          setDate(newDate);
+          animateFieldUpdate('date');
+        }
+      }
+      
+      // Update time with animation
+      if (externalFields.time !== undefined && externalFields.time !== time) {
+        setTime(externalFields.time);
+        animateFieldUpdate('time');
+      }
+      
+      // Update tag with animation
+      if (externalFields.tag_id !== undefined && externalFields.tag_id !== tagId) {
+        setTagId(externalFields.tag_id);
+        animateFieldUpdate('tag');
+      }
+      
+      // Update priority with animation
+      if (externalFields.priority_id !== undefined && externalFields.priority_id !== priorityId) {
+        setPriorityId(externalFields.priority_id);
+        animateFieldUpdate('priority');
+      }
+    }
+  }, [externalFields, liveMode, isOpen]);
 
   useEffect(() => {
     const keyboardWillShowListener = Keyboard.addListener(
@@ -103,7 +177,8 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
   }, []);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !liveMode) {
+      // Only run the full-screen slide/backdrop animations in default modal mode.
       Animated.parallel([
         Animated.spring(slideAnim, {
           toValue: 0,
@@ -117,7 +192,7 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
           useNativeDriver: true,
         }),
       ]).start();
-    } else {
+    } else if (!isOpen && !liveMode) {
       Animated.parallel([
         Animated.timing(slideAnim, {
           toValue: SCREEN_HEIGHT,
@@ -131,7 +206,7 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
         }),
       ]).start();
     }
-  }, [isOpen]);
+  }, [isOpen, liveMode, slideAnim, backdropAnim]);
 
   const handleClose = () => {
     Keyboard.dismiss();
@@ -229,7 +304,297 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
   };
 
   if (!isOpen) return null;
+  // Shared sheet content used in both default modal mode and inline liveMode.
+  const sheetContent = (
+    <Animated.View
+      style={[
+        liveMode ? styles.inlineSheet : styles.sheet,
+        !liveMode && {
+          transform: [{ translateY: slideAnim }],
+          marginBottom: keyboardHeight,
+        },
+      ]}
+    >
+      {/* Handle */}
+      <View style={styles.handleContainer}>
+        <View style={styles.handle} />
+      </View>
 
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>
+          {editReminder ? 'Edit Reminder' : liveMode ? 'Creating Reminder' : 'New Reminder'}
+        </Text>
+        <TouchableOpacity
+          style={styles.closeButton}
+          onPress={handleClose}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="close" size={24} color={colors.mutedForeground} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Content */}
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Title Input */}
+        <Animated.View style={{ transform: [{ scale: fieldAnimations.title }] }}>
+          <TextInput
+            style={styles.input}
+            placeholder="What do you need to remember?"
+            placeholderTextColor={colors.mutedForeground}
+            value={title}
+            onChangeText={setTitle}
+            onFocus={() => {
+              setShowDatePicker(false);
+              setShowTimePicker(false);
+            }}
+          />
+        </Animated.View>
+
+        {/* Date & Time Row */}
+        <View style={styles.dateTimeRow}>
+          {/* Date Picker */}
+          <Animated.View
+            style={[styles.pickerButtonWrapper, { transform: [{ scale: fieldAnimations.date }] }]}
+          >
+            <TouchableOpacity
+              style={[
+                styles.pickerButton,
+                date && styles.pickerButtonActive,
+              ]}
+              onPress={() => {
+                Keyboard.dismiss();
+                setShowDatePicker(!showDatePicker);
+                setShowTimePicker(false);
+              }}
+            >
+              <Ionicons
+                name="calendar-outline"
+                size={18}
+                color={date ? colors.foreground : colors.mutedForeground}
+              />
+              <Text
+                style={[
+                  styles.pickerButtonText,
+                  date && styles.pickerButtonTextActive,
+                ]}
+              >
+                {date ? formatDate(date) : 'Add date'}
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* Time Picker */}
+          <Animated.View
+            style={[styles.pickerButtonWrapper, { transform: [{ scale: fieldAnimations.time }] }]}
+          >
+            <TouchableOpacity
+              style={[
+                styles.pickerButton,
+                time && styles.pickerButtonActive,
+              ]}
+              onPress={() => {
+                Keyboard.dismiss();
+                setShowTimePicker(!showTimePicker);
+                setShowDatePicker(false);
+              }}
+            >
+              <Ionicons
+                name="time-outline"
+                size={18}
+                color={time ? colors.foreground : colors.mutedForeground}
+              />
+              <Text
+                style={[
+                  styles.pickerButtonText,
+                  time && styles.pickerButtonTextActive,
+                ]}
+              >
+                {formatDisplayTime(time)}
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
+
+        {/* Time Picker Modal */}
+        {showTimePicker && (
+          <DateTimePicker
+            value={getTimeDate()}
+            mode="time"
+            is24Hour={false}
+            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+            onChange={handleTimeChange}
+            textColor={colors.foreground}
+            themeVariant={isDark ? 'dark' : 'light'}
+          />
+        )}
+
+        {/* Date Picker Modal (Android shows inline) */}
+        {showDatePicker && (
+          <DateTimePicker
+            value={date || new Date()}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'inline' : 'default'}
+            onChange={handleDateChange}
+            minimumDate={new Date()}
+            textColor={colors.foreground}
+            themeVariant={isDark ? 'dark' : 'light'}
+          />
+        )}
+
+        {/* Repeat Options */}
+        <View style={styles.repeatSection}>
+          <View style={styles.repeatHeader}>
+            <Ionicons name="repeat" size={18} color={colors.mutedForeground} />
+            <Text style={styles.repeatLabel}>Repeat</Text>
+          </View>
+          <View style={styles.repeatOptions}>
+            {repeatOptions.map((option) => (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.repeatOption,
+                  repeat === option.value && styles.repeatOptionActive,
+                ]}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setRepeat(option.value);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.repeatOptionText,
+                    repeat === option.value && styles.repeatOptionTextActive,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Priority Selection */}
+        {priorities.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="flag-outline" size={18} color={colors.mutedForeground} />
+              <Text style={styles.sectionLabel}>Priority</Text>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.horizontalScroll}
+            >
+              <TouchableOpacity
+                style={[styles.tagOption, !priorityId && styles.tagOptionActive]}
+                onPress={() => setPriorityId(undefined)}
+              >
+                <Text style={[styles.tagText, !priorityId && styles.tagTextActive]}>None</Text>
+              </TouchableOpacity>
+              {priorities.map((priority) => (
+                <TouchableOpacity
+                  key={priority.id}
+                  style={[
+                    styles.tagOption,
+                    priorityId === priority.id && {
+                      backgroundColor: priority.color,
+                      borderColor: priority.color,
+                    },
+                  ]}
+                  onPress={() => setPriorityId(priority.id)}
+                >
+                  <Text
+                    style={[
+                      styles.priorityRankText,
+                      priorityId === priority.id && { color: 'white' },
+                    ]}
+                  >
+                    {priority.rank}
+                  </Text>
+                  <Text
+                    style={[styles.tagText, priorityId === priority.id && { color: 'white' }]}
+                  >
+                    {priority.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Tag Selection */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="pricetag-outline" size={18} color={colors.mutedForeground} />
+            <Text style={styles.sectionLabel}>Tag</Text>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.horizontalScroll}
+          >
+            <TouchableOpacity
+              style={[styles.tagOption, !tagId && styles.tagOptionActive]}
+              onPress={() => setTagId(undefined)}
+            >
+              <Text style={[styles.tagText, !tagId && styles.tagTextActive]}>None</Text>
+            </TouchableOpacity>
+            {tags.map((tag) => (
+              <TouchableOpacity
+                key={tag.id}
+                style={[
+                  styles.tagOption,
+                  tagId === tag.id && { backgroundColor: tag.color, borderColor: tag.color },
+                ]}
+                onPress={() => setTagId(tag.id)}
+              >
+                <View
+                  style={[
+                    styles.tagDot,
+                    { backgroundColor: tagId === tag.id ? 'white' : tag.color },
+                  ]}
+                />
+                <Text style={[styles.tagText, tagId === tag.id && { color: 'white' }]}>
+                  {tag.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Save Button */}
+        <TouchableOpacity
+          style={[
+            styles.saveButton,
+            !title.trim() && styles.saveButtonDisabled,
+          ]}
+          onPress={handleSave}
+          disabled={!title.trim()}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.saveButtonText}>
+            {editReminder ? 'Save Changes' : 'Add Reminder'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Bottom padding for safe area */}
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </Animated.View>
+  );
+
+  // In live conversational mode, render inline inside the layout (between chat and input),
+  // so that the user's text input remains visible and usable.
+  if (liveMode) {
+    return sheetContent;
+  }
+
+  // Default behavior: render as full-screen modal bottom sheet (used on Home screen, etc.).
   return (
     <Modal
       transparent
@@ -253,250 +618,7 @@ export function AddReminderSheet({ isOpen, onClose, onSave, editReminder }: AddR
       </Animated.View>
 
       {/* Sheet */}
-      <Animated.View
-        style={[
-          styles.sheet,
-          {
-            transform: [{ translateY: slideAnim }],
-            marginBottom: keyboardHeight,
-          },
-        ]}
-      >
-        {/* Handle */}
-        <View style={styles.handleContainer}>
-          <View style={styles.handle} />
-        </View>
-
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>
-            {editReminder ? 'Edit Reminder' : 'New Reminder'}
-          </Text>
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={handleClose}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="close" size={24} color={colors.mutedForeground} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Content */}
-        <ScrollView 
-          style={styles.content} 
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Title Input */}
-          <TextInput
-            style={styles.input}
-            placeholder="What do you need to remember?"
-            placeholderTextColor={colors.mutedForeground}
-            value={title}
-            onChangeText={setTitle}
-            onFocus={() => {
-              setShowDatePicker(false);
-              setShowTimePicker(false);
-            }}
-          />
-
-          {/* Date & Time Row */}
-          <View style={styles.dateTimeRow}>
-            {/* Date Picker */}
-            <TouchableOpacity
-              style={[
-                styles.pickerButton,
-                date && styles.pickerButtonActive,
-              ]}
-              onPress={() => {
-                Keyboard.dismiss();
-                setShowDatePicker(!showDatePicker);
-                setShowTimePicker(false);
-              }}
-            >
-              <Ionicons
-                name="calendar-outline"
-                size={18}
-                color={date ? colors.foreground : colors.mutedForeground}
-              />
-              <Text style={[
-                styles.pickerButtonText,
-                date && styles.pickerButtonTextActive,
-              ]}>
-                {date ? formatDate(date) : 'Add date'}
-              </Text>
-            </TouchableOpacity>
-
-            {/* Time Picker */}
-            <TouchableOpacity
-              style={[
-                styles.pickerButton,
-                time && styles.pickerButtonActive,
-              ]}
-              onPress={() => {
-                Keyboard.dismiss();
-                setShowTimePicker(!showTimePicker);
-                setShowDatePicker(false);
-              }}
-            >
-              <Ionicons
-                name="time-outline"
-                size={18}
-                color={time ? colors.foreground : colors.mutedForeground}
-              />
-              <Text style={[
-                styles.pickerButtonText,
-                time && styles.pickerButtonTextActive,
-              ]}>
-                {formatDisplayTime(time)}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Time Picker Modal */}
-          {showTimePicker && (
-            <DateTimePicker
-              value={getTimeDate()}
-              mode="time"
-              is24Hour={false}
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={handleTimeChange}
-              textColor={colors.foreground}
-              themeVariant={isDark ? 'dark' : 'light'}
-            />
-          )}
-
-          {/* Date Picker Modal (Android shows inline) */}
-          {showDatePicker && (
-            <DateTimePicker
-              value={date || new Date()}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'inline' : 'default'}
-              onChange={handleDateChange}
-              minimumDate={new Date()}
-              textColor={colors.foreground}
-              themeVariant={isDark ? 'dark' : 'light'}
-            />
-          )}
-
-          {/* Repeat Options */}
-          <View style={styles.repeatSection}>
-            <View style={styles.repeatHeader}>
-              <Ionicons name="repeat" size={18} color={colors.mutedForeground} />
-              <Text style={styles.repeatLabel}>Repeat</Text>
-            </View>
-            <View style={styles.repeatOptions}>
-              {repeatOptions.map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  style={[
-                    styles.repeatOption,
-                    repeat === option.value && styles.repeatOptionActive,
-                  ]}
-                  onPress={() => {
-                    Keyboard.dismiss();
-                    setRepeat(option.value);
-                  }}
-                >
-                  <Text style={[
-                    styles.repeatOptionText,
-                    repeat === option.value && styles.repeatOptionTextActive,
-                  ]}>
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Priority Selection */}
-          {priorities.length > 0 && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Ionicons name="flag-outline" size={18} color={colors.mutedForeground} />
-                <Text style={styles.sectionLabel}>Priority</Text>
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
-                <TouchableOpacity
-                  style={[styles.tagOption, !priorityId && styles.tagOptionActive]}
-                  onPress={() => setPriorityId(undefined)}
-                >
-                  <Text style={[styles.tagText, !priorityId && styles.tagTextActive]}>None</Text>
-                </TouchableOpacity>
-                {priorities.map((priority) => (
-                  <TouchableOpacity
-                    key={priority.id}
-                    style={[
-                      styles.tagOption,
-                      priorityId === priority.id && { backgroundColor: priority.color, borderColor: priority.color },
-                    ]}
-                    onPress={() => setPriorityId(priority.id)}
-                  >
-                    <Text style={[
-                      styles.priorityRankText,
-                      priorityId === priority.id && { color: 'white' }
-                    ]}>
-                      {priority.rank}
-                    </Text>
-                    <Text style={[styles.tagText, priorityId === priority.id && { color: 'white' }]}>
-                      {priority.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-
-          {/* Tag Selection */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="pricetag-outline" size={18} color={colors.mutedForeground} />
-              <Text style={styles.sectionLabel}>Tag</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
-              <TouchableOpacity
-                style={[styles.tagOption, !tagId && styles.tagOptionActive]}
-                onPress={() => setTagId(undefined)}
-              >
-                <Text style={[styles.tagText, !tagId && styles.tagTextActive]}>None</Text>
-              </TouchableOpacity>
-              {tags.map((tag) => (
-                <TouchableOpacity
-                  key={tag.id}
-                  style={[
-                    styles.tagOption,
-                    tagId === tag.id && { backgroundColor: tag.color, borderColor: tag.color },
-                  ]}
-                  onPress={() => setTagId(tag.id)}
-                >
-                  <View style={[styles.tagDot, { backgroundColor: tagId === tag.id ? 'white' : tag.color }]} />
-                  <Text style={[styles.tagText, tagId === tag.id && { color: 'white' }]}>
-                    {tag.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* Save Button */}
-          <TouchableOpacity
-            style={[
-              styles.saveButton,
-              !title.trim() && styles.saveButtonDisabled,
-            ]}
-            onPress={handleSave}
-            disabled={!title.trim()}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.saveButtonText}>
-              {editReminder ? 'Save Changes' : 'Add Reminder'}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Bottom padding for safe area */}
-          <View style={{ height: 40 }} />
-        </ScrollView>
-      </Animated.View>
+      {sheetContent}
     </Modal>
   );
 }
@@ -518,6 +640,15 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: SCREEN_HEIGHT * 0.85,
+    ...shadows.cardHover,
+  },
+  // Inline variant for AI chat: sits between messages and input, not full-screen.
+  inlineSheet: {
+    backgroundColor: colors.card,
+    borderRadius: 24,
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.lg,
+    maxHeight: SCREEN_HEIGHT * 0.6,
     ...shadows.cardHover,
   },
   handleContainer: {
@@ -567,8 +698,10 @@ const createStyles = (colors: any) => StyleSheet.create({
     gap: spacing.md,
     marginBottom: spacing.lg,
   },
-  pickerButton: {
+  pickerButtonWrapper: {
     flex: 1,
+  },
+  pickerButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,

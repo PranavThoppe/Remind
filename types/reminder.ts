@@ -17,6 +17,7 @@ export interface Profile {
   email: string;
   avatar_url?: string;
   updated_at?: string;
+  pro?: boolean;
 }
 
 export interface User {
