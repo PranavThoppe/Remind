@@ -140,9 +140,8 @@ serve(async (req) => {
       ? priorities.map(p => `- ${p.name} (Rank: ${p.rank}, Color: ${p.color})`).join('\n')
       : 'No priorities available'
 
-    // Determine intent: create, update, or chat
+    // Determine intent: create, update, search, or chat
     const isRefinement = modalContext?.isOpen === true
-    const hasCreationIntent = /(create|add|remind|new reminder|set a reminder|make a reminder)/i.test(query)
 
     // Build the extraction prompt
     const systemPrompt = `You are a reminder extraction assistant. Today is ${fullToday}.
@@ -162,12 +161,16 @@ ${modalContext?.isOpen ? JSON.stringify(modalContext.currentFields, null, 2) : '
 USER QUERY: "${query}"
 
 INSTRUCTIONS:
-${isRefinement 
-  ? `The user is REFINING an existing reminder. Extract only the fields they want to UPDATE. Leave unchanged fields as null.`
-  : hasCreationIntent
-  ? `The user wants to CREATE a new reminder. Extract all relevant fields.`
-  : `The user is chatting. Extract fields if mentioned, but this may be a general conversation.`
-}
+1. CLASSIFY the user's intent into one of these types:
+   - "create": User wants to set/add a new reminder.
+   - "update": User is refining an existing reminder (especially if the modal is open) or changing details of something just discussed.
+   - "search": User is asking about their existing reminders (e.g., "What's on my list?", "Show my tasks for tomorrow", "Do I have any meetings?").
+   - "chat": General conversation, greetings, or questions that aren't about managing specific reminders.
+
+2. EXTRACTION:
+   - If "create" or "update", extract all relevant fields.
+   - If "search", extract the "date" if they are asking about a specific time, and "title" if they are asking about a specific topic.
+   - For "update", extract the fields the user wants to CHANGE or ADD. If the user mentions a tag that matches an available tag, always extract it even if the modal is already open.
 
 CRITICAL TEMPORAL EXTRACTION RULES:
 1. "next Sunday" = the Sunday in the upcoming week (${nextSundayStr} if today is ${dayOfWeek})
@@ -183,43 +186,51 @@ CRITICAL TEMPORAL EXTRACTION RULES:
 
 SEMANTIC TAG CLASSIFICATION:
 - Evaluate ALL available tags against the user's query and overall context (conversation + modal state).
-- Consider semantic meaning, user intent, and relevance, not just exact keywords.
-- Mentally assign each tag a relevance score from 0–100 based on how well it fits this specific reminder.
-- Choose ONLY the single tag with the HIGHEST relevance score, but ONLY if its score is >= 50.
-- If NO tag has relevance >= 50, set tag_name to null (no tag is appropriate for this reminder).
-- If multiple tags could fit, choose the most specific / most natural category for this reminder.
-- Example mappings (if such tags exist for the user):
-  - "exam", "quiz", "midterm", "final", "homework", "assignment", "class", "lecture", "study" → School tag.
-  - "doctor", "dentist", "appointment", "meds", "medicine", "workout", "gym", "exercise" → Health tag.
-  - "meeting", "deadline", "project", "client", "sprint", "standup", "conference" → Work tag.
-  - "groceries", "shopping", "errands", "buy milk", "pick up package" → Personal / Errands tag.
+- If the user mentions a category or keyword that matches one of their tags (e.g., "for my internship" -> "Internship"), YOU MUST EXTRACT IT into tag_name.
+- DO THIS EVEN IF you also decide to include that word in the "title" field.
+- Choose ONLY the single tag with the HIGHEST relevance score.
+- If NO tag fits, set tag_name to null.
 
 FIELD EXTRACTION:
-- title: Clean reminder title (remove trigger words like "create", "remind me to", "set a reminder", etc.)
-- date: YYYY-MM-DD format or null (must be valid date string)
-- time: HH:mm format (24-hour) or null (convert "2pm" → "14:00", "3:30am" → "03:30")
-- tag_name: One of user's tag names from the list above if a good semantic match exists, otherwise null
+- title: A very concise (MAX 6 WORDS) action-oriented title. REMOVE words that are redundant with the extracted tag_name. (e.g., if tag is "Internship", title should be "Call apartment people" not "Call internship apartment people").
+- date: YYYY-MM-DD format or null
+- time: HH:mm format (24-hour) or null (convert "2pm" → "14:00")
+- tag_name: One of user's tag names if a good semantic match exists, otherwise null. ALWAYS extract this if a tag is mentioned, even if redundant with title.
 - repeat: "none" | "daily" | "weekly" | "monthly" or null
-- NOTE: Do NOT extract priority - users set priority manually
 
 EXAMPLES:
-Today: ${fullToday}
-- Query: "Create reminder for exam next Sunday at 2pm"
-  → {title: "exam", date: "${nextSundayStr}", time: "14:00", tag_name: "School", repeat: "none"}
-- Query: "Remind me to call mom tomorrow"
-  → {title: "call mom", date: "${tomorrowStr}", time: null, tag_name: null, repeat: "none"}
-- Query: "next week Friday at 3pm"
-  → {title: null, date: "[calculate Friday in next week]", time: "15:00", tag_name: null, repeat: "none"}
-
-Return ONLY valid JSON (no markdown, no code blocks):
+User: "remind me to buy groceries for home tonight at 7pm"
 {
-  "type": "${isRefinement ? 'update' : hasCreationIntent ? 'create' : 'chat'}",
-  "message": "friendly conversational response (1-2 sentences)",
+  "type": "create",
+  "message": "I've set a reminder to buy groceries tonight.",
   "fieldUpdates": {
-    "title": "string or null",
+    "title": "Buy groceries",
+    "tag_name": "Home",
+    "date": "2026-01-29",
+    "time": "19:00"
+  }
+}
+
+User: "add a reminder for my internship to call the housing office tomorrow"
+{
+  "type": "create",
+  "message": "Added a reminder to call the housing office.",
+  "fieldUpdates": {
+    "title": "Call housing office",
+    "tag_name": "Internship",
+    "date": "2026-01-30"
+  }
+}
+
+Return ONLY valid JSON:
+{
+  "type": "create" | "update" | "search" | "chat",
+  "message": "friendly conversational response (MAX 15 WORDS)",
+  "fieldUpdates": {
+    "title": "A very concise title (MAX 6 WORDS). Remove redundant words like 'internship' if tag_name is 'Internship'.",
     "date": "YYYY-MM-DD or null",
     "time": "HH:mm or null",
-    "tag_name": "string or null",
+    "tag_name": "One of: ${tags.length > 0 ? tags.map(t => t.name).join(', ') : 'null'} or null",
     "repeat": "none" | "daily" | "weekly" | "monthly" | null
   }
 }`
@@ -253,7 +264,7 @@ Return ONLY valid JSON (no markdown, no code blocks):
 
     // Parse JSON response
     let parsedResponse: {
-      type?: 'create' | 'update' | 'chat';
+      type?: 'create' | 'update' | 'search' | 'chat';
       message?: string;
       fieldUpdates?: {
         title?: string | null;
@@ -331,11 +342,9 @@ Return ONLY valid JSON (no markdown, no code blocks):
 
     // Build response
     const response = {
-      type: parsedResponse.type || (isRefinement ? 'update' : hasCreationIntent ? 'create' : 'chat'),
+      type: parsedResponse.type || (isRefinement ? 'update' : 'chat'),
       message: parsedResponse.message || (isRefinement 
         ? "I've updated the reminder fields."
-        : hasCreationIntent
-        ? "I'll help you create that reminder."
         : "How can I help you with reminders?"),
       fieldUpdates: Object.keys(fieldUpdates).length > 0 ? fieldUpdates : undefined
     }

@@ -17,7 +17,8 @@ export interface ModalFieldUpdates {
 }
 
 export interface MockAIResponse {
-  type: 'chat' | 'create' | 'update';
+  type: 'chat' | 'create' | 'update' | 'search';
   message: string;
   fieldUpdates?: ModalFieldUpdates;
+  searchResults?: any[];
 }
