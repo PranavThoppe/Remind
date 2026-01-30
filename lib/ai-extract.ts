@@ -33,6 +33,10 @@ export async function extractReminderFields(
 ): Promise<ExtractReminderFieldsResponse> {
   const { query, user_id, conversation = [], modalContext, tags = [], priorities = [] } = params;
 
+  // Add timeout to prevent hanging
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+
   try {
     // Prepare request body
     const requestBody = {
@@ -69,7 +73,10 @@ export async function extractReminderFields(
         'x-admin-secret': ADMIN_SECRET_KEY,
       },
       body: JSON.stringify(requestBody),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       let errorData: any = {};
@@ -80,16 +87,16 @@ export async function extractReminderFields(
       } catch (e) {
         errorData = { error: errorText || response.statusText };
       }
-      
+
       console.error('[extractReminderFields] HTTP Error:', response.status, errorData);
-      
+
       // Handle pro membership required error
       if (response.status === 403 && errorData.code === 'PRO_REQUIRED') {
         const error = new Error(errorData.error || 'Pro membership required');
         (error as any).code = 'PRO_REQUIRED';
         throw error;
       }
-      
+
       throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
     }
 
@@ -98,7 +105,7 @@ export async function extractReminderFields(
 
     // Map tag_name to tag_id
     const fieldUpdates: ModalFieldUpdates = {};
-    
+
     if (data.fieldUpdates) {
       const updates = data.fieldUpdates;
 
@@ -133,6 +140,11 @@ export async function extractReminderFields(
       fieldUpdates: Object.keys(fieldUpdates).length > 0 ? fieldUpdates : undefined,
     };
   } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      console.error('[extractReminderFields] Request timed out');
+      throw new Error('Request timed out. Please try again.');
+    }
     console.error('[extractReminderFields] Error:', error);
     throw error;
   }
@@ -147,6 +159,9 @@ export async function searchReminders(params: {
 }): Promise<{ answer: string; follow_up: string; evidence: any[] }> {
   const { query, user_id } = params;
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+
   try {
     const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-search`, {
       method: 'POST',
@@ -157,7 +172,10 @@ export async function searchReminders(params: {
         'x-admin-secret': ADMIN_SECRET_KEY,
       },
       body: JSON.stringify({ query, dev_user_id: user_id }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -165,6 +183,11 @@ export async function searchReminders(params: {
 
     return await response.json();
   } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      console.error('[searchReminders] Request timed out');
+      throw new Error('Request timed out. Please try again.');
+    }
     console.error('[searchReminders] Error:', error);
     throw error;
   }
