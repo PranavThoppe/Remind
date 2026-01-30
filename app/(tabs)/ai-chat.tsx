@@ -19,6 +19,7 @@ import { useSettings } from '../../contexts/SettingsContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useReminders } from '../../hooks/useReminders';
 import { AiLiveReminderPanel } from '../../components/AiLiveReminderPanel';
+import { InlineReminderPanel } from '../../components/InlineReminderPanel';
 import { ChatMessage, ModalFieldUpdates, MockAIResponse } from '../../types/ai-chat';
 import { Reminder } from '../../types/reminder';
 import { scheduleReminderNotification } from '../../lib/notifications';
@@ -81,9 +82,43 @@ function TypingIndicator({ colors }: { colors: any }) {
 }
 
 // Message bubble component
-function MessageBubble({ message, colors, tags }: { message: ChatMessage; colors: any; tags: any[] }) {
+function MessageBubble({
+  message,
+  colors,
+  tags,
+  onPanelFieldsChange,
+  onPanelSave,
+  onPanelClose,
+  onSelectReminder,
+}: {
+  message: ChatMessage;
+  colors: any;
+  tags: any[];
+  onPanelFieldsChange?: (messageId: string, fields: ModalFieldUpdates) => void;
+  onPanelSave?: (messageId: string) => void;
+  onPanelClose?: (messageId: string) => void;
+  onSelectReminder?: (reminder: Reminder) => void;
+}) {
   const isUser = message.role === 'user';
-  
+
+  // If message has panel data, render inline panel
+  if (message.panelType) {
+    return (
+      <View style={[styles.messageContainer, styles.panelMessageContainer]}>
+        <InlineReminderPanel
+          type={message.panelType}
+          fields={message.panelFields}
+          searchResults={message.panelSearchResults}
+          isStatic={message.panelIsStatic}
+          onFieldsChange={(fields) => onPanelFieldsChange?.(message.id, fields)}
+          onSave={() => onPanelSave?.(message.id)}
+          onClose={() => onPanelClose?.(message.id)}
+          onSelectReminder={onSelectReminder}
+        />
+      </View>
+    );
+  }
+
   const renderContent = () => {
     if (isUser) {
       return (
@@ -116,7 +151,7 @@ function MessageBubble({ message, colors, tags }: { message: ChatMessage; colors
       </Text>
     );
   };
-  
+
   return (
     <View style={[styles.messageContainer, isUser && styles.userMessageContainer]}>
       <View
@@ -137,7 +172,7 @@ export default function AIChatScreen() {
   const { tags, priorities } = useSettings();
   const { user } = useAuth();
   const { addReminder, updateReminder } = useReminders();
-  
+
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
@@ -148,14 +183,8 @@ export default function AIChatScreen() {
   ]);
   const [inputText, setInputText] = useState('');
   const [isThinking, setIsThinking] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalFields, setModalFields] = useState<ModalFieldUpdates>({
-    repeat: 'none',
-  });
-  const [searchResults, setSearchResults] = useState<Reminder[]>([]);
-  const [editingReminderId, setEditingReminderId] = useState<string | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
-  
+
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
 
@@ -187,10 +216,10 @@ export default function AIChatScreen() {
       let hours = parseInt(match[1]);
       const minutes = match[2] || '00';
       const period = match[3].toLowerCase();
-      
+
       if (period === 'pm' && hours !== 12) hours += 12;
       if (period === 'am' && hours === 12) hours = 0;
-      
+
       return `${hours.toString().padStart(2, '0')}:${minutes}`;
     }
     return undefined;
@@ -199,11 +228,11 @@ export default function AIChatScreen() {
   const parseDateFromText = useCallback((input: string): string | undefined => {
     const today = new Date();
     const lower = input.toLowerCase();
-    
+
     if (lower.includes('today')) {
       return formatDateString(today);
     }
-    
+
     if (lower.includes('tomorrow')) {
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
@@ -223,7 +252,7 @@ export default function AIChatScreen() {
         return formatDateString(targetDate);
       }
     }
-    
+
     return undefined;
   }, [formatDateString]);
 
@@ -245,13 +274,13 @@ export default function AIChatScreen() {
       const response = await extractReminderFields({
         query: input,
         user_id: user.id,
-        conversation: messages.filter(m => 
-          !m.content.includes('Reminder created successfully!') && 
+        conversation: messages.filter(m =>
+          !m.content.includes('Reminder created successfully!') &&
           !m.content.includes('Okay, let me know if you want to create another reminder!')
         ),
         modalContext: {
-          isOpen: isModalOpen,
-          currentFields: modalFields,
+          isOpen: false,
+          currentFields: {},
         },
         tags: tags,
         priorities: priorities,
@@ -264,10 +293,10 @@ export default function AIChatScreen() {
       };
     } catch (error: any) {
       console.error('[processMessage] Error:', error);
-      
+
       // Fallback response on error
       const lower = input.toLowerCase();
-      
+
       // Check for cancel/nevermind
       if (/(cancel|nevermind|never mind|close|stop)/i.test(lower)) {
         return {
@@ -275,22 +304,22 @@ export default function AIChatScreen() {
           message: "Okay, I've closed the form. Let me know if you want to create another reminder!",
         };
       }
-      
+
       return {
         type: 'chat',
         message: "I'm having trouble processing that right now. Please try again or rephrase your request.",
       };
     }
-  }, [messages, isModalOpen, modalFields, tags, user]);
+  }, [messages, tags, user]);
 
   // Handle sending messages
   const handleSend = useCallback(async () => {
     if (!inputText.trim() || isThinking) return;
-    
+
     const userContent = inputText.trim();
     setInputText('');
     Keyboard.dismiss();
-    
+
     // Add user message
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -299,76 +328,126 @@ export default function AIChatScreen() {
       timestamp: new Date(),
     };
     setMessages(prev => [...prev, userMessage]);
-    
+
     // Show thinking state
     setIsThinking(true);
-    
+
     try {
       // Process with LLM extraction
       const response = await processMessage(userContent);
-      
-      // Add AI response
-      const aiMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: response.message,
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, aiMessage]);
-      
-      // Handle actions
-      if (response.type === 'create') {
-        setSearchResults([]);
-        setEditingReminderId(null);
-        setModalFields({
-          repeat: 'none',
-          ...(response.fieldUpdates || {}),
-        });
-        setIsModalOpen(true);
-      } else if (response.type === 'update' && response.fieldUpdates) {
-        setModalFields(prev => ({ ...prev, ...response.fieldUpdates }));
-      } else if (response.type === 'search') {
+
+      // Handle search specially - we want to show the actual search answer, not the extraction message
+      if (response.type === 'search') {
+        console.log('[handleSend] 🔍 SEARCH MODE TRIGGERED');
+        console.log('[handleSend] Search query:', userContent);
         try {
           const searchData = await searchReminders({
             query: userContent,
             user_id: user!.id,
           });
-          
+
+          console.log('[handleSend] Search response:', JSON.stringify(searchData, null, 2));
+          console.log('[handleSend] Evidence count:', searchData.evidence?.length || 0);
+
           if (searchData.evidence && searchData.evidence.length > 0) {
             // Map reminder_id to id for the Reminder interface compatibility
             const mappedResults = searchData.evidence.map((item: any) => ({
               ...item,
               id: item.reminder_id || item.id,
             }));
-            setSearchResults(mappedResults);
-            setModalFields({});
-            setEditingReminderId(null);
-            setIsModalOpen(true);
+
+            // Create inline panel message with search results
+            const panelMessage: ChatMessage = {
+              id: (Date.now() + 1).toString(),
+              role: 'assistant',
+              content: searchData.answer || "I found these reminders:",
+              timestamp: new Date(),
+              panelType: 'search',
+              panelSearchResults: mappedResults,
+              panelIsStatic: false,
+            };
+            setMessages(prev => [...prev, panelMessage]);
           } else {
-            setSearchResults([]);
-            // Maybe add a follow up message if no results found
+            // No results found
+            const noResultsMessage: ChatMessage = {
+              id: (Date.now() + 1).toString(),
+              role: 'assistant',
+              content: searchData.answer || "I couldn't find any matching reminders.",
+              timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, noResultsMessage]);
           }
         } catch (searchError) {
-          console.error('[handleSend] Search Error:', searchError);
-          // Fallback if search function fails
+          console.error('[handleSend] ❌ Search Error:', searchError);
+          const errorMessage: ChatMessage = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: "I had trouble searching your reminders. Please try again.",
+            timestamp: new Date(),
+          };
+          setMessages(prev => [...prev, errorMessage]);
         }
-      } else if (response.type === 'chat' && isModalOpen && /(cancel|nevermind|never mind|close|stop)/i.test(userContent.toLowerCase())) {
-        setIsModalOpen(false);
-        setModalFields({});
-        setSearchResults([]);
-        setEditingReminderId(null);
+      } else if (response.type === 'create') {
+        // Create inline panel message for creating a reminder
+        const panelMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: response.message,
+          timestamp: new Date(),
+          panelType: 'create',
+          panelFields: {
+            repeat: 'none',
+            ...(response.fieldUpdates || {}),
+          },
+          panelIsStatic: false,
+        };
+        setMessages(prev => [...prev, panelMessage]);
+      } else if (response.type === 'update') {
+        // Find the most recent panel message and update its fields
+        setMessages(prev => {
+          const lastPanelIndex = prev.findLastIndex(m => m.panelType && !m.panelIsStatic);
+          if (lastPanelIndex !== -1 && response.fieldUpdates) {
+            const updated = [...prev];
+            updated[lastPanelIndex] = {
+              ...updated[lastPanelIndex],
+              panelFields: {
+                ...updated[lastPanelIndex].panelFields,
+                ...response.fieldUpdates,
+              },
+            };
+            return updated;
+          }
+          return prev;
+        });
+
+        // Also add an AI message acknowledging the update
+        const updateMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: response.message,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, updateMessage]);
+      } else {
+        // Regular chat message
+        const aiMessage: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: response.message,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, aiMessage]);
       }
     } catch (error: any) {
       console.error('[handleSend] Error:', error);
-      // Add error message
       let errorContent = "I'm sorry, I encountered an error. Please try again.";
-      
+
       if (error.code === 'PRO_REQUIRED' || error.message?.includes('Pro membership')) {
         errorContent = "This AI feature requires a Pro membership. Please upgrade to access AI-powered reminder extraction!";
       } else if (error.message) {
         errorContent = error.message;
       }
-      
+
       const errorMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -379,55 +458,35 @@ export default function AIChatScreen() {
     } finally {
       setIsThinking(false);
     }
-  }, [inputText, isThinking, processMessage, isModalOpen]);
+  }, [inputText, isThinking, processMessage, user]);
 
-  // Handle selecting a reminder from search results
-  const handleSelectReminder = useCallback((reminder: Reminder) => {
-    setSearchResults([]);
-    setEditingReminderId(reminder.id);
-    setModalFields({
-      title: reminder.title,
-      date: reminder.date,
-      time: reminder.time,
-      tag_id: reminder.tag_id,
-      repeat: reminder.repeat || 'none',
-    });
+  // Handle panel field changes
+  const handlePanelFieldsChange = useCallback((messageId: string, fields: ModalFieldUpdates) => {
+    setMessages(prev => prev.map(msg =>
+      msg.id === messageId ? { ...msg, panelFields: fields } : msg
+    ));
   }, []);
 
-  // Handle modal close
-  const handleModalClose = useCallback(() => {
-    setIsModalOpen(false);
-    setModalFields({});
-    setSearchResults([]);
-    setEditingReminderId(null);
-    
-    const closeMessage: ChatMessage = {
-      id: Date.now().toString(),
-      role: 'assistant',
-      content: "Okay, let me know if you want to create or find another reminder!",
-      timestamp: new Date(),
-    };
-    setMessages(prev => [...prev, closeMessage]);
-  }, []);
+  // Handle panel save
+  const handlePanelSave = useCallback(async (messageId: string) => {
+    // Find the panel message
+    const panelMessage = messages.find(m => m.id === messageId);
+    if (!panelMessage || !panelMessage.panelFields?.title?.trim()) return;
 
-  // Handle save from the inline AI panel
-  const handleSaveFromPanel = useCallback(async () => {
-    const title = modalFields.title?.trim();
-    if (!title) return;
-
-    const dateStr = modalFields.date || getTodayDateString();
+    const fields = panelMessage.panelFields;
+    const dateStr = fields.date || getTodayDateString();
 
     const reminderData: any = {
-      title,
+      title: fields.title,
       date: dateStr,
-      time: modalFields.time,
-      repeat: modalFields.repeat || 'none',
-      tag_id: modalFields.tag_id,
+      time: fields.time,
+      repeat: fields.repeat || 'none',
+      tag_id: fields.tag_id,
     };
 
     let result;
-    if (editingReminderId) {
-      result = await updateReminder(editingReminderId, reminderData);
+    if (panelMessage.panelReminderId) {
+      result = await updateReminder(panelMessage.panelReminderId, reminderData);
     } else {
       result = await addReminder(reminderData);
     }
@@ -439,29 +498,71 @@ export default function AIChatScreen() {
       // Schedule notification
       try {
         await scheduleReminderNotification(
-          title,
+          fields.title!,
           dateStr,
-          modalFields.time,
-          modalFields.repeat || 'none',
+          fields.time,
+          fields.repeat || 'none',
           savedReminder.id,
         );
       } catch (err) {
         console.error('[AIChat] Failed to schedule notification:', err);
       }
 
-      setIsModalOpen(false);
-      setModalFields({ repeat: 'none' });
-      setEditingReminderId(null);
+      // Convert panel to static state
+      setMessages(prev => prev.map(msg =>
+        msg.id === messageId ? { ...msg, panelIsStatic: true } : msg
+      ));
 
+      // Add success message
       const successMessage: ChatMessage = {
         id: Date.now().toString(),
         role: 'assistant',
-        content: `Reminder ${editingReminderId ? 'updated' : 'created'} successfully! What else can I help you with?`,
+        content: `Reminder ${panelMessage.panelReminderId ? 'updated' : 'created'} successfully! What else can I help you with?`,
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, successMessage]);
     }
-  }, [addReminder, updateReminder, modalFields, getTodayDateString, editingReminderId]);
+  }, [messages, addReminder, updateReminder, getTodayDateString]);
+
+  // Handle panel close
+  const handlePanelClose = useCallback((messageId: string) => {
+    // Convert panel to static or just remove it
+    setMessages(prev => prev.filter(m => m.id !== messageId));
+
+    const closeMessage: ChatMessage = {
+      id: Date.now().toString(),
+      role: 'assistant',
+      content: "Okay, let me know if you want to create or find another reminder!",
+      timestamp: new Date(),
+    };
+    setMessages(prev => [...prev, closeMessage]);
+  }, []);
+
+  // Handle selecting a reminder from search results (convert to edit panel)
+  const handleSelectReminder = useCallback((reminder: Reminder) => {
+    // Find the search panel message
+    const searchPanelIndex = messages.findLastIndex(m => m.panelType === 'search');
+    if (searchPanelIndex === -1) return;
+
+    // Replace search panel with edit panel
+    setMessages(prev => {
+      const updated = [...prev];
+      updated[searchPanelIndex] = {
+        ...updated[searchPanelIndex],
+        panelType: 'edit',
+        panelFields: {
+          title: reminder.title,
+          date: reminder.date,
+          time: reminder.time,
+          tag_id: reminder.tag_id,
+          repeat: reminder.repeat || 'none',
+        },
+        panelReminderId: reminder.id,
+        panelSearchResults: undefined,
+      };
+      return updated;
+    });
+  }, [messages]);
 
   // Clear chat
   const handleClearChat = useCallback(() => {
@@ -469,12 +570,10 @@ export default function AIChatScreen() {
       {
         id: 'welcome',
         role: 'assistant',
-        content: "Hi! I can help you create reminders. Try saying something like 'Create a reminder to buy milk tomorrow at 3pm'",
+        content: "Hi! I can help you create, find, or update reminders. Try saying 'What do I have tomorrow?' or 'Remind me to call mom at 5pm'",
         timestamp: new Date(),
       },
     ]);
-    setIsModalOpen(false);
-    setModalFields({});
   }, []);
 
   // Track keyboard visibility so we can remove extra bottom padding when it's open
@@ -534,7 +633,17 @@ export default function AIChatScreen() {
           ref={flatListRef}
           data={messages}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <MessageBubble message={item} colors={colors} tags={tags} />}
+          renderItem={({ item }) => (
+            <MessageBubble
+              message={item}
+              colors={colors}
+              tags={tags}
+              onPanelFieldsChange={handlePanelFieldsChange}
+              onPanelSave={handlePanelSave}
+              onPanelClose={handlePanelClose}
+              onSelectReminder={handleSelectReminder}
+            />
+          )}
           contentContainerStyle={dynamicStyles.messagesList}
           showsVerticalScrollIndicator={false}
           ListFooterComponent={isThinking ? <TypingIndicator colors={colors} /> : null}
@@ -543,16 +652,7 @@ export default function AIChatScreen() {
         />
       </View>
 
-      {/* Inline AI live reminder panel between messages and input */}
-      <AiLiveReminderPanel
-        isOpen={isModalOpen}
-        fields={modalFields}
-        searchResults={searchResults}
-        onSelectReminder={handleSelectReminder}
-        onChangeFields={(updates) => setModalFields(prev => ({ ...prev, ...updates }))}
-        onClose={handleModalClose}
-        onSave={handleSaveFromPanel}
-      />
+
 
       {/* Input Bar */}
       <View
@@ -570,7 +670,7 @@ export default function AIChatScreen() {
           <TextInput
             ref={inputRef}
             style={dynamicStyles.input}
-            placeholder={isModalOpen ? "Update the reminder..." : "Create a reminder..."}
+            placeholder="Create or find a reminder..."
             placeholderTextColor={colors.mutedForeground}
             value={inputText}
             onChangeText={setInputText}
@@ -623,8 +723,11 @@ const styles = StyleSheet.create({
   userMessageContainer: {
     justifyContent: 'flex-end',
   },
+  panelMessageContainer: {
+    paddingHorizontal: spacing.lg,
+  },
   messageText: {
-    fontFamily: typography.fontFamily.regular,
+    fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.base,
     lineHeight: 22,
   },
