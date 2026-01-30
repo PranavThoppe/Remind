@@ -38,15 +38,15 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
-    
-    const { 
-      query, 
+
+    const {
+      query,
       user_id,
       conversation = [],
       modalContext,
       tags = [],
       priorities = [],
-      dev_user_id 
+      dev_user_id
     } = body
 
     if (!query) {
@@ -78,9 +78,9 @@ serve(async (req) => {
 
     if (profileError) {
       console.error('[AI Extract Test] Profile fetch error:', profileError)
-      return new Response(JSON.stringify({ 
+      return new Response(JSON.stringify({
         error: 'Failed to verify pro status',
-        details: profileError.message 
+        details: profileError.message
       }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -88,7 +88,7 @@ serve(async (req) => {
     }
 
     if (!profile || !profile.pro) {
-      return new Response(JSON.stringify({ 
+      return new Response(JSON.stringify({
         error: 'This feature requires a Pro membership. Please upgrade to access AI-powered reminder extraction.',
         code: 'PRO_REQUIRED'
       }), {
@@ -108,18 +108,18 @@ serve(async (req) => {
     const dayOfMonth = now.getDate()
     const year = now.getFullYear()
     const fullToday = `${dayOfWeek}, ${monthName} ${dayOfMonth}, ${year} (${todayStr})`
-    
+
     // Calculate some reference dates for examples
     const tomorrow = new Date(now)
     tomorrow.setDate(tomorrow.getDate() + 1)
     const tomorrowStr = tomorrow.toISOString().split('T')[0]
-    
+
     // Calculate next Sunday for example
     const nextSunday = new Date(now)
     const daysUntilSunday = (7 - now.getDay()) % 7 || 7
     nextSunday.setDate(now.getDate() + daysUntilSunday)
     const nextSundayStr = nextSunday.toISOString().split('T')[0]
-    
+
     // Calculate next week (7 days from now)
     const nextWeek = new Date(now)
     nextWeek.setDate(nextWeek.getDate() + 7)
@@ -164,7 +164,7 @@ INSTRUCTIONS:
 1. CLASSIFY the user's intent into one of these types:
    - "create": User wants to set/add a new reminder.
    - "update": User is refining an existing reminder (especially if the modal is open) or changing details of something just discussed.
-   - "search": User is asking about their existing reminders (e.g., "What's on my list?", "Show my tasks for tomorrow", "Do I have any meetings?").
+   - "search": User is asking to find information in their reminders, including future tasks AND past history (e.g., "What's on my list?", "When was the last time I...?", "Did I already...?", "Do I have any meetings?").
    - "chat": General conversation, greetings, or questions that aren't about managing specific reminders.
 
 2. EXTRACTION:
@@ -184,12 +184,17 @@ CRITICAL TEMPORAL EXTRACTION RULES:
 9. "end of month" = last day of current month
 10. Always return dates in YYYY-MM-DD format
 
-SEMANTIC TAG CLASSIFICATION:
-- Evaluate ALL available tags against the user's query and overall context (conversation + modal state).
-- If the user mentions a category or keyword that matches one of their tags (e.g., "for my internship" -> "Internship"), YOU MUST EXTRACT IT into tag_name.
-- DO THIS EVEN IF you also decide to include that word in the "title" field.
+SEMANTIC TAG CLASSIFICATION (CRITICAL):
+- Evaluate ALL available tags against the user's query using SEMANTIC UNDERSTANDING, not just exact keyword matching.
+- Consider whether the reminder's TOPIC or CONTEXT relates to a tag, even if the tag name isn't explicitly mentioned.
+- Common semantic patterns:
+  * "School" tag: homework, quiz, assignment, exam, study, class, lecture, project deadline, turn in, submit
+  * "Home" tag: groceries, cleaning, chores, cooking, family, house maintenance
+  * "Internship" tag: work tasks, office, meetings, career-related activities
+- If the user explicitly mentions a tag (e.g., "for my internship") OR if the reminder semantically belongs to that category, YOU MUST EXTRACT IT into tag_name.
 - Choose ONLY the single tag with the HIGHEST relevance score.
-- If NO tag fits, set tag_name to null.
+- If NO tag fits semantically, set tag_name to null.
+- ALWAYS prioritize semantic relevance over exact keyword matching.
 
 FIELD EXTRACTION:
 - title: A very concise (MAX 6 WORDS) action-oriented title. REMOVE words that are redundant with the extracted tag_name. (e.g., if tag is "Internship", title should be "Call apartment people" not "Call internship apartment people").
@@ -199,7 +204,7 @@ FIELD EXTRACTION:
 - repeat: "none" | "daily" | "weekly" | "monthly" or null
 
 EXAMPLES:
-User: "remind me to buy groceries for home tonight at 7pm"
+User: "remind me to buy groceries tonight at 7pm"
 {
   "type": "create",
   "message": "I've set a reminder to buy groceries tonight.",
@@ -211,6 +216,17 @@ User: "remind me to buy groceries for home tonight at 7pm"
   }
 }
 
+User: "remind me to turn in my quiz tomorrow"
+{
+  "type": "create",
+  "message": "Reminder set to turn in quiz tomorrow.",
+  "fieldUpdates": {
+    "title": "Turn in quiz",
+    "tag_name": "School",
+    "date": "2026-01-30"
+  }
+}
+
 User: "add a reminder for my internship to call the housing office tomorrow"
 {
   "type": "create",
@@ -219,6 +235,15 @@ User: "add a reminder for my internship to call the housing office tomorrow"
     "title": "Call housing office",
     "tag_name": "Internship",
     "date": "2026-01-30"
+  }
+}
+
+User: "When was the last time I went to the gym?"
+{
+  "type": "search",
+  "message": "Checking your history for gym visits...",
+  "fieldUpdates": {
+    "title": "gym"
   }
 }
 
@@ -279,9 +304,9 @@ Return ONLY valid JSON:
       parsedResponse = JSON.parse(rawResponse)
     } catch (e) {
       console.error('[JSON Parse Error]', e, 'Raw:', rawResponse)
-      return new Response(JSON.stringify({ 
+      return new Response(JSON.stringify({
         error: 'Failed to parse LLM response',
-        raw: rawResponse 
+        raw: rawResponse
       }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -290,15 +315,15 @@ Return ONLY valid JSON:
 
     // Validate and clean fieldUpdates
     const fieldUpdates: any = {}
-    
+
     if (parsedResponse.fieldUpdates) {
       const updates = parsedResponse.fieldUpdates
-      
+
       // Clean title
       if (updates.title && typeof updates.title === 'string' && updates.title.trim()) {
         fieldUpdates.title = updates.title.trim()
       }
-      
+
       // Validate date format
       if (updates.date && typeof updates.date === 'string') {
         const dateStr = updates.date.trim()
@@ -310,7 +335,7 @@ Return ONLY valid JSON:
           }
         }
       }
-      
+
       // Validate time format (HH:mm)
       if (updates.time && typeof updates.time === 'string') {
         const timeStr = updates.time.trim()
@@ -322,16 +347,19 @@ Return ONLY valid JSON:
           }
         }
       }
-      
+
       // Validate tag_name (must match one of user's tags)
       if (updates.tag_name && typeof updates.tag_name === 'string') {
         const tagName = updates.tag_name.trim()
-        const matchingTag = tags.find(t => t.name.toLowerCase() === tagName.toLowerCase())
+        const matchingTag = tags.find((t: any) => t.name.toLowerCase() === tagName.toLowerCase())
         if (matchingTag) {
           fieldUpdates.tag_name = matchingTag.name // Return canonical name
+          if (matchingTag.id) {
+            fieldUpdates.tag_id = matchingTag.id // Return ID for database/state update
+          }
         }
       }
-      
+
       // Validate repeat
       if (updates.repeat && ['none', 'daily', 'weekly', 'monthly'].includes(updates.repeat)) {
         fieldUpdates.repeat = updates.repeat
@@ -343,7 +371,7 @@ Return ONLY valid JSON:
     // Build response
     const response = {
       type: parsedResponse.type || (isRefinement ? 'update' : 'chat'),
-      message: parsedResponse.message || (isRefinement 
+      message: parsedResponse.message || (isRefinement
         ? "I've updated the reminder fields."
         : "How can I help you with reminders?"),
       fieldUpdates: Object.keys(fieldUpdates).length > 0 ? fieldUpdates : undefined
@@ -361,9 +389,9 @@ Return ONLY valid JSON:
   } catch (error: any) {
     console.error('[AI Extract Test Error]', error)
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: error.message || 'Internal server error',
-        details: error.stack 
+        details: error.stack
       }),
       {
         status: 500,
