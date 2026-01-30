@@ -74,12 +74,25 @@ serve(async (req) => {
 
     console.log('[AI Query] User:', user.id, 'Query:', query)
 
-    // Setup dates
+    // Setup dates with comprehensive context (same as ai-extract-test for consistent date handling)
     const now = new Date()
-    // Important: Use a format that ensures the LLM understands the current context clearly
     const todayStr = now.toISOString().split('T')[0]
     const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' })
-    const fullToday = `${dayOfWeek}, ${todayStr}`
+    const monthName = now.toLocaleDateString('en-US', { month: 'long' })
+    const dayOfMonth = now.getDate()
+    const year = now.getFullYear()
+    const fullToday = `${dayOfWeek}, ${monthName} ${dayOfMonth}, ${year} (${todayStr})`
+
+    const tomorrow = new Date(now)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const tomorrowStr = tomorrow.toISOString().split('T')[0]
+    const nextFriday = new Date(now)
+    const daysUntilFriday = (5 - now.getDay() + 7) % 7 || 7
+    nextFriday.setDate(now.getDate() + daysUntilFriday)
+    const nextFridayStr = nextFriday.toISOString().split('T')[0]
+    const fridayNextWeek = new Date(nextFriday)
+    fridayNextWeek.setDate(fridayNextWeek.getDate() + 7)
+    const fridayNextWeekStr = fridayNextWeek.toISOString().split('T')[0]
 
     // STEP 1 & 2: Run Temporal Analysis and Embedding Generation in Parallel
     const [temporalRes, embeddingRes] = await Promise.all([
@@ -95,19 +108,19 @@ serve(async (req) => {
             { 
               role: 'system', 
               content: `You are a date extraction tool. Today is ${fullToday}.
-              
-              INSTRUCTIONS:
-              1. If the user query refers to a specific date or a relative day (like "tomorrow", "next Friday", "this weekend", "Friday", etc.), you MUST calculate the exact date in YYYY-MM-DD format.
-              2. For relative weekdays like "Friday", calculate the date for the CLOSEST occurrence of that day in the future (the very next one).
-              3. If today is Wednesday (2026-01-28) and the user says "Friday", the date is 2026-01-30.
-              4. If the user says "next [weekday]", it means the weekday in the following week.
-              5. Return ONLY the YYYY-MM-DD string.
-              6. If absolutely no date or time period is mentioned, return "NONE".
-              
-              EXAMPLES:
-              - Today: Wednesday, 2026-01-28 | Query: "friday" -> "2026-01-30"
-              - Today: Wednesday, 2026-01-28 | Query: "tomorrow" -> "2026-01-29"
-              - Today: Wednesday, 2026-01-28 | Query: "next friday" -> "2026-02-06"`
+
+INSTRUCTIONS:
+1. If the user query refers to a specific date or a relative day (like "tomorrow", "next Friday", "this weekend", "Friday", etc.), you MUST calculate the exact date in YYYY-MM-DD format.
+2. For relative weekdays like "Friday", calculate the date for the CLOSEST occurrence of that day in the future (the very next one).
+3. If the user says "next [weekday]", it means that weekday in the following week (not this week).
+4. Return ONLY the YYYY-MM-DD string.
+5. If absolutely no date or time period is mentioned, return "NONE".
+
+EXAMPLES (use today above for your calculation):
+- "today" -> ${todayStr}
+- "tomorrow" -> ${tomorrowStr}
+- "friday" or "this friday" (if Friday is upcoming) -> ${nextFridayStr}
+- "next friday" -> ${fridayNextWeekStr}`
             },
             { role: 'user', content: query }
           ],

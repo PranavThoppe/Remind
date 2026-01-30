@@ -19,6 +19,8 @@ import { useTheme } from '../hooks/useTheme';
 import { useSettings } from '../contexts/SettingsContext';
 import { ModalFieldUpdates } from '../types/ai-chat';
 
+import { Reminder } from '../types/reminder';
+
 type RepeatValue = 'none' | 'daily' | 'weekly' | 'monthly';
 
 const repeatOptions: { value: RepeatValue; label: string }[] = [
@@ -31,6 +33,8 @@ const repeatOptions: { value: RepeatValue; label: string }[] = [
 export interface AiLiveReminderPanelProps {
   isOpen: boolean;
   fields: ModalFieldUpdates;
+  searchResults?: Reminder[];
+  onSelectReminder?: (reminder: Reminder) => void;
   onChangeFields: (updates: Partial<ModalFieldUpdates>) => void;
   onClose: () => void;
   onSave: () => Promise<void> | void;
@@ -41,6 +45,8 @@ type ActivePicker = 'repeat' | 'tag' | null;
 export function AiLiveReminderPanel({
   isOpen,
   fields,
+  searchResults = [],
+  onSelectReminder,
   onChangeFields,
   onClose,
   onSave,
@@ -63,6 +69,9 @@ export function AiLiveReminderPanel({
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const isSearching = searchResults.length > 0;
+  const isUpdating = !!fields.title; // If title is already there, we're probably updating/refining
 
   const selectedRepeat: RepeatValue = fields.repeat || 'none';
 
@@ -254,8 +263,12 @@ export function AiLiveReminderPanel({
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.headerTitle}>Creating reminder</Text>
-            <Text style={styles.headerSubtitle}>Live preview from your chat</Text>
+            <Text style={styles.headerTitle}>
+              {isSearching ? 'Search results' : isUpdating ? 'Updating reminder' : 'Creating reminder'}
+            </Text>
+            <Text style={styles.headerSubtitle}>
+              {isSearching ? 'I found these reminders' : 'Live preview from your chat'}
+            </Text>
           </View>
           <TouchableOpacity
             onPress={onClose}
@@ -267,118 +280,161 @@ export function AiLiveReminderPanel({
         </View>
       </TouchableWithoutFeedback>
 
-      {/* Title - excluded from keyboard dismiss so user can type */}
-      <TextInput
-        style={styles.titleInput}
-        placeholder="What do you need to remember?"
-        placeholderTextColor={colors.mutedForeground}
-        value={fields.title ?? ''}
-        onChangeText={(text) => onChangeFields({ title: text })}
-      />
-
-      {/* Rest of the panel - tapping dismisses keyboard */}
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View>
-          {/* Date & Time row */}
-          <View style={styles.row}>
-            <TouchableOpacity
-              style={[
-                styles.chip,
-                fields.date && styles.chipActive,
-              ]}
-              onPress={() => {
-                Keyboard.dismiss();
-                setShowDatePicker(true);
-              }}
-            >
-              <Ionicons
-                name="calendar-outline"
-                size={16}
-                color={fields.date ? colors.foreground : colors.mutedForeground}
-              />
-              <Text
+      {isSearching ? (
+        <ScrollView style={styles.searchResultsContainer} showsVerticalScrollIndicator={false}>
+          {searchResults.map((reminder) => {
+            const tag = tags.find((t) => t.id === reminder.tag_id);
+            return (
+              <TouchableOpacity
+                key={reminder.id}
                 style={[
-                  styles.chipText,
-                  fields.date && styles.chipTextActive,
+                  styles.searchResultItem,
+                  tag && { borderLeftColor: tag.color, borderLeftWidth: 3 },
                 ]}
+                onPress={() => onSelectReminder?.(reminder)}
               >
-                {formatDisplayDate(fields.date)}
-              </Text>
-            </TouchableOpacity>
+                <View style={styles.searchResultContent}>
+                  <Text style={styles.searchResultTitle} numberOfLines={1}>
+                    {reminder.title}
+                  </Text>
+                  <View style={styles.searchResultMeta}>
+                    {reminder.date && (
+                      <View style={styles.searchResultMetaItem}>
+                        <Ionicons name="calendar-outline" size={12} color={colors.mutedForeground} />
+                        <Text style={styles.searchResultMetaText}>{formatDisplayDate(reminder.date)}</Text>
+                      </View>
+                    )}
+                    {reminder.time && (
+                      <View style={styles.searchResultMetaItem}>
+                        <Ionicons name="time-outline" size={12} color={colors.mutedForeground} />
+                        <Text style={styles.searchResultMetaText}>{formatDisplayTime(reminder.time)}</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      ) : (
+        <>
+          {/* Title - excluded from keyboard dismiss so user can type */}
+          <TextInput
+            style={styles.titleInput}
+            placeholder="What do you need to remember?"
+            placeholderTextColor={colors.mutedForeground}
+            value={fields.title ?? ''}
+            onChangeText={(text) => onChangeFields({ title: text })}
+          />
 
-            <TouchableOpacity
-              style={[
-                styles.chip,
-                fields.time && styles.chipActive,
-              ]}
-              onPress={() => {
-                Keyboard.dismiss();
-                setShowTimePicker(true);
-              }}
-            >
-              <Ionicons
-                name="time-outline"
-                size={16}
-                color={fields.time ? colors.foreground : colors.mutedForeground}
-              />
-              <Text
+          {/* Rest of the panel - tapping dismisses keyboard */}
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View>
+              {/* Date & Time row */}
+              <View style={styles.row}>
+                <TouchableOpacity
+                  style={[
+                    styles.chip,
+                    fields.date && styles.chipActive,
+                  ]}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setShowDatePicker(true);
+                  }}
+                >
+                  <Ionicons
+                    name="calendar-outline"
+                    size={16}
+                    color={fields.date ? colors.foreground : colors.mutedForeground}
+                  />
+                  <Text
+                    style={[
+                      styles.chipText,
+                      fields.date && styles.chipTextActive,
+                    ]}
+                  >
+                    {formatDisplayDate(fields.date)}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.chip,
+                    fields.time && styles.chipActive,
+                  ]}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setShowTimePicker(true);
+                  }}
+                >
+                  <Ionicons
+                    name="time-outline"
+                    size={16}
+                    color={fields.time ? colors.foreground : colors.mutedForeground}
+                  />
+                  <Text
+                    style={[
+                      styles.chipText,
+                      fields.time && styles.chipTextActive,
+                    ]}
+                  >
+                    {formatDisplayTime(fields.time)}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Quick options: Repeat / Tag */}
+              <View style={styles.row}>
+                <TouchableOpacity
+                  style={styles.metaButton}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setActivePicker('repeat');
+                  }}
+                >
+                  <Text style={styles.metaLabel}>Repeat</Text>
+                  <View style={styles.metaValueContainer}>
+                    <Text style={styles.metaValue}>{selectedRepeatLabel}</Text>
+                    <Ionicons name="chevron-down" size={14} color={colors.mutedForeground} />
+                  </View>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.row}>
+                <TouchableOpacity
+                  style={styles.metaButton}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setActivePicker('tag');
+                  }}
+                >
+                  <Text style={styles.metaLabel}>Tag</Text>
+                  <View style={styles.metaValueContainer}>
+                    <Text style={styles.metaValue}>{selectedTag ? selectedTag.name : 'None'}</Text>
+                    <Ionicons name="chevron-down" size={14} color={colors.mutedForeground} />
+                  </View>
+                </TouchableOpacity>
+              </View>
+
+              {/* Save button */}
+              <TouchableOpacity
                 style={[
-                  styles.chipText,
-                  fields.time && styles.chipTextActive,
+                  styles.saveButton,
+                  !(fields.title && fields.title.trim()) && styles.saveButtonDisabled,
                 ]}
+                disabled={!(fields.title && fields.title.trim())}
+                onPress={handleSavePress}
+                activeOpacity={0.85}
               >
-                {formatDisplayTime(fields.time)}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Quick options: Repeat / Tag */}
-          <View style={styles.row}>
-            <TouchableOpacity
-              style={styles.metaButton}
-              onPress={() => {
-                Keyboard.dismiss();
-                setActivePicker('repeat');
-              }}
-            >
-              <Text style={styles.metaLabel}>Repeat</Text>
-              <View style={styles.metaValueContainer}>
-                <Text style={styles.metaValue}>{selectedRepeatLabel}</Text>
-                <Ionicons name="chevron-down" size={14} color={colors.mutedForeground} />
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.row}>
-            <TouchableOpacity
-              style={styles.metaButton}
-              onPress={() => {
-                Keyboard.dismiss();
-                setActivePicker('tag');
-              }}
-            >
-              <Text style={styles.metaLabel}>Tag</Text>
-              <View style={styles.metaValueContainer}>
-                <Text style={styles.metaValue}>{selectedTag ? selectedTag.name : 'None'}</Text>
-                <Ionicons name="chevron-down" size={14} color={colors.mutedForeground} />
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          {/* Save button */}
-          <TouchableOpacity
-            style={[
-              styles.saveButton,
-              !(fields.title && fields.title.trim()) && styles.saveButtonDisabled,
-            ]}
-            disabled={!(fields.title && fields.title.trim())}
-            onPress={handleSavePress}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.saveButtonText}>Add Reminder</Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableWithoutFeedback>
+                <Text style={styles.saveButtonText}>
+                  {isUpdating ? 'Update Reminder' : 'Add Reminder'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableWithoutFeedback>
+        </>
+      )}
 
       {/* Date Picker Modal */}
       {showDatePicker && (
@@ -661,6 +717,47 @@ const createStyles = (colors: any) =>
       fontFamily: typography.fontFamily.semibold,
       fontSize: typography.fontSize.lg,
       color: colors.foreground,
+    },
+    searchResultsContainer: {
+      maxHeight: 220,
+      marginBottom: spacing.md,
+    },
+    searchResultItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.md,
+      backgroundColor: colors.background,
+      borderRadius: borderRadius.md,
+      marginBottom: spacing.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    searchResultContent: {
+      flex: 1,
+      marginRight: spacing.md,
+    },
+    searchResultTitle: {
+      fontFamily: typography.fontFamily.medium,
+      fontSize: typography.fontSize.base,
+      color: colors.foreground,
+      marginBottom: 2,
+    },
+    searchResultMeta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+    },
+    searchResultMetaItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    searchResultMetaText: {
+      fontFamily: typography.fontFamily.regular,
+      fontSize: 12,
+      color: colors.mutedForeground,
     },
   });
 

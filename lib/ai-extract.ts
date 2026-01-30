@@ -8,7 +8,7 @@ const ADMIN_SECRET_KEY = 'bxWLD2nOAFTjbFxlG60jNmNn+djE+DgNpcLlfckyKNw=';
 const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndudWN5Y2lhY3hxcmJ1dGh5bWJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4NjIzMzgsImV4cCI6MjA4NDQzODMzOH0.Xm5XfWgrQIGpvUzoCUqRntuO0pNXWfb4u465VxUe22Y';
 
 export interface ExtractReminderFieldsResponse {
-  type: 'create' | 'update' | 'chat';
+  type: 'create' | 'update' | 'chat' | 'search';
   message: string;
   fieldUpdates?: ModalFieldUpdates;
 }
@@ -134,6 +134,38 @@ export async function extractReminderFields(
     };
   } catch (error: any) {
     console.error('[extractReminderFields] Error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Calls the ai-search edge function to find existing reminders
+ */
+export async function searchReminders(params: {
+  query: string;
+  user_id: string;
+}): Promise<{ answer: string; follow_up: string; evidence: any[] }> {
+  const { query, user_id } = params;
+
+  try {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-search`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': ANON_KEY,
+        'Authorization': `Bearer ${ANON_KEY}`,
+        'x-admin-secret': ADMIN_SECRET_KEY,
+      },
+      body: JSON.stringify({ query, dev_user_id: user_id }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (error: any) {
+    console.error('[searchReminders] Error:', error);
     throw error;
   }
 }
