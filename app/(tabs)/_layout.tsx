@@ -40,29 +40,20 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="home"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name={focused ? 'home' : 'home-outline'} focused={focused} colors={colors} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="completed"
-        options={{
-          title: 'Done',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name={focused ? 'checkmark-circle' : 'checkmark-circle-outline'} focused={focused} colors={colors} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="ai-chat"
         options={{
           title: 'AI',
           tabBarIcon: ({ focused }) => (
             <TabIcon name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'} focused={focused} colors={colors} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="home"
+        options={{
+          title: 'Home',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name={focused ? 'home' : 'home-outline'} focused={focused} colors={colors} />
           ),
         }}
       />
