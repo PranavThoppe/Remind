@@ -341,10 +341,32 @@ export default function AIChatScreen() {
         console.log('[handleSend] 🔍 SEARCH MODE TRIGGERED');
         console.log('[handleSend] Search query:', userContent);
         try {
+          // DEBUG: Log the handoff
+          const targetDate = response.fieldUpdates?.date;
+          console.log('[handleSend] Extracted date for search:', targetDate);
+
+          // User Feedback: Explicitly mention the date we are checking
+          const searchMessageContent = targetDate
+            ? `Checking your schedule for ${targetDate}...`
+            : "Searching for reminders...";
+
+          // Add a temporary "Searching..." message
+          const searchingMessageId = (Date.now() + 1).toString();
+          setMessages(prev => [...prev, {
+            id: searchingMessageId,
+            role: 'assistant',
+            content: searchMessageContent,
+            timestamp: new Date(),
+          }]);
+
           const searchData = await searchReminders({
             query: userContent,
             user_id: user!.id,
+            targetDate: targetDate,
           });
+
+          // Remove the temporary searching message
+          setMessages(prev => prev.filter(m => m.id !== searchingMessageId));
 
           console.log('[handleSend] Search response:', JSON.stringify(searchData, null, 2));
           console.log('[handleSend] Evidence count:', searchData.evidence?.length || 0);

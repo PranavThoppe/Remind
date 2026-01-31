@@ -30,8 +30,10 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
-    
-    const { query, dev_user_id } = body
+
+    const { query, dev_user_id, target_date } = body
+    console.log('[AI Query] Received Request. Query:', query, 'Target Date:', target_date)
+
     if (!query) {
       return new Response(JSON.stringify({ error: 'Query required' }), {
         status: 400,
@@ -53,7 +55,7 @@ serve(async (req) => {
       // Standard JWT authentication
       const authHeader = req.headers.get('Authorization')!
       if (!authHeader) {
-         return new Response(JSON.stringify({ error: 'Unauthorized: Missing Authorization header' }), {
+        return new Response(JSON.stringify({ error: 'Unauthorized: Missing Authorization header' }), {
           status: 401,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
@@ -105,27 +107,43 @@ serve(async (req) => {
         body: JSON.stringify({
           model: 'llama-3.1-8b-instant',
           messages: [
-            { 
-              role: 'system', 
+            {
+              role: 'system',
               content: `You are a date extraction tool. Today is ${fullToday}.
 
 INSTRUCTIONS:
-1. If the user query refers to a specific date or a relative day (like "tomorrow", "next Friday", "this weekend", "Friday", etc.), you MUST calculate the exact date in YYYY-MM-DD format.
-2. For relative weekdays like "Friday", calculate the date for the CLOSEST occurrence of that day in the future (the very next one).
-3. If the user says "next [weekday]", it means that weekday in the following week (not this week).
-4. Return ONLY the YYYY-MM-DD string.
-5. If absolutely no date or time period is mentioned, return "NONE".
+1. Identify if the user query refers to a specific date, a relative day, or a range (like "this week", "this month").
+2. Calculate the exact dates in YYYY-MM-DD format.
+3. For "this week", return the range from today until the end of the coming Sunday.
+4. For "this month", return the range from today until the end of the current month.
+5. For relative weekdays like "Friday", calculate the date for the CLOSEST occurrence of that day in the future (the very next one).
+6. If the user says "next [weekday]", it means that weekday in the following week (not this week).
+7. Return ONLY a JSON object.
 
 EXAMPLES (use today above for your calculation):
-- "today" -> ${todayStr}
-- "tomorrow" -> ${tomorrowStr}
-- "friday" or "this friday" (if Friday is upcoming) -> ${nextFridayStr}
-- "next friday" -> ${fridayNextWeekStr}`
+- "today" -> startDate: ${todayStr}, endDate: ${todayStr}
+- "tomorrow" -> startDate: ${tomorrowStr}, endDate: ${tomorrowStr}
+- "friday" or "this friday" (if Friday is upcoming) -> startDate: ${nextFridayStr}, endDate: ${nextFridayStr}
+- "next friday" -> startDate: ${fridayNextWeekStr}, endDate: ${fridayNextWeekStr}
+- "this week" -> startDate: ${todayStr}, endDate: [Coming Sunday], isRange: true
+- "next week" -> startDate: [Next Monday], endDate: [Next Sunday], isRange: true
+- "next month" -> startDate: [First Day of Next Month], endDate: [Last Day of Next Month], isRange: true
+
+FORMAT:
+{
+  "startDate": "YYYY-MM-DD",
+  "endDate": "YYYY-MM-DD",
+  "isRange": boolean,
+  "confidence": number (0-1)
+}
+
+If no date is mentioned, return startDate: null.`
             },
             { role: 'user', content: query }
           ],
           temperature: 0,
-          max_tokens: 10
+          max_tokens: 150,
+          response_format: { type: 'json_object' }
         })
       }),
       fetch('https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction', {
@@ -144,8 +162,22 @@ EXAMPLES (use today above for your calculation):
       throw new Error(`Groq Temporal Error: ${errorData.error?.message || temporalRes.statusText}`)
     }
     const temporalData = await temporalRes.json()
-    const targetDate = temporalData.choices?.[0]?.message?.content?.trim() || 'NONE'
-    console.log('[Temporal Analysis] Target Date:', targetDate)
+    const temporalJson = JSON.parse(temporalData.choices?.[0]?.message?.content || '{}')
+    console.log('[Temporal Analysis] Extracted:', temporalJson)
+
+    // Robust extraction: prioritize provided target_date, then LLM extraction
+    let startDate = temporalJson.startDate
+    let endDate = temporalJson.endDate || temporalJson.startDate
+    let isRange = temporalJson.isRange || false
+
+    if (target_date && /^\d{4}-\d{2}-\d{2}$/.test(target_date)) {
+      console.log('[Temporal Analysis] Overriding with target_date:', target_date)
+      startDate = target_date
+      endDate = target_date
+      isRange = false
+    }
+
+    const hasTargetDate = startDate && /^\d{4}-\d{2}-\d{2}$/.test(startDate)
 
     // Validate Embedding Response
     if (!embeddingRes.ok) {
@@ -170,17 +202,19 @@ EXAMPLES (use today above for your calculation):
       .or(`title.ilike.%${query}%`)
       .limit(5)
 
-    const embeddingKeywordSearchPromise = (targetDate !== 'NONE')
+    const embeddingKeywordSearchPromise = hasTargetDate
       ? supabase
-          .from('reminder_embeddings')
-          .select('reminder_id, content')
-          .eq('user_id', user.id)
-          .ilike('content', `%${targetDate}%`)
-          .limit(5)
+        .from('reminder_embeddings')
+        .select('reminder_id, content')
+        .eq('user_id', user.id)
+        .ilike('content', `%${startDate}%`)
+        .limit(5)
       : Promise.resolve({ data: [] })
 
-    const dateSearchPromise = (targetDate !== 'NONE' && /^\d{4}-\d{2}-\d{2}$/.test(targetDate))
-      ? supabase.from('reminders').select('*').eq('user_id', user.id).eq('date', targetDate)
+    const dateSearchPromise = hasTargetDate
+      ? isRange
+        ? supabase.from('reminders').select('*').eq('user_id', user.id).gte('date', startDate).lte('date', endDate)
+        : supabase.from('reminders').select('*').eq('user_id', user.id).eq('date', startDate)
       : Promise.resolve({ data: [] })
 
     const [vectorRes, keywordRes, dateRes, embedKeywordRes] = await Promise.all([
@@ -202,7 +236,7 @@ EXAMPLES (use today above for your calculation):
 
     // Step 5: Combine and deduplicate results
     const allResults = new Map<string, any>()
-    
+
     // Add date matches with high priority
     dateResults.forEach((r: any) => {
       allResults.set(r.id, {
@@ -260,18 +294,24 @@ EXAMPLES (use today above for your calculation):
     // KEY IMPROVEMENT: We do the "does this reminder exist?" check in CODE, not in the LLM.
     // This eliminates the bug where the LLM says "no reminders" even when reminders exist.
     // The LLM's job is now ONLY to format the list nicely and ask a helpful follow-up question.
-    const remindersForTargetDate = (targetDate !== 'NONE' && /^\d{4}-\d{2}-\d{2}$/.test(targetDate))
-      ? topResults.filter(r => r.date === targetDate && !r.completed)
+    const remindersForTargetDate = hasTargetDate
+      ? topResults.filter(r => {
+        if (!r.date || r.completed) return false;
+        if (isRange) {
+          return r.date >= startDate && r.date <= endDate;
+        }
+        return r.date === startDate;
+      })
       : []
 
     // Build structured JSON context instead of bullet points
-    const remindersJson = remindersForTargetDate.length > 0 
+    const remindersJson = remindersForTargetDate.length > 0
       ? remindersForTargetDate.map(r => ({
-          title: r.title,
-          date: r.date,
-          time: r.time || null,
-          completed: r.completed || false
-        }))
+        title: r.title,
+        date: r.date,
+        time: r.time || null,
+        completed: r.completed || false
+      }))
       : []
 
     // Also include all top results for general context
@@ -291,25 +331,28 @@ EXAMPLES (use today above for your calculation):
 
     if (remindersForTargetDate.length > 0) {
       // Case 1: Reminders exist for target date - build answer in code (no LLM needed)
-      console.log('[Deterministic Answer] Found', remindersForTargetDate.length, 'reminders for', targetDate)
-      
+      console.log('[Deterministic Answer] Found', remindersForTargetDate.length, 'reminders for', isRange ? `${startDate} to ${endDate}` : startDate)
+
       const list = remindersForTargetDate
         .map(r => r.time ? `${r.title} (${r.time})` : r.title)
         .join(', ')
-      
-      answer = `${targetDate}: ${list}.`
+
+      answer = isRange
+        ? `Reminders from ${startDate} to ${endDate}: ${list}.`
+        : `${startDate}: ${list}.`
       followUp = remindersForTargetDate.some(r => !r.time)
         ? "Want me to set a time for any of these or add another reminder?"
         : "Want to add another reminder for that day?"
-    } else if (targetDate !== 'NONE' && /^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
-      // Case 2: No reminders for specific target date - simple response
-      console.log('[Deterministic Answer] No reminders for', targetDate)
-      answer = `Nothing scheduled for ${targetDate}.`
+    } else if (hasTargetDate) {
+      // Case 2: No reminders for specific target date/range - simple response
+      const dateText = isRange ? `between ${startDate} and ${endDate}` : `scheduled for ${startDate}`
+      console.log('[Deterministic Answer] No reminders', dateText)
+      answer = `Nothing ${dateText}.`
       followUp = "Want me to add a reminder for that day—what should it be and what time?"
     } else {
       // Case 3: General query - use LLM for natural language response
       console.log('[LLM Answer] General query, using LLM for context:', allRemindersJson.length, 'reminders')
-      
+
       const systemPrompt = `You are a reminders assistant. Today is ${fullToday}.
 
 ALL_RELEVANT_REMINDERS:
@@ -372,11 +415,15 @@ OUTPUT FORMAT (return ONLY valid JSON):
     }
 
     // Step 8: Return response
+    const evidence = remindersForTargetDate.length > 0
+      ? remindersForTargetDate
+      : topResults;
+
     return new Response(
       JSON.stringify({
         answer,
         follow_up: followUp,
-        evidence: topResults.map(r => ({
+        evidence: evidence.map(r => ({
           reminder_id: r.reminder_id,
           title: r.title,
           date: r.date,
@@ -385,7 +432,8 @@ OUTPUT FORMAT (return ONLY valid JSON):
         })),
         actions,
         query,
-        targetDate: targetDate !== 'NONE' ? targetDate : null,
+        targetDate: startDate || null,
+        endDate: isRange ? endDate : null,
         reminders_for_target_date: remindersForTargetDate.length // Debug info
       }),
       {

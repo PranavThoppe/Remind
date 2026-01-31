@@ -164,7 +164,7 @@ INSTRUCTIONS:
 1. CLASSIFY the user's intent into one of these types:
    - "create": User wants to set/add a new reminder.
    - "update": User is refining an existing reminder (especially if the modal is open) or changing details of something just discussed.
-   - "search": User is asking to find information in their reminders, including future tasks AND past history (e.g., "What's on my list?", "When was the last time I...?", "Did I already...?", "Do I have any meetings?").
+   - "search": User is asking to find or check reminders, including future tasks ("What's on for today?", "Anything this week?", "Show me my next month"), and past history ("When did I last...", "Did I finish...").
    - "chat": General conversation, greetings, or questions that aren't about managing specific reminders.
 
 2. EXTRACTION:
