@@ -24,7 +24,7 @@ interface ReminderCardProps {
 export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: ReminderCardProps) {
   const { colors, isDark } = useTheme();
   const styles = createStyles(colors);
-  
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(8)).current;
   const checkScaleAnim = useRef(new Animated.Value(1)).current;
@@ -112,7 +112,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
       </View>
     );
   };
-  
+
   return (
     <Swipeable
       ref={swipeableRef}
@@ -147,7 +147,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
               borderLeftColor: tag.color,
               borderRightWidth: 1,
               borderRightColor: tag.color,
-              paddingLeft: spacing.lg - 4,
+              paddingLeft: spacing.md - 4,
               borderBottomWidth: 1,
               borderBottomColor: tag.color,
               borderTopWidth: 1,
@@ -230,7 +230,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   card: {
     backgroundColor: colors.card,
     borderRadius: borderRadius.lg,
-    padding: spacing.lg,
+    padding: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
     overflow: 'hidden',
@@ -308,7 +308,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.md,
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
   },
   metaItem: {
     flexDirection: 'row',

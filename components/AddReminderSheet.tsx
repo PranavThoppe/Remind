@@ -21,6 +21,8 @@ import { ModalFieldUpdates } from '../types/ai-chat';
 import { scheduleReminderNotification } from '../lib/notifications';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTheme } from '../hooks/useTheme';
+import { ColorPicker } from './ColorPicker';
+import { PRESET_COLORS } from '../types/settings';
 
 interface AddReminderSheetProps {
   isOpen: boolean;
@@ -52,7 +54,7 @@ export function AddReminderSheet({
 }: AddReminderSheetProps) {
   const { colors, isDark } = useTheme();
   const styles = createStyles(colors);
-  
+
   const [title, setTitle] = useState('');
   const [date, setDate] = useState<Date | undefined>();
   const [time, setTime] = useState('');
@@ -63,7 +65,19 @@ export function AddReminderSheet({
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
-  const { tags, priorities } = useSettings();
+  const { tags, priorities, addTag, addPriority } = useSettings();
+
+  const [isAddingTag, setIsAddingTag] = useState(false);
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagColor, setNewTagColor] = useState(PRESET_COLORS[0].color);
+
+  const [isAddingPriority, setIsAddingPriority] = useState(false);
+  const [newPriorityName, setNewPriorityName] = useState('');
+  const [newPriorityColor, setNewPriorityColor] = useState(PRESET_COLORS[0].color);
+
+  // Track which entity we are picking a color for
+  const [colorPickerMode, setColorPickerMode] = useState<'tag' | 'priority'>('tag');
+  const [showColorPicker, setShowColorPicker] = useState(false);
 
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
@@ -93,6 +107,59 @@ export function AddReminderSheet({
     ]).start();
   };
 
+  const handleAddTag = async () => {
+    if (!newTagName.trim()) return;
+
+    await addTag(newTagName.trim(), newTagColor);
+    setNewTagName('');
+    setIsAddingTag(false);
+    // Reset to a random color for next time
+    setNewTagColor(PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)].color);
+  };
+
+  const handleAddPriority = async () => {
+    if (!newPriorityName.trim()) return;
+
+    // Calculate next rank (max rank + 1)
+    const maxRank = priorities.length > 0
+      ? Math.max(...priorities.map(p => p.rank))
+      : 0;
+
+    await addPriority(newPriorityName.trim(), newPriorityColor, maxRank + 1);
+
+    setNewPriorityName('');
+    setIsAddingPriority(false);
+    // Reset to a random color
+    setNewPriorityColor(PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)].color);
+  };
+
+  const toggleAddTag = () => {
+    if (!isAddingTag) {
+      setColorPickerMode('tag');
+      setNewTagColor(PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)].color);
+    }
+    setIsAddingTag(!isAddingTag);
+    if (isAddingPriority) setIsAddingPriority(false);
+  };
+
+  const toggleAddPriority = () => {
+    if (!isAddingPriority) {
+      setColorPickerMode('priority');
+      setNewPriorityColor(PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)].color);
+    }
+    setIsAddingPriority(!isAddingPriority);
+    if (isAddingTag) setIsAddingTag(false);
+  };
+
+  const handleColorSelect = (color: string) => {
+    if (colorPickerMode === 'tag') {
+      setNewTagColor(color);
+    } else {
+      setNewPriorityColor(color);
+    }
+  };
+
+
   useEffect(() => {
     if (editReminder) {
       setTitle(editReminder.title);
@@ -113,6 +180,8 @@ export function AddReminderSheet({
     // Reset picker visibility when sheet is opened or closed
     setShowDatePicker(false);
     setShowTimePicker(false);
+    setIsAddingTag(false);
+    setIsAddingPriority(false);
   }, [editReminder, isOpen]);
 
   // Effect for live updates in conversational mode
@@ -123,7 +192,7 @@ export function AddReminderSheet({
         setTitle(externalFields.title);
         animateFieldUpdate('title');
       }
-      
+
       // Update date with animation
       if (externalFields.date !== undefined) {
         const newDate = new Date(externalFields.date + 'T00:00:00');
@@ -132,19 +201,19 @@ export function AddReminderSheet({
           animateFieldUpdate('date');
         }
       }
-      
+
       // Update time with animation
       if (externalFields.time !== undefined && externalFields.time !== time) {
         setTime(externalFields.time);
         animateFieldUpdate('time');
       }
-      
+
       // Update tag with animation
       if (externalFields.tag_id !== undefined && externalFields.tag_id !== tagId) {
         setTagId(externalFields.tag_id);
         animateFieldUpdate('tag');
       }
-      
+
       // Update priority with animation
       if (externalFields.priority_id !== undefined && externalFields.priority_id !== priorityId) {
         setPriorityId(externalFields.priority_id);
@@ -479,60 +548,141 @@ export function AddReminderSheet({
         </View>
 
         {/* Priority Selection */}
-        {priorities.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
+        <View style={styles.section}>
+          <View style={[styles.sectionHeader, styles.headerSpaceBetween]}>
+            <View style={styles.headerLabelContainer}>
               <Ionicons name="flag-outline" size={18} color={colors.mutedForeground} />
               <Text style={styles.sectionLabel}>Priority</Text>
             </View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.horizontalScroll}
+            <TouchableOpacity
+              onPress={toggleAddPriority}
+              style={styles.addTagButton}
             >
-              <TouchableOpacity
-                style={[styles.tagOption, !priorityId && styles.tagOptionActive]}
-                onPress={() => setPriorityId(undefined)}
-              >
-                <Text style={[styles.tagText, !priorityId && styles.tagTextActive]}>None</Text>
-              </TouchableOpacity>
-              {priorities.map((priority) => (
-                <TouchableOpacity
-                  key={priority.id}
-                  style={[
-                    styles.tagOption,
-                    priorityId === priority.id && {
-                      backgroundColor: priority.color,
-                      borderColor: priority.color,
-                    },
-                  ]}
-                  onPress={() => setPriorityId(priority.id)}
-                >
-                  <Text
-                    style={[
-                      styles.priorityRankText,
-                      priorityId === priority.id && { color: 'white' },
-                    ]}
-                  >
-                    {priority.rank}
-                  </Text>
-                  <Text
-                    style={[styles.tagText, priorityId === priority.id && { color: 'white' }]}
-                  >
-                    {priority.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+              <Ionicons
+                name={isAddingPriority ? "close" : "add"}
+                size={20}
+                color={colors.primary}
+              />
+            </TouchableOpacity>
           </View>
-        )}
+
+          {isAddingPriority && (
+            <View style={styles.addTagInputContainer}>
+              <TouchableOpacity
+                style={[styles.newTagColorPreview, { backgroundColor: newPriorityColor }]}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setColorPickerMode('priority');
+                  setShowColorPicker(true);
+                }}
+              />
+              <TextInput
+                style={styles.addTagInput}
+                placeholder="New priority name"
+                placeholderTextColor={colors.mutedForeground}
+                value={newPriorityName}
+                onChangeText={setNewPriorityName}
+                autoFocus
+                onSubmitEditing={handleAddPriority}
+              />
+              <TouchableOpacity
+                style={styles.addTagConfirmButton}
+                onPress={handleAddPriority}
+                disabled={!newPriorityName.trim()}
+              >
+                <Ionicons name="checkmark" size={20} color="white" />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.horizontalScroll}
+          >
+            <TouchableOpacity
+              style={[styles.tagOption, !priorityId && styles.tagOptionActive]}
+              onPress={() => setPriorityId(undefined)}
+            >
+              <Text style={[styles.tagText, !priorityId && styles.tagTextActive]}>None</Text>
+            </TouchableOpacity>
+            {priorities.map((priority) => (
+              <TouchableOpacity
+                key={priority.id}
+                style={[
+                  styles.tagOption,
+                  priorityId === priority.id && {
+                    backgroundColor: priority.color,
+                    borderColor: priority.color,
+                  },
+                ]}
+                onPress={() => setPriorityId(priority.id)}
+              >
+                <Text
+                  style={[
+                    styles.priorityRankText,
+                    priorityId === priority.id && { color: 'white' },
+                  ]}
+                >
+                  {priority.rank}
+                </Text>
+                <Text
+                  style={[styles.tagText, priorityId === priority.id && { color: 'white' }]}
+                >
+                  {priority.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
 
         {/* Tag Selection */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="pricetag-outline" size={18} color={colors.mutedForeground} />
-            <Text style={styles.sectionLabel}>Tag</Text>
+          <View style={[styles.sectionHeader, styles.headerSpaceBetween]}>
+            <View style={styles.headerLabelContainer}>
+              <Ionicons name="pricetag-outline" size={18} color={colors.mutedForeground} />
+              <Text style={styles.sectionLabel}>Tag</Text>
+            </View>
+            <TouchableOpacity
+              onPress={toggleAddTag}
+              style={styles.addTagButton}
+            >
+              <Ionicons
+                name={isAddingTag ? "close" : "add"}
+                size={20}
+                color={colors.primary}
+              />
+            </TouchableOpacity>
           </View>
+
+          {isAddingTag && (
+            <View style={styles.addTagInputContainer}>
+              <TouchableOpacity
+                style={[styles.newTagColorPreview, { backgroundColor: newTagColor }]}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setColorPickerMode('tag');
+                  setShowColorPicker(true);
+                }}
+              />
+              <TextInput
+                style={styles.addTagInput}
+                placeholder="New tag name"
+                placeholderTextColor={colors.mutedForeground}
+                value={newTagName}
+                onChangeText={setNewTagName}
+                autoFocus
+                onSubmitEditing={handleAddTag}
+              />
+              <TouchableOpacity
+                style={styles.addTagConfirmButton}
+                onPress={handleAddTag}
+                disabled={!newTagName.trim()}
+              >
+                <Ionicons name="checkmark" size={20} color="white" />
+              </TouchableOpacity>
+            </View>
+          )}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -619,6 +769,14 @@ export function AddReminderSheet({
 
       {/* Sheet */}
       {sheetContent}
+
+      <ColorPicker
+        visible={showColorPicker}
+        onClose={() => setShowColorPicker(false)}
+        selectedColor={colorPickerMode === 'tag' ? newTagColor : newPriorityColor}
+        onSelect={handleColorSelect}
+        colors={colors}
+      />
     </Modal>
   );
 }
@@ -828,5 +986,59 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontSize: typography.fontSize.sm,
     marginRight: spacing.xs,
     color: colors.primary,
+  },
+  headerSpaceBetween: {
+    justifyContent: 'space-between',
+  },
+  headerLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  addTagButton: {
+    padding: spacing.xs,
+  },
+  addTagInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  newTagColorPreview: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'black',
+    ...shadows.soft,
+  },
+  colorEditIcon: {
+    backgroundColor: 'rgba(0,0,0,0.2)',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addTagInput: {
+    flex: 1,
+    height: 40,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.lg,
+    paddingHorizontal: spacing.md,
+    color: colors.foreground,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.base,
+  },
+  addTagConfirmButton: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
