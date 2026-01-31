@@ -23,6 +23,12 @@ interface SettingsContextType {
   setShowRelativeDates: (show: boolean) => Promise<void>;
   theme: ThemeType;
   setTheme: (theme: ThemeType) => Promise<void>;
+  lastViewMode: 'list' | 'week';
+  setLastViewMode: (mode: 'list' | 'week') => Promise<void>;
+  lastSortMode: 'time' | 'tag' | 'priority';
+  setLastSortMode: (mode: 'time' | 'tag' | 'priority') => Promise<void>;
+  isSortExpanded: boolean;
+  setIsSortExpanded: (expanded: boolean) => void;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -46,6 +52,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [weekStart, setWeekStartState] = useState<'Sunday' | 'Monday'>('Sunday');
   const [showRelativeDates, setShowRelativeDatesState] = useState(true);
   const [theme, setThemeState] = useState<ThemeType>('system');
+  const [lastViewMode, setLastViewModeState] = useState<'list' | 'week'>('list');
+  const [lastSortMode, setLastSortModeState] = useState<'time' | 'tag' | 'priority'>('time');
+  const [isSortExpanded, setIsSortExpanded] = useState(false);
   const [loadingTags, setLoadingTags] = useState(false);
   const [loadingPriorities, setLoadingPriorities] = useState(false);
 
@@ -101,17 +110,36 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
+  const fetchProfileSettings = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('last_view_mode, last_sort_mode')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching profile settings:', error);
+      } else if (data) {
+        if (data.last_view_mode) setLastViewModeState(data.last_view_mode as 'list' | 'week');
+        if (data.last_sort_mode) setLastSortModeState(data.last_sort_mode as 'time' | 'tag' | 'priority');
+      }
+    } catch (error) {
+      console.error('Unexpected error fetching profile settings:', error);
+    }
+  }, [user]);
+
   useEffect(() => {
     loadSettings();
   }, []);
 
   useEffect(() => {
     fetchTags();
-  }, [fetchTags]);
-
-  useEffect(() => {
     fetchPriorities();
-  }, [fetchPriorities]);
+    fetchProfileSettings();
+  }, [fetchTags, fetchPriorities, fetchProfileSettings]);
 
   const loadSettings = async () => {
     try {
@@ -280,6 +308,32 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.setItem(STORAGE_KEYS.THEME, JSON.stringify(newTheme));
   };
 
+  const setLastViewMode = async (mode: 'list' | 'week') => {
+    setLastViewModeState(mode);
+    if (!user) return;
+    try {
+      await supabase
+        .from('profiles')
+        .update({ last_view_mode: mode })
+        .eq('id', user.id);
+    } catch (error) {
+      console.error('Error updating view mode:', error);
+    }
+  };
+
+  const setLastSortMode = async (mode: 'time' | 'tag' | 'priority') => {
+    setLastSortModeState(mode);
+    if (!user) return;
+    try {
+      await supabase
+        .from('profiles')
+        .update({ last_sort_mode: mode })
+        .eq('id', user.id);
+    } catch (error) {
+      console.error('Error updating sort mode:', error);
+    }
+  };
+
   const value = {
     tags,
     addTag,
@@ -299,6 +353,12 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     setShowRelativeDates,
     theme,
     setTheme,
+    lastViewMode,
+    setLastViewMode,
+    lastSortMode,
+    setLastSortMode,
+    isSortExpanded,
+    setIsSortExpanded,
   };
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;

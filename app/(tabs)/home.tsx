@@ -11,28 +11,30 @@ import {
   ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { startOfDay, isSameDay } from 'date-fns';
+import { startOfDay, isSameDay, isToday } from 'date-fns';
 import { ReminderCard } from '../../components/ReminderCard';
 import { DaySection } from '../../components/DaySection';
 import { EmptyState } from '../../components/EmptyState';
 import { FloatingAddButton } from '../../components/FloatingAddButton';
 import { AddReminderSheet } from '../../components/AddReminderSheet';
 import { WeekForecast } from '../../components/WeekForecast';
+import { SortSelector } from '../../components/SortSelector';
 import { spacing, typography, borderRadius } from '../../constants/theme';
 import { Reminder } from '../../types/reminder';
 import { useReminders } from '../../hooks/useReminders';
+import { useSettings } from '../../contexts/SettingsContext';
 import { useTheme } from '../../hooks/useTheme';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const styles = createStyles(colors);
-  
+
   const { reminders, loading, addReminder, toggleComplete, refreshReminders, updateReminder, deleteReminder } = useReminders();
+  const { tags, priorities, lastViewMode: viewMode, setLastViewMode: setViewMode, lastSortMode: sortMode, setLastSortMode: setSortMode } = useSettings();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
   const [showRetry, setShowRetry] = useState(false);
-  const [viewMode, setViewMode] = useState<'list' | 'week'>('list');
 
   // Show retry button if loading takes more than 5 seconds
   useEffect(() => {
@@ -49,47 +51,122 @@ export default function HomeScreen() {
 
   const activeReminders = reminders.filter(r => !r.completed);
 
-  // Group active reminders by day in chronological order
+  // Group active reminders by day or tag
   const groupedReminders = useMemo(() => {
-    const groups: { date: Date; reminders: Reminder[] }[] = [];
-    
-    // Separate reminders with and without dates
+    interface Group {
+      id: string;
+      title?: string;
+      headerColor?: string;
+      date?: Date;
+      reminders: Reminder[];
+    }
+
+    if (sortMode === 'tag') {
+      const tagGroups: Map<string, Group> = new Map();
+
+      activeReminders.forEach(reminder => {
+        const tag = tags.find(t => t.id === reminder.tag_id);
+        const tagId = tag?.id || 'none';
+
+        if (!tagGroups.has(tagId)) {
+          tagGroups.set(tagId, {
+            id: tagId,
+            title: tag?.name || 'Untagged',
+            headerColor: tag?.color || colors.mutedForeground,
+            reminders: []
+          });
+        }
+        tagGroups.get(tagId)!.reminders.push(reminder);
+      });
+
+      return Array.from(tagGroups.values())
+        .sort((a, b) => {
+          if (a.id === 'none') return 1;
+          if (b.id === 'none') return -1;
+          return (a.title || '').localeCompare(b.title || '');
+        })
+        .map(group => ({
+          ...group,
+          reminders: [...group.reminders].sort((a, b) => {
+            if (a.time && b.time) return a.time.localeCompare(b.time);
+            if (a.time) return -1;
+            if (b.time) return 1;
+            return 0;
+          })
+        }));
+    }
+
+    if (sortMode === 'priority') {
+      const priorityGroups: Map<string, Group> = new Map();
+
+      activeReminders.forEach(reminder => {
+        const priority = priorities.find(p => p.id === reminder.priority_id);
+        const priorityId = priority?.id || 'none';
+
+        if (!priorityGroups.has(priorityId)) {
+          priorityGroups.set(priorityId, {
+            id: priorityId,
+            title: priority?.name || 'No Priority',
+            headerColor: priority?.color || colors.mutedForeground,
+            reminders: []
+          });
+        }
+        priorityGroups.get(priorityId)!.reminders.push(reminder);
+      });
+
+      return Array.from(priorityGroups.values())
+        .sort((a, b) => {
+          if (a.id === 'none') return 1;
+          if (b.id === 'none') return -1;
+          // Find actual priorities to compare rank
+          const pA = priorities.find(p => p.id === a.id);
+          const pB = priorities.find(p => p.id === b.id);
+          return (pA?.rank || 0) - (pB?.rank || 0);
+        })
+        .map(group => ({
+          ...group,
+          reminders: [...group.reminders].sort((a, b) => {
+            if (a.time && b.time) return a.time.localeCompare(b.time);
+            if (a.time) return -1;
+            if (b.time) return 1;
+            return 0;
+          })
+        }));
+    }
+
+    // Default: Sort by date (Time Sort)
+    const groups: Group[] = [];
     const withDate = activeReminders.filter(r => r.date);
     const withoutDate = activeReminders.filter(r => !r.date);
-    
-    // Sort reminders with dates chronologically
+
     const sortedWithDate = [...withDate].sort((a, b) => {
-      const dateA = a.date ? new Date(a.date + 'T00:00:00').getTime() : 0;
-      const dateB = b.date ? new Date(b.date + 'T00:00:00').getTime() : 0;
+      const dateA = new Date(a.date! + 'T00:00:00').getTime();
+      const dateB = new Date(b.date! + 'T00:00:00').getTime();
       if (dateA !== dateB) return dateA - dateB;
-      // If same date, sort by time
       if (a.time && b.time) return a.time.localeCompare(b.time);
       return 0;
     });
 
-    // Group by day
     sortedWithDate.forEach(reminder => {
       const reminderDate = startOfDay(new Date(reminder.date! + 'T00:00:00'));
-      const existingGroup = groups.find(g => isSameDay(g.date, reminderDate));
+      const existingGroup = groups.find(g => g.date && isSameDay(g.date, reminderDate));
       if (existingGroup) {
         existingGroup.reminders.push(reminder);
       } else {
-        groups.push({ date: reminderDate, reminders: [reminder] });
+        groups.push({ id: reminderDate.toISOString(), date: reminderDate, reminders: [reminder] });
       }
     });
 
-    // Add reminders without dates to "Anytime" group at the end
     if (withoutDate.length > 0) {
-      // Sort by time if available
       const sortedWithoutDate = [...withoutDate].sort((a, b) => {
         if (a.time && b.time) return a.time.localeCompare(b.time);
         return 0;
       });
-      groups.push({ date: new Date(9999, 0, 1), reminders: sortedWithoutDate }); // Far future date for "Anytime"
+      groups.push({ id: 'anytime', date: new Date(9999, 0, 1), reminders: sortedWithoutDate });
     }
 
     return groups;
-  }, [activeReminders]);
+  }, [activeReminders, sortMode, tags, colors.mutedForeground]);
 
   const handleComplete = (id: string) => {
     const reminder = reminders.find(r => r.id === id);
@@ -146,7 +223,7 @@ export default function HomeScreen() {
             <Text style={styles.dateText}>{formatDate()}</Text>
             <Text style={styles.greeting}>{greeting()} ✨</Text>
           </View>
-          
+
           {/* View Mode Toggle */}
           <View style={styles.toggleContainer}>
             <TouchableOpacity
@@ -172,8 +249,8 @@ export default function HomeScreen() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           {showRetry && (
-            <TouchableOpacity 
-              style={styles.retryButton} 
+            <TouchableOpacity
+              style={styles.retryButton}
               onPress={() => refreshReminders()}
             >
               <Text style={styles.retryText}>Taking too long? Tap to retry</Text>
@@ -210,18 +287,26 @@ export default function HomeScreen() {
       ) : (
         <FlatList
           data={groupedReminders}
-          keyExtractor={(item) => item.date.toISOString()}
+          keyExtractor={(item) => item.id}
           renderItem={({ item, index: groupIndex }) => {
             const startIndex = groupedReminders
               .slice(0, groupIndex)
               .reduce((acc, g) => acc + g.reminders.length, 0);
-            
-            const isAnytime = item.date.getFullYear() === 9999;
-            
-            if (isAnytime) {
+
+            const isAnytime = item.id === 'anytime';
+
+            if (isAnytime && sortMode === 'time') {
               return (
                 <View style={styles.anytimeSection}>
-                  <Text style={styles.sectionHeader}>Anytime</Text>
+                  <View style={styles.headerRow}>
+                    <Text style={styles.sectionHeader}>Anytime</Text>
+                    {groupIndex === 0 && (
+                      <SortSelector
+                        currentSort={sortMode}
+                        onSortChange={setSortMode}
+                      />
+                    )}
+                  </View>
                   <View style={styles.remindersList}>
                     {item.reminders.map((reminder, index) => (
                       <ReminderCard
@@ -237,15 +322,22 @@ export default function HomeScreen() {
                 </View>
               );
             }
-            
+
             return (
               <DaySection
-                date={item.date}
+                date={(item as any).date}
+                title={(item as any).title}
+                headerColor={(item as any).headerColor}
                 reminders={item.reminders}
                 onComplete={handleComplete}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 startIndex={startIndex}
+                onSortChange={setSortMode as any}
+                currentSort={sortMode}
+                showSort={
+                  groupIndex === 0 || ((item as any).date && isToday((item as any).date))
+                }
               />
             );
           }}
@@ -350,7 +442,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: spacing.xl,
-    paddingBottom: Platform.OS === 'ios' ? 120 : 100,
+    paddingBottom: 100,
   },
   anytimeSection: {
     marginBottom: spacing.xl,
@@ -366,5 +458,11 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   remindersList: {
     gap: spacing.md,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
   },
 });

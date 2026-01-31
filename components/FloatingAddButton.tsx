@@ -16,7 +16,7 @@ interface FloatingAddButtonProps {
 export function FloatingAddButton({ onPress }: FloatingAddButtonProps) {
   const { colors } = useTheme();
   const styles = createStyles(colors);
-  
+
   const scaleAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -70,7 +70,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   container: {
     position: 'absolute',
     right: 20,
-    bottom: Platform.OS === 'ios' ? 110 : 90,
+    bottom: 32,
     zIndex: 30,
   },
   button: {
