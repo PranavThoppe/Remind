@@ -23,8 +23,8 @@ interface SettingsContextType {
   setShowRelativeDates: (show: boolean) => Promise<void>;
   theme: ThemeType;
   setTheme: (theme: ThemeType) => Promise<void>;
-  lastViewMode: 'list' | 'week';
-  setLastViewMode: (mode: 'list' | 'week') => Promise<void>;
+  lastViewMode: 'list' | 'week' | 'calendar';
+  setLastViewMode: (mode: 'list' | 'week' | 'calendar') => Promise<void>;
   lastSortMode: 'time' | 'tag' | 'priority';
   setLastSortMode: (mode: 'time' | 'tag' | 'priority') => Promise<void>;
   isSortExpanded: boolean;
@@ -52,7 +52,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [weekStart, setWeekStartState] = useState<'Sunday' | 'Monday'>('Sunday');
   const [showRelativeDates, setShowRelativeDatesState] = useState(true);
   const [theme, setThemeState] = useState<ThemeType>('system');
-  const [lastViewMode, setLastViewModeState] = useState<'list' | 'week'>('list');
+  const [lastViewMode, setLastViewModeState] = useState<'list' | 'week' | 'calendar'>('list');
   const [lastSortMode, setLastSortModeState] = useState<'time' | 'tag' | 'priority'>('time');
   const [isSortExpanded, setIsSortExpanded] = useState(false);
   const [loadingTags, setLoadingTags] = useState(false);
@@ -123,7 +123,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       if (error) {
         console.error('Error fetching profile settings:', error);
       } else if (data) {
-        if (data.last_view_mode) setLastViewModeState(data.last_view_mode as 'list' | 'week');
+        if (data.last_view_mode) setLastViewModeState(data.last_view_mode as 'list' | 'week' | 'calendar');
         if (data.last_sort_mode) setLastSortModeState(data.last_sort_mode as 'time' | 'tag' | 'priority');
       }
     } catch (error) {
@@ -308,7 +308,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.setItem(STORAGE_KEYS.THEME, JSON.stringify(newTheme));
   };
 
-  const setLastViewMode = async (mode: 'list' | 'week') => {
+  const setLastViewMode = async (mode: 'list' | 'week' | 'calendar') => {
     setLastViewModeState(mode);
     if (!user) return;
     try {
