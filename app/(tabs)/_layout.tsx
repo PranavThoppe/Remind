@@ -1,8 +1,24 @@
-import { Tabs } from 'expo-router';
+import {
+  createMaterialTopTabNavigator,
+  MaterialTopTabNavigationEventMap,
+  MaterialTopTabNavigationOptions,
+} from '@react-navigation/material-top-tabs';
+import { withLayoutContext } from 'expo-router';
+import { ParamListBase, TabNavigationState } from '@react-navigation/native';
+import { useTheme } from '../../hooks/useTheme';
+
+const { Navigator } = createMaterialTopTabNavigator();
+
+export const MaterialTopTabs = withLayoutContext<
+  MaterialTopTabNavigationOptions,
+  typeof Navigator,
+  TabNavigationState<ParamListBase>,
+  MaterialTopTabNavigationEventMap
+>(Navigator);
+
 import { View, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { shadows, typography } from '../../constants/theme';
-import { useTheme } from '../../hooks/useTheme';
 
 type TabIconProps = {
   name: keyof typeof Ionicons.glyphMap;
@@ -16,7 +32,7 @@ function TabIcon({ name, focused, colors }: TabIconProps) {
     <View style={styles.iconContainer}>
       <Ionicons
         name={name}
-        size={focused ? 26 : 24}
+        size={focused ? 24 : 22}
         color={focused ? colors.primary : colors.mutedForeground}
         style={focused ? styles.iconActive : undefined}
       />
@@ -29,17 +45,22 @@ export default function TabLayout() {
   const styles = createStyles(colors);
 
   return (
-    <Tabs
+    <MaterialTopTabs
+      tabBarPosition="bottom"
+      initialRouteName="home"
       screenOptions={{
-        headerShown: false,
-        tabBarStyle: styles.tabBar,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.mutedForeground,
-        tabBarLabelStyle: styles.tabBarLabel,
-        tabBarItemStyle: styles.tabBarItem,
+        tabBarIndicatorStyle: { backgroundColor: colors.primary, height: 3, top: 0 },
+        tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.border, borderTopWidth: 1, elevation: 0, shadowOpacity: 0 },
+        tabBarLabelStyle: { fontSize: 10, textTransform: 'none', fontFamily: typography.fontFamily.medium, marginTop: 0 },
+        tabBarShowIcon: true,
+        swipeEnabled: true,
+        animationEnabled: true,
+
       }}
     >
-      <Tabs.Screen
+      <MaterialTopTabs.Screen
         name="ai-chat"
         options={{
           title: 'AI',
@@ -48,7 +69,7 @@ export default function TabLayout() {
           ),
         }}
       />
-      <Tabs.Screen
+      <MaterialTopTabs.Screen
         name="home"
         options={{
           title: 'Home',
@@ -57,7 +78,7 @@ export default function TabLayout() {
           ),
         }}
       />
-      <Tabs.Screen
+      <MaterialTopTabs.Screen
         name="settings"
         options={{
           title: 'Settings',
@@ -66,42 +87,16 @@ export default function TabLayout() {
           ),
         }}
       />
-    </Tabs>
+    </MaterialTopTabs>
   );
 }
 
 const createStyles = (colors: any) => StyleSheet.create({
-  tabBar: {
-    backgroundColor: colors.card,
-    borderTopColor: colors.border,
-    borderTopWidth: 1,
-    height: Platform.OS === 'ios' ? 88 : 64,
-    paddingTop: 8,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 8,
-    ...Platform.select({
-      ios: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-      },
-    }),
-    elevation: 0,
-    shadowOpacity: 0,
-  },
-  tabBarLabel: {
-    fontFamily: typography.fontFamily.medium,
-    fontSize: 10,
-    marginTop: 2,
-  },
-  tabBarItem: {
-    paddingVertical: 4,
-  },
   iconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
   },
   iconActive: {
-    transform: [{ scale: 1.1 }],
+    // transform: [{ scale: 1.1 }],
   },
 });

@@ -27,7 +27,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const styles = createStyles(colors);
-  
+
   const { reminders, loading, addReminder, toggleComplete, refreshReminders, updateReminder, deleteReminder } = useReminders();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
@@ -52,11 +52,11 @@ export default function HomeScreen() {
   // Group active reminders by day in chronological order
   const groupedReminders = useMemo(() => {
     const groups: { date: Date; reminders: Reminder[] }[] = [];
-    
+
     // Separate reminders with and without dates
     const withDate = activeReminders.filter(r => r.date);
     const withoutDate = activeReminders.filter(r => !r.date);
-    
+
     // Sort reminders with dates chronologically
     const sortedWithDate = [...withDate].sort((a, b) => {
       const dateA = a.date ? new Date(a.date + 'T00:00:00').getTime() : 0;
@@ -146,7 +146,7 @@ export default function HomeScreen() {
             <Text style={styles.dateText}>{formatDate()}</Text>
             <Text style={styles.greeting}>{greeting()} ✨</Text>
           </View>
-          
+
           {/* View Mode Toggle */}
           <View style={styles.toggleContainer}>
             <TouchableOpacity
@@ -172,8 +172,8 @@ export default function HomeScreen() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           {showRetry && (
-            <TouchableOpacity 
-              style={styles.retryButton} 
+            <TouchableOpacity
+              style={styles.retryButton}
               onPress={() => refreshReminders()}
             >
               <Text style={styles.retryText}>Taking too long? Tap to retry</Text>
@@ -215,9 +215,9 @@ export default function HomeScreen() {
             const startIndex = groupedReminders
               .slice(0, groupIndex)
               .reduce((acc, g) => acc + g.reminders.length, 0);
-            
+
             const isAnytime = item.date.getFullYear() === 9999;
-            
+
             if (isAnytime) {
               return (
                 <View style={styles.anytimeSection}>
@@ -237,7 +237,7 @@ export default function HomeScreen() {
                 </View>
               );
             }
-            
+
             return (
               <DaySection
                 date={item.date}
@@ -350,7 +350,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: spacing.xl,
-    paddingBottom: Platform.OS === 'ios' ? 120 : 100,
+    paddingBottom: 100,
   },
   anytimeSection: {
     marginBottom: spacing.xl,

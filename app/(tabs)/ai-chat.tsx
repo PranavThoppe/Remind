@@ -660,9 +660,7 @@ export default function AIChatScreen() {
           dynamicStyles.inputContainer,
           {
             // Extra offset only when keyboard is hidden, so the bar sits above the tab bar
-            paddingBottom:
-              Math.max(insets.bottom, spacing.md) +
-              (Platform.OS === 'ios' && !keyboardVisible ? 56 : 0),
+            paddingBottom: Math.max(insets.bottom, spacing.md),
           },
         ]}
       >
