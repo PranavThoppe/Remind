@@ -12,6 +12,7 @@ import { spacing, borderRadius, typography, shadows } from '../constants/theme';
 import { Reminder } from '../types/reminder';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTheme } from '../hooks/useTheme';
+import { BirthdayArt } from './BirthdayArt';
 
 interface ReminderCardProps {
   reminder: Reminder;
@@ -30,6 +31,8 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
   const checkScaleAnim = useRef(new Animated.Value(1)).current;
   const swipeableRef = useRef<Swipeable>(null);
   const { tags, priorities } = useSettings();
+
+  const isBirthday = reminder.title.toLowerCase().includes('birthday');
 
   useEffect(() => {
     Animated.parallel([
@@ -152,7 +155,8 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
               borderBottomColor: tag.color,
               borderTopWidth: 1,
               borderTopColor: tag.color,
-            }
+            },
+            isBirthday && !reminder.completed && styles.birthdayCard
           ]}
           onPress={() => onEdit(reminder)}
           activeOpacity={0.9}
@@ -165,6 +169,9 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
               </View>
             </>
           )}
+
+          {isBirthday && !reminder.completed && <BirthdayArt />}
+
           <View style={[styles.content, !reminder.time && { alignItems: 'center' }]}>
             {/* Checkbox */}
             <TouchableOpacity
@@ -178,6 +185,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
                   reminder.completed && styles.checkboxCompleted,
                   tag && !reminder.completed && { borderColor: tag.color },
                   !reminder.time && { marginTop: 0 },
+                  isBirthday && !reminder.completed && styles.birthdayCheckbox,
                   { transform: [{ scale: checkScaleAnim }] },
                 ]}
               >
@@ -194,6 +202,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
                   style={[
                     styles.title,
                     reminder.completed && styles.titleCompleted,
+                    isBirthday && !reminder.completed && styles.birthdayTitle,
                   ]}
                   numberOfLines={1}
                 >
@@ -208,8 +217,8 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
               <View style={styles.metaContainer}>
                 {reminder.time && (
                   <View style={styles.metaItem}>
-                    <Ionicons name="time-outline" size={14} color={colors.mutedForeground} />
-                    <Text style={styles.metaText}>{formatTime(reminder.time)}</Text>
+                    <Ionicons name="time-outline" size={14} color={isBirthday && !reminder.completed ? 'rgba(0,0,0,0.6)' : colors.mutedForeground} />
+                    <Text style={[styles.metaText, isBirthday && !reminder.completed && styles.birthdayMetaText]}>{formatTime(reminder.time)}</Text>
                   </View>
                 )}
               </View>
@@ -321,12 +330,25 @@ const createStyles = (colors: any) => StyleSheet.create({
     color: colors.mutedForeground,
   },
   deleteBackground: {
-    backgroundColor: colors.destructive,
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 80,
-    height: '100%',
     borderRadius: borderRadius.lg,
     marginLeft: spacing.md,
+  },
+  birthdayCard: {
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    borderWidth: 1.5,
+  },
+  birthdayTitle: {
+    color: '#1F2937', // Dark text for legibility on light gradient
+    textShadowColor: 'rgba(255, 255, 255, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+    fontFamily: typography.fontFamily.bold,
+  },
+  birthdayCheckbox: {
+    borderColor: 'rgba(0, 0, 0, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  birthdayMetaText: {
+    color: 'rgba(0, 0, 0, 0.6)',
   },
 });
