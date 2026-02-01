@@ -18,7 +18,7 @@ interface WeekForecastProps {
 export const WeekForecast = ({ reminders, onReminderClick, onComplete, onDelete }: WeekForecastProps) => {
   const { colors, isDark } = useTheme();
   const styles = createStyles(colors);
-  
+
   const today = startOfDay(new Date());
   const days = Array.from({ length: 7 }, (_, i) => addDays(today, i));
   const swipeableRefs = useRef<{ [key: string]: Swipeable | null }>({});
@@ -109,7 +109,7 @@ export const WeekForecast = ({ reminders, onReminderClick, onComplete, onDelete 
               {dayReminders.length > 0 && (
                 <View style={[styles.badge, isToday ? styles.todayBadge : styles.otherBadge]}>
                   <Text style={[styles.badgeText, isToday ? styles.todayBadgeText : styles.otherBadgeText]}>
-                    {dayReminders.length} {dayReminders.length === 1 ? 'reminder' : 'reminders'}
+                    {dayReminders.length}
                   </Text>
                 </View>
               )}
@@ -124,8 +124,8 @@ export const WeekForecast = ({ reminders, onReminderClick, onComplete, onDelete 
                   return (
                     <Swipeable
                       key={reminder.id}
-                      ref={(el) => (swipeableRefs.current[reminder.id] = el)}
-                      renderRightActions={(progress, dragX) => 
+                      ref={(el) => { swipeableRefs.current[reminder.id] = el; }}
+                      renderRightActions={(progress, dragX) =>
                         renderRightActions(reminder.id, progress, dragX)
                       }
                       friction={2}
@@ -143,7 +143,7 @@ export const WeekForecast = ({ reminders, onReminderClick, onComplete, onDelete 
                         <TouchableOpacity
                           onPress={() => onComplete?.(reminder.id)}
                           style={[
-                            styles.checkbox, 
+                            styles.checkbox,
                             reminder.completed && styles.checkboxCompleted,
                             tag && !reminder.completed && { borderColor: tag.color }
                           ]}
@@ -153,27 +153,27 @@ export const WeekForecast = ({ reminders, onReminderClick, onComplete, onDelete 
                             <Ionicons name="checkmark" size={12} color={colors.successForeground} strokeWidth={3} />
                           )}
                         </TouchableOpacity>
-                        
+
                         <View style={styles.reminderContent}>
-                          <Text 
+                          <Text
                             style={[
-                              styles.reminderTitle, 
+                              styles.reminderTitle,
                               reminder.completed && styles.completedText,
                               tag && !reminder.completed && { color: tag.color }
-                            ]} 
+                            ]}
                             numberOfLines={1}
                           >
                             {reminder.title}
                           </Text>
                           {reminder.time && (
                             <View style={styles.timeContainer}>
-                              <Ionicons 
-                                name="time-outline" 
-                                size={12} 
-                                color={tag && !reminder.completed ? tag.color : colors.mutedForeground} 
+                              <Ionicons
+                                name="time-outline"
+                                size={12}
+                                color={tag && !reminder.completed ? tag.color : colors.mutedForeground}
                                 style={{ opacity: tag && !reminder.completed ? 0.7 : 1 }}
                               />
-                              <Text 
+                              <Text
                                 style={[
                                   styles.timeText,
                                   tag && !reminder.completed && { color: tag.color, opacity: 0.7 }
@@ -225,9 +225,10 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
     marginBottom: spacing.md,
+    gap: spacing.sm,
   },
   dayInfo: {
     flexDirection: 'row',

@@ -12,7 +12,6 @@ import {
     isSameDay,
     addMonths,
     subMonths,
-    parseISO
 } from 'date-fns';
 import { useRemindersContext } from '../contexts/RemindersContext';
 import { useSettings } from '../contexts/SettingsContext';
@@ -20,14 +19,16 @@ import { useTheme } from '../hooks/useTheme';
 import { ReminderCard } from './ReminderCard';
 import { AddReminderSheet } from './AddReminderSheet';
 import { typography, spacing, borderRadius } from '../constants/theme';
-import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
     FadeInDown,
-    FadeInLeft,
-    FadeInRight,
+    useAnimatedStyle,
+    useSharedValue,
+    withTiming,
 } from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
+const DAY_SIZE = (width - 72) / 7;
+const ROW_HEIGHT = DAY_SIZE + 8; // cell height + marginVertical * 2
 
 const CalendarView: React.FC = () => {
     const { reminders, toggleComplete, deleteReminder, updateReminder, addReminder } = useRemindersContext();
@@ -67,6 +68,18 @@ const CalendarView: React.FC = () => {
 
         return allDays.slice(0, Math.max(allDays.length, totalCells));
     }, [currentDate, selectedEvents.length]);
+
+    const gridHeight = useSharedValue(6 * ROW_HEIGHT);
+
+    useEffect(() => {
+        const rows = Math.ceil(days.length / 7);
+        gridHeight.value = withTiming(rows * ROW_HEIGHT, { duration: 300 });
+    }, [days.length]);
+
+    const animatedGridStyle = useAnimatedStyle(() => ({
+        height: gridHeight.value,
+        overflow: 'hidden'
+    }));
 
     const handlePrevMonth = () => setCurrentDate(subMonths(currentDate, 1));
     const handleNextMonth = () => setCurrentDate(addMonths(currentDate, 1));
@@ -136,7 +149,7 @@ const CalendarView: React.FC = () => {
                 </View>
 
                 {/* Days Grid */}
-                <View style={styles.daysGrid}>
+                <Animated.View style={[styles.daysGrid, animatedGridStyle]}>
                     {days.map((date, idx) => {
                         const isCurrMonth = isSameMonth(date, currentDate);
                         const isToday = isSameDay(date, new Date());
@@ -159,6 +172,7 @@ const CalendarView: React.FC = () => {
                                 <Text style={[
                                     styles.dayText,
                                     { color: isCurrMonth ? colors.foreground : colors.mutedForeground },
+                                    isCurrMonth && { fontFamily: typography.fontFamily.bold },
                                     isSelected && { color: colors.primaryForeground },
                                     isToday && !isSelected && { color: colors.primary }
                                 ]}>
@@ -170,7 +184,7 @@ const CalendarView: React.FC = () => {
                             </TouchableOpacity>
                         );
                     })}
-                </View>
+                </Animated.View>
             </Animated.View>
 
             {/* Agenda Section */}
@@ -216,20 +230,10 @@ const styles = StyleSheet.create({
         flex: 1,
         paddingHorizontal: spacing.lg,
     },
-    header: {
-        paddingVertical: spacing.xl,
-        flexDirection: 'row',
-        justifyContent: 'center',
-    },
-    time: {
-        fontSize: 18,
-        fontFamily: typography.fontFamily.semibold,
-    },
     calendarCard: {
         borderRadius: borderRadius.xl,
         padding: spacing.lg,
         borderWidth: 1,
-        // Glass effect shadow/blur handled by rgba and translucent backgrounds
     },
     calendarHeader: {
         flexDirection: 'row',
@@ -296,32 +300,6 @@ const styles = StyleSheet.create({
         fontSize: 20,
         fontFamily: typography.fontFamily.bold,
         marginBottom: spacing.lg,
-    },
-    agendaItem: {
-        flexDirection: 'row',
-        padding: spacing.md,
-        borderRadius: borderRadius.lg,
-        marginBottom: spacing.md,
-        alignItems: 'center',
-    },
-    agendaIcon: {
-        marginRight: spacing.md,
-        width: 32,
-        height: 32,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    agendaDetails: {
-        flex: 1,
-    },
-    eventTitle: {
-        fontSize: 15,
-        fontFamily: typography.fontFamily.semibold,
-    },
-    eventTime: {
-        fontSize: 13,
-        fontFamily: typography.fontFamily.regular,
-        marginTop: 2,
     },
     emptyState: {
         alignItems: 'center',

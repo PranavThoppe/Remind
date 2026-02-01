@@ -156,8 +156,9 @@ export async function extractReminderFields(
 export async function searchReminders(params: {
   query: string;
   user_id: string;
+  targetDate?: string;
 }): Promise<{ answer: string; follow_up: string; evidence: any[] }> {
-  const { query, user_id } = params;
+  const { query, user_id, targetDate } = params;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
@@ -171,7 +172,11 @@ export async function searchReminders(params: {
         'Authorization': `Bearer ${ANON_KEY}`,
         'x-admin-secret': ADMIN_SECRET_KEY,
       },
-      body: JSON.stringify({ query, dev_user_id: user_id }),
+      body: JSON.stringify({
+        query,
+        dev_user_id: user_id,
+        target_date: targetDate
+      }),
       signal: controller.signal,
     });
 

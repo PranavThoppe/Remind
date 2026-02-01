@@ -79,15 +79,6 @@ export default function TabLayout() {
         }}
       />
       <MaterialTopTabs.Screen
-        name="calendar"
-        options={{
-          title: 'Calendar',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name={focused ? 'calendar' : 'calendar-outline'} focused={focused} colors={colors} />
-          ),
-        }}
-      />
-      <MaterialTopTabs.Screen
         name="settings"
         options={{
           title: 'Settings',

@@ -19,6 +19,7 @@ import { FloatingAddButton } from '../../components/FloatingAddButton';
 import { AddReminderSheet } from '../../components/AddReminderSheet';
 import { WeekForecast } from '../../components/WeekForecast';
 import { SortSelector } from '../../components/SortSelector';
+import CalendarView from '../../components/CalendarView';
 import { spacing, typography, borderRadius } from '../../constants/theme';
 import { Reminder } from '../../types/reminder';
 import { useReminders } from '../../hooks/useReminders';
@@ -240,6 +241,13 @@ export default function HomeScreen() {
             >
               <Text style={[styles.toggleText, viewMode === 'week' && styles.toggleTextActive]}>Week</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.toggleButton, viewMode === 'calendar' && styles.toggleButtonActive]}
+              onPress={() => setViewMode('calendar')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.toggleText, viewMode === 'calendar' && styles.toggleTextActive]}>Calendar</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -284,6 +292,8 @@ export default function HomeScreen() {
             onDelete={handleDelete}
           />
         </ScrollView>
+      ) : viewMode === 'calendar' ? (
+        <CalendarView />
       ) : (
         <FlatList
           data={groupedReminders}

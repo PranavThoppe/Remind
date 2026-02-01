@@ -2,13 +2,13 @@ export interface Reminder {
   id: string;
   user_id: string;
   title: string;
-  date?: string;
-  time?: string;
+  date?: string | null;
+  time?: string | null; // Allow null for clearing time
   repeat?: 'none' | 'daily' | 'weekly' | 'monthly';
   completed: boolean;
   created_at: string;
-  tag_id?: string;
-  priority_id?: string;
+  tag_id?: string | null; // Allow null for removing tags
+  priority_id?: string | null; // Allow null for removing priority
 }
 
 export interface Profile {
