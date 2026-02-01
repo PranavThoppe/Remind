@@ -187,7 +187,15 @@ export function InlineReminderPanel({
     // Render static summary (read-only)
     if (isStatic) {
         return (
-            <View style={styles.staticContainer}>
+            <View style={[
+                styles.staticContainer,
+                selectedTag && {
+                    backgroundColor: `${selectedTag.color}${isDark ? '15' : '08'}`,
+                    borderColor: selectedTag.color,
+                    borderWidth: 1,
+                    borderLeftWidth: 1, // Override the default 3
+                }
+            ]}>
                 <View style={styles.staticHeader}>
                     <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
                     <Text style={styles.staticTitle}>{type === 'edit' ? 'Reminder Updated' : 'Reminder Created'}</Text>
@@ -240,7 +248,13 @@ export function InlineReminderPanel({
                         return (
                             <TouchableOpacity
                                 key={reminder.id}
-                                style={[styles.searchItem, tag && { borderLeftColor: tag.color, borderLeftWidth: 3 }]}
+                                style={[
+                                    styles.searchItem,
+                                    tag && {
+                                        backgroundColor: `${tag.color}${isDark ? '15' : '08'}`,
+                                        borderColor: tag.color,
+                                    }
+                                ]}
                                 onPress={() => onSelectReminder?.(reminder)}
                             >
                                 <View style={styles.searchContent}>
@@ -271,7 +285,14 @@ export function InlineReminderPanel({
 
     // Render interactive form (create/edit)
     return (
-        <View style={styles.container}>
+        <View style={[
+            styles.container,
+            selectedTag && {
+                backgroundColor: `${selectedTag.color}${isDark ? '15' : '08'}`,
+                borderColor: selectedTag.color,
+                borderWidth: 1,
+            }
+        ]}>
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>{type === 'edit' ? 'Editing reminder' : 'Creating reminder'}</Text>
                 {onClose && (

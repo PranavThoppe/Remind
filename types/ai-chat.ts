@@ -17,10 +17,10 @@ export interface ChatMessage {
 
 export interface ModalFieldUpdates {
   title?: string;
-  date?: string;  // YYYY-MM-DD
-  time?: string;  // HH:mm
-  tag_id?: string;
-  priority_id?: string;
+  date?: string | null;  // YYYY-MM-DD
+  time?: string | null;  // HH:mm
+  tag_id?: string | null;
+  priority_id?: string | null;
   repeat?: 'none' | 'daily' | 'weekly' | 'monthly';
 }
 

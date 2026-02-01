@@ -59,8 +59,8 @@ export function AddReminderSheet({
   const [date, setDate] = useState<Date | undefined>();
   const [time, setTime] = useState('');
   const [repeat, setRepeat] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none');
-  const [tagId, setTagId] = useState<string | undefined>();
-  const [priorityId, setPriorityId] = useState<string | undefined>();
+  const [tagId, setTagId] = useState<string | null | undefined>();
+  const [priorityId, setPriorityId] = useState<string | null | undefined>();
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -174,8 +174,8 @@ export function AddReminderSheet({
       setDate(undefined);
       setTime('');
       setRepeat('none');
-      setTagId(undefined);
-      setPriorityId(undefined);
+      setTagId(null);
+      setPriorityId(null);
     }
     // Reset picker visibility when sheet is opened or closed
     setShowDatePicker(false);
@@ -195,16 +195,23 @@ export function AddReminderSheet({
 
       // Update date with animation
       if (externalFields.date !== undefined) {
-        const newDate = new Date(externalFields.date + 'T00:00:00');
-        if (!date || newDate.getTime() !== date.getTime()) {
-          setDate(newDate);
-          animateFieldUpdate('date');
+        if (externalFields.date === null) {
+          if (date !== undefined) {
+            setDate(undefined);
+            animateFieldUpdate('date');
+          }
+        } else {
+          const newDate = new Date(externalFields.date + 'T00:00:00');
+          if (!date || newDate.getTime() !== date.getTime()) {
+            setDate(newDate);
+            animateFieldUpdate('date');
+          }
         }
       }
 
       // Update time with animation
-      if (externalFields.time !== undefined && externalFields.time !== time) {
-        setTime(externalFields.time);
+      if (externalFields.time !== undefined && (externalFields.time || '') !== time) {
+        setTime(externalFields.time || '');
         animateFieldUpdate('time');
       }
 
@@ -299,8 +306,8 @@ export function AddReminderSheet({
       date: dateString,
       time: time || undefined,
       repeat,
-      tag_id: tagId,
-      priority_id: priorityId,
+      tag_id: tagId || null,
+      priority_id: priorityId || null,
     }) as any;
 
     const savedReminder = result?.data;
@@ -328,8 +335,8 @@ export function AddReminderSheet({
     setDate(undefined);
     setTime('');
     setRepeat('none');
-    setTagId(undefined);
-    setPriorityId(undefined);
+    setTagId(null);
+    setPriorityId(null);
     handleClose();
   };
 
@@ -602,7 +609,7 @@ export function AddReminderSheet({
           >
             <TouchableOpacity
               style={[styles.tagOption, !priorityId && styles.tagOptionActive]}
-              onPress={() => setPriorityId(undefined)}
+              onPress={() => setPriorityId(null)}
             >
               <Text style={[styles.tagText, !priorityId && styles.tagTextActive]}>None</Text>
             </TouchableOpacity>
@@ -690,7 +697,7 @@ export function AddReminderSheet({
           >
             <TouchableOpacity
               style={[styles.tagOption, !tagId && styles.tagOptionActive]}
-              onPress={() => setTagId(undefined)}
+              onPress={() => setTagId(null)}
             >
               <Text style={[styles.tagText, !tagId && styles.tagTextActive]}>None</Text>
             </TouchableOpacity>

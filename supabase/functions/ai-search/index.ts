@@ -245,6 +245,8 @@ If no date is mentioned, return startDate: null.`
         date: r.date,
         time: r.time,
         completed: r.completed,
+        tag_id: r.tag_id,
+        priority_id: r.priority_id,
         source: 'date',
         score: 1.0
       })
@@ -280,6 +282,8 @@ If no date is mentioned, return startDate: null.`
           date: r.date,
           time: r.time,
           completed: r.completed,
+          tag_id: r.tag_id,
+          priority_id: r.priority_id,
           source: 'keyword',
           score: 0.7
         })
@@ -428,6 +432,8 @@ OUTPUT FORMAT (return ONLY valid JSON):
           title: r.title,
           date: r.date,
           time: r.time,
+          tag_id: r.tag_id,
+          priority_id: r.priority_id,
           score: r.score
         })),
         actions,
