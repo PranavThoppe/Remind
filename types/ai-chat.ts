@@ -13,6 +13,9 @@ export interface ChatMessage {
   panelSearchResults?: Reminder[];
   panelReminderId?: string; // For editing
   panelIsStatic?: boolean; // True after save/close
+
+  // Media support
+  imageUri?: string;
 }
 
 export interface ModalFieldUpdates {

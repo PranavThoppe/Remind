@@ -10,9 +10,13 @@ import {
   KeyboardAvoidingView,
   Animated,
   Keyboard,
+  Image,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { spacing, typography, borderRadius, shadows } from '../../constants/theme';
 import { useTheme } from '../../hooks/useTheme';
 import { useSettings } from '../../contexts/SettingsContext';
@@ -120,35 +124,48 @@ function MessageBubble({
   }
 
   const renderContent = () => {
-    if (isUser) {
-      return (
-        <Text
-          style={[
-            styles.messageText,
-            { color: colors.primaryForeground },
-          ]}
-        >
-          {message.content}
-        </Text>
-      );
-    }
-
-    // AI messages: Highlight tags if they appear in text
-    const parts = message.content.split(/(\b\w+\b)/g);
     return (
-      <Text style={[styles.messageText, { color: colors.foreground }]}>
-        {parts.map((part, i) => {
-          const tag = tags.find(t => t.name.toLowerCase() === part.toLowerCase());
-          if (tag) {
-            return (
-              <Text key={i} style={{ color: tag.color, fontWeight: 'bold' }}>
-                {part}
-              </Text>
-            );
-          }
-          return part;
-        })}
-      </Text>
+      <View>
+        {message.imageUri && (
+          <Image
+            source={{ uri: message.imageUri }}
+            style={{
+              width: 200,
+              height: 150,
+              borderRadius: borderRadius.md,
+              marginBottom: message.content ? spacing.sm : 0,
+            }}
+            resizeMode="cover"
+          />
+        )}
+        {message.content ? (
+          isUser ? (
+            <Text
+              style={[
+                styles.messageText,
+                { color: colors.primaryForeground },
+              ]}
+            >
+              {message.content}
+            </Text>
+          ) : (
+            // AI messages: Highlight tags if they appear in text
+            <Text style={[styles.messageText, { color: colors.foreground }]}>
+              {message.content.split(/(\b\w+\b)/g).map((part, i) => {
+                const tag = tags.find(t => t.name.toLowerCase() === part.toLowerCase());
+                if (tag) {
+                  return (
+                    <Text key={i} style={{ color: tag.color, fontWeight: 'bold' }}>
+                      {part}
+                    </Text>
+                  );
+                }
+                return part;
+              })}
+            </Text>
+          )
+        ) : null}
+      </View>
     );
   };
 
@@ -182,6 +199,7 @@ export default function AIChatScreen() {
     },
   ]);
   const [inputText, setInputText] = useState('');
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isThinking, setIsThinking] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
@@ -200,80 +218,48 @@ export default function AIChatScreen() {
     return formatDateString(new Date());
   }, [formatDateString]);
 
-  const extractTitle = useCallback((input: string): string => {
-    const cleaned = input
-      .replace(/(create|add|remind me to|set a reminder to|set a reminder|new reminder|reminder to|reminder)/gi, '')
-      .replace(/\b(tomorrow|today|at \d{1,2}(:\d{2})?\s*(am|pm)?|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-    return cleaned || 'New reminder';
-  }, []);
+  // Image Picker Logic
+  const handlePickImage = async () => {
+    // Request permission
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
-  const parseTimeFromText = useCallback((input: string): string | undefined => {
-    // Match patterns like "3pm", "3:30pm", "15:00", "at 3pm"
-    const match = input.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
-    if (match) {
-      let hours = parseInt(match[1]);
-      const minutes = match[2] || '00';
-      const period = match[3].toLowerCase();
-
-      if (period === 'pm' && hours !== 12) hours += 12;
-      if (period === 'am' && hours === 12) hours = 0;
-
-      return `${hours.toString().padStart(2, '0')}:${minutes}`;
-    }
-    return undefined;
-  }, []);
-
-  const parseDateFromText = useCallback((input: string): string | undefined => {
-    const today = new Date();
-    const lower = input.toLowerCase();
-
-    if (lower.includes('today')) {
-      return formatDateString(today);
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Sorry, we need camera roll permissions to make this work!');
+      return;
     }
 
-    if (lower.includes('tomorrow')) {
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      return formatDateString(tomorrow);
-    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
 
-    // Parse weekdays
-    const weekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    for (let i = 0; i < weekdays.length; i++) {
-      if (lower.includes(weekdays[i])) {
-        const targetDay = i;
-        const currentDay = today.getDay();
-        let daysUntil = targetDay - currentDay;
-        if (daysUntil <= 0) daysUntil += 7; // Next occurrence
-        const targetDate = new Date(today);
-        targetDate.setDate(today.getDate() + daysUntil);
-        return formatDateString(targetDate);
-      }
+    if (!result.canceled) {
+      setSelectedImage(result.assets[0].uri);
     }
-
-    return undefined;
-  }, [formatDateString]);
-
-  const findTagByName = useCallback((input: string): string | undefined => {
-    const lower = input.toLowerCase();
-    for (const tag of tags) {
-      if (lower.includes(tag.name.toLowerCase())) {
-        return tag.id;
-      }
-    }
-    return undefined;
-  }, [tags]);
+  };
 
   // Process message with LLM extraction
-  const processMessage = useCallback(async (input: string): Promise<MockAIResponse> => {
+  const processMessage = useCallback(async (input: string, imageUri?: string): Promise<MockAIResponse> => {
     try {
       if (!user) return { type: 'chat', message: "Please log in to use AI features." };
+
+      let base64Image = undefined;
+      if (imageUri) {
+        try {
+          // Read image as base64 using the new File API in expo-file-system v19+
+          const file = new FileSystem.File(imageUri);
+          base64Image = await file.base64();
+          console.log('[processMessage] Image converted to base64, length:', base64Image?.length);
+        } catch (imageError) {
+          console.error('[processMessage] Error reading image:', imageError);
+        }
+      }
 
       const response = await extractReminderFields({
         query: input,
         user_id: user.id,
+        image: base64Image,
         conversation: messages.filter(m =>
           !m.content.includes('Reminder created successfully!') &&
           !m.content.includes('Okay, let me know if you want to create another reminder!')
@@ -314,10 +300,13 @@ export default function AIChatScreen() {
 
   // Handle sending messages
   const handleSend = useCallback(async () => {
-    if (!inputText.trim() || isThinking) return;
+    if ((!inputText.trim() && !selectedImage) || isThinking) return;
 
     const userContent = inputText.trim();
+    const userImage = selectedImage;
+
     setInputText('');
+    setSelectedImage(null);
     Keyboard.dismiss();
 
     // Add user message
@@ -325,6 +314,7 @@ export default function AIChatScreen() {
       id: Date.now().toString(),
       role: 'user',
       content: userContent,
+      imageUri: userImage || undefined,
       timestamp: new Date(),
     };
     setMessages(prev => [...prev, userMessage]);
@@ -334,7 +324,7 @@ export default function AIChatScreen() {
 
     try {
       // Process with LLM extraction
-      const response = await processMessage(userContent);
+      const response = await processMessage(userContent || (userImage ? "I uploaded an image." : ""), userImage || undefined);
 
       // Handle search specially - we want to show the actual search answer, not the extraction message
       if (response.type === 'search') {
@@ -362,7 +352,7 @@ export default function AIChatScreen() {
           const searchData = await searchReminders({
             query: userContent,
             user_id: user!.id,
-            targetDate: targetDate,
+            targetDate: targetDate || undefined,
           });
 
           // Remove the temporary searching message
@@ -480,7 +470,7 @@ export default function AIChatScreen() {
     } finally {
       setIsThinking(false);
     }
-  }, [inputText, isThinking, processMessage, user]);
+  }, [inputText, selectedImage, isThinking, processMessage, user]);
 
   // Handle panel field changes
   const handlePanelFieldsChange = useCallback((messageId: string, fields: ModalFieldUpdates) => {
@@ -522,7 +512,7 @@ export default function AIChatScreen() {
         await scheduleReminderNotification(
           fields.title!,
           dateStr,
-          fields.time,
+          fields.time || undefined,
           fields.repeat || 'none',
           savedReminder.id,
         );
@@ -674,50 +664,140 @@ export default function AIChatScreen() {
         />
       </View>
 
-
-
-      {/* Input Bar */}
+      {/* Input Area */}
       <View
         style={[
           dynamicStyles.inputContainer,
           {
-            // Extra offset only when keyboard is hidden, so the bar sits above the tab bar
             paddingBottom: Math.max(insets.bottom, spacing.md),
           },
         ]}
       >
-        <View style={dynamicStyles.inputWrapper}>
-          <TextInput
-            ref={inputRef}
-            style={dynamicStyles.input}
-            placeholder="Create or find a reminder..."
-            placeholderTextColor={colors.mutedForeground}
-            value={inputText}
-            onChangeText={setInputText}
-            multiline
-            maxLength={500}
-            onSubmitEditing={handleSend}
-            blurOnSubmit={false}
-            editable={!isThinking}
-          />
+        {/* Image Preview - Shows above input if selected */}
+        {selectedImage && (
+          <View style={dynamicStyles.imagePreviewContainer}>
+            <Image source={{ uri: selectedImage }} style={dynamicStyles.imagePreview} />
+            <TouchableOpacity
+              style={dynamicStyles.removeImageButton}
+              onPress={() => setSelectedImage(null)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close" size={16} color="white" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <View style={dynamicStyles.inputRow}>
+          {/* Add Button (Left) */}
           <TouchableOpacity
-            style={[
-              dynamicStyles.sendButton,
-              (!inputText.trim() || isThinking) && dynamicStyles.sendButtonDisabled,
-            ]}
-            onPress={handleSend}
-            disabled={!inputText.trim() || isThinking}
-            activeOpacity={0.7}
+            style={dynamicStyles.addButton}
+            onPress={handlePickImage}
+            disabled={isThinking}
           >
-            <Ionicons
-              name="send"
-              size={20}
-              color={inputText.trim() && !isThinking ? colors.primaryForeground : colors.mutedForeground}
-            />
+            <Ionicons name="add" size={24} color={colors.background} />
           </TouchableOpacity>
+
+          {/* Text Input Pill (Center) */}
+          <View style={dynamicStyles.inputPill}>
+            <TextInput
+              ref={inputRef}
+              style={dynamicStyles.input}
+              placeholder="Ask anything..."
+              placeholderTextColor={colors.mutedForeground}
+              value={inputText}
+              onChangeText={setInputText}
+              multiline
+              maxLength={500}
+              onSubmitEditing={handleSend}
+              blurOnSubmit={false}
+              editable={!isThinking}
+            />
+
+            {/* Action Icon (Right side of pill) */}
+            {inputText.trim() || selectedImage ? (
+              <TouchableOpacity
+                onPress={handleSend}
+                disabled={isThinking}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="arrow-up-circle" size={32} color={colors.primary} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={() => Alert.alert("Coming Soon", "Voice dictation is under development!")}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="mic" size={22} color={colors.mutedForeground} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+
+          {/* Pulsating Brain Mode Button */}
+          <PulsatingBrainButton
+            colors={colors}
+            isTyping={inputText.length > 0}
+            onPress={() => Alert.alert("Coming Soon", "Live Vision mode is under development!")}
+          />
         </View>
       </View>
     </KeyboardAvoidingView>
+  );
+}
+
+// Separate component to handle its own animation cycle
+function PulsatingBrainButton({ colors, isTyping, onPress }: { colors: any, isTyping: boolean, onPress: () => void }) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (isTyping) {
+      // Stop pulsating and reset to normal
+      Animated.timing(scale, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
+
+    // Start pulsating loop
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(scale, {
+          toValue: 1.2,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(scale, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    pulse.start();
+
+    return () => pulse.stop();
+  }, [isTyping]);
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
+      <Animated.View style={{
+        width: 35,
+        height: 35,
+        borderRadius: 21,
+        backgroundColor: colors.foreground,
+        alignItems: 'center',
+        justifyContent: 'center',
+        transform: [{ scale }]
+      }}>
+        <MaterialIcons name="record-voice-over" size={24} color={colors.card} />
+      </Animated.View>
+    </TouchableOpacity>
   );
 }
 
@@ -798,44 +878,88 @@ const createDynamicStyles = (colors: any) => StyleSheet.create({
     backgroundColor: colors.muted,
   },
   messagesList: {
-    paddingVertical: spacing.lg,
-    flexGrow: 1,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xl,
   },
+
+  // New Input Bar Styles
   inputContainer: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.card,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    backgroundColor: colors.background,
   },
-  inputWrapper: {
+  inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: spacing.sm,
   },
-  input: {
+  addButton: {
+    width: 35,
+    height: 35,
+    borderRadius: 21,
+    backgroundColor: '#FFFFFF', // Specifically white as requested
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 0,
+    borderWidth: 1,
+    borderColor: colors.border, // Add a subtle border since it's white on background
+  },
+  inputPill: {
     flex: 1,
-    minHeight: 44,
-    maxHeight: 120,
+    maxHeight: 45,
+    minHeight: 45,
+    backgroundColor: colors.card,
+    borderRadius: 21,
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.lg,
-    backgroundColor: colors.background,
+    paddingVertical: spacing.xs, // Allow multiline to expand
     borderWidth: 1,
     borderColor: colors.border,
+
+  },
+  input: {
+    flex: 1,
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.base,
     color: colors.foreground,
+    maxHeight: 120,
+    paddingTop: Platform.OS === 'ios' ? 12 : 8,
+    paddingBottom: Platform.OS === 'ios' ? 11 : 8,
+    marginRight: spacing.sm,
   },
-  sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: borderRadius.lg,
-    backgroundColor: colors.primary,
-    justifyContent: 'center',
+  voiceModeButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.foreground, // Dark/Light contrast
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  sendButtonDisabled: {
-    backgroundColor: colors.muted,
+
+  // Image Preview
+  imagePreviewContainer: {
+    flexDirection: 'row',
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.sm,
+  },
+  imagePreview: {
+    width: 80,
+    height: 80,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: -6,
+    left: 70, // Offset from image edge
+    backgroundColor: colors.destructive,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
   },
 });
