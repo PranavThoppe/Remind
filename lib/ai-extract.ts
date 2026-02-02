@@ -16,6 +16,7 @@ export interface ExtractReminderFieldsResponse {
 export interface ExtractReminderFieldsParams {
   query: string;
   user_id: string; // Required for MVP mode
+  image?: string; // Optional base64 image data
   conversation?: ChatMessage[];
   modalContext?: {
     isOpen: boolean;
@@ -58,13 +59,15 @@ export async function extractReminderFields(
         rank: p.rank,
         color: p.color,
       })),
+      image: params.image,
     };
 
-    console.log('[extractReminderFields] Sending request to:', `${SUPABASE_URL}/functions/v1/ai-extract-test`);
-    console.log('[extractReminderFields] Body:', JSON.stringify(requestBody, null, 2));
+    const functionName = params.image ? 'ai-vision-gemini' : 'ai-extract-test';
+    console.log(`[extractReminderFields] Sending request to: ${SUPABASE_URL}/functions/v1/${functionName}`);
+    console.log('[extractReminderFields] Body keys:', Object.keys(requestBody));
 
     // Call edge function - MVP mode using service role key + admin secret
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-extract-test`, {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/${functionName}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
