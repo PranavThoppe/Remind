@@ -225,7 +225,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.md,
     gap: spacing.sm,
@@ -241,7 +241,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     color: colors.foreground,
   },
   todayLabel: {
-    color: colors.primary,
+    color: '#FFFFFF',
   },
   dateLabel: {
     fontFamily: typography.fontFamily.regular,
@@ -297,9 +297,10 @@ const createStyles = (colors: any) => StyleSheet.create({
     flex: 1,
   },
   reminderTitle: {
-    fontFamily: typography.fontFamily.medium,
+    fontFamily: typography.fontFamily.title,
     fontSize: typography.fontSize.base,
     color: colors.foreground,
+    fontWeight: '600' as any,
   },
   completedText: {
     textDecorationLine: 'line-through',

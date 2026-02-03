@@ -10,6 +10,8 @@ import {
   Inter_600SemiBold,
   Inter_700Bold,
 } from '@expo-google-fonts/inter';
+import { PoiretOne_400Regular } from '@expo-google-fonts/poiret-one';
+import { DMSerifText_400Regular } from '@expo-google-fonts/dm-serif-text';
 import { useTheme } from '../hooks/useTheme';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { RemindersProvider, useRemindersContext } from '../contexts/RemindersContext';
@@ -35,7 +37,7 @@ function NotificationHandler() {
 
       if (actionId === 'complete' && id) {
         console.log(`Attempting to mark "${title || 'Unknown'}" as complete...`);
-        
+
         // toggleComplete now handles its own session check inside
         const result = await toggleComplete(id, false);
         if (result.error) {
@@ -52,7 +54,7 @@ function NotificationHandler() {
         const minutes = actionId === 'snooze-30' ? 30 : 60;
         const now = new Date();
         const snoozeDate = addMinutes(now, minutes);
-        
+
         const newDate = format(snoozeDate, 'yyyy-MM-dd');
         const newTime = format(snoozeDate, 'HH:mm');
 
@@ -109,6 +111,8 @@ function RootContent() {
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
+    PoiretOne_400Regular,
+    DMSerifText_400Regular,
   });
 
   useEffect(() => {

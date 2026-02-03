@@ -195,7 +195,7 @@ export default function AIChatScreen() {
     {
       id: 'welcome',
       role: 'assistant',
-      content: "Hi! I can help you create, find, or update reminders. Try saying 'What do I have tomorrow?' or 'Remind me to call mom at 5pm'",
+      content: "Hi! I can help you create, find, or update reminders.",
       timestamp: new Date(),
     },
   ]);
