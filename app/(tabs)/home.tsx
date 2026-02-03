@@ -25,6 +25,7 @@ import { Reminder } from '../../types/reminder';
 import { useReminders } from '../../hooks/useReminders';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useTheme } from '../../hooks/useTheme';
+import { AnimatedViewSelector } from '../../components/AnimatedViewSelector';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -225,30 +226,11 @@ export default function HomeScreen() {
             <Text style={styles.greeting}>{greeting()} ✨</Text>
           </View>
 
-          {/* View Mode Toggle */}
-          <View style={styles.toggleContainer}>
-            <TouchableOpacity
-              style={[styles.toggleButton, viewMode === 'list' && styles.toggleButtonActive]}
-              onPress={() => setViewMode('list')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.toggleText, viewMode === 'list' && styles.toggleTextActive]}>List</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.toggleButton, viewMode === 'week' && styles.toggleButtonActive]}
-              onPress={() => setViewMode('week')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.toggleText, viewMode === 'week' && styles.toggleTextActive]}>Week</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.toggleButton, viewMode === 'calendar' && styles.toggleButtonActive]}
-              onPress={() => setViewMode('calendar')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.toggleText, viewMode === 'calendar' && styles.toggleTextActive]}>Calendar</Text>
-            </TouchableOpacity>
-          </View>
+          {/* View Mode Selector */}
+          <AnimatedViewSelector
+            currentView={viewMode}
+            onViewChange={setViewMode}
+          />
         </View>
       </View>
 
@@ -388,50 +370,17 @@ const createStyles = (colors: any) => StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
   },
-  toggleContainer: {
-    flexDirection: 'row',
-    backgroundColor: colors.muted,
-    padding: 4,
-    borderRadius: borderRadius.md,
-    gap: 4,
-  },
-  toggleButton: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.sm,
-  },
-  toggleButtonActive: {
-    backgroundColor: colors.card,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
-  },
-  toggleText: {
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    color: colors.mutedForeground,
-  },
-  toggleTextActive: {
-    color: colors.foreground,
-  },
   dateText: {
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.base,
     color: colors.mutedForeground,
   },
   greeting: {
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize['2xl'],
+    fontFamily: typography.fontFamily.display,
+    fontSize: typography.fontSize['3xl'],
     color: colors.foreground,
     marginTop: 2,
+    fontWeight: '600' as any,
   },
   loadingContainer: {
     flex: 1,

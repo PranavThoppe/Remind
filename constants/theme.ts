@@ -136,6 +136,8 @@ export const typography = {
     medium: 'Inter_500Medium',
     semibold: 'Inter_600SemiBold',
     bold: 'Inter_700Bold',
+    display: 'PoiretOne_400Regular', // For headings and special text (greeting)
+    title: 'DMSerifText_400Regular', // For reminder titles
   },
   fontSize: {
     xs: 10,

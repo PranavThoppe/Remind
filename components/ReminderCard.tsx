@@ -291,11 +291,12 @@ const createStyles = (colors: any) => StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.lg,
+    fontFamily: typography.fontFamily.title,
+    fontSize: typography.fontSize.xl,
     color: colors.foreground,
-    lineHeight: 22,
+    lineHeight: 24,
     flexShrink: 1,
+    fontWeight: '600' as any,
   },
   titleRow: {
     flexDirection: 'row',
