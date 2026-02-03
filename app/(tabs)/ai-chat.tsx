@@ -28,6 +28,7 @@ import { ChatMessage, ModalFieldUpdates, MockAIResponse } from '../../types/ai-c
 import { Reminder } from '../../types/reminder';
 import { scheduleReminderNotification } from '../../lib/notifications';
 import { extractReminderFields, searchReminders } from '../../lib/ai-extract';
+import { VoiceModeButton } from '../../components/voice/VoiceModeButton';
 
 // Typing indicator component
 function TypingIndicator({ colors }: { colors: any }) {
@@ -201,6 +202,7 @@ export default function AIChatScreen() {
   const [inputText, setInputText] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isThinking, setIsThinking] = useState(false);
+  const [isVoiceActive, setIsVoiceActive] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
@@ -733,17 +735,20 @@ export default function AIChatScreen() {
           </View>
 
 
-          {/* Pulsating Brain Mode Button */}
-          <PulsatingBrainButton
+          {/* Voice Mode Button */}
+          <VoiceModeButton
             colors={colors}
-            isTyping={inputText.length > 0}
-            onPress={() => Alert.alert("Coming Soon", "Live Vision mode is under development!")}
+            userId={user?.id}
+            onSessionUpdate={setIsVoiceActive}
           />
         </View>
       </View>
     </KeyboardAvoidingView>
   );
 }
+
+// Remove the now unused component
+// function PulsatingBrainButton ...
 
 // Separate component to handle its own animation cycle
 function PulsatingBrainButton({ colors, isTyping, onPress }: { colors: any, isTyping: boolean, onPress: () => void }) {
