@@ -584,7 +584,7 @@ export default function AIChatScreen() {
       {
         id: 'welcome',
         role: 'assistant',
-        content: "Hi! I can help you create, find, or update reminders. Try saying 'What do I have tomorrow?' or 'Remind me to call mom at 5pm'",
+        content: "Hi! I can help you create, find, or update reminders.",
         timestamp: new Date(),
       },
     ]);
@@ -628,16 +628,13 @@ export default function AIChatScreen() {
         {/* Header */}
         <View style={[dynamicStyles.header, { paddingTop: insets.top + spacing.md }]}>
           <View style={dynamicStyles.headerContent}>
-            <View>
-              <Text style={dynamicStyles.headerTitle}>AI Assistant</Text>
-              <Text style={dynamicStyles.headerSubtitle}>Create reminders with natural language</Text>
-            </View>
+            <Text style={dynamicStyles.headerTitle}>Chat Mode</Text>
             <TouchableOpacity
               onPress={handleClearChat}
               style={dynamicStyles.clearButton}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Ionicons name="trash-outline" size={20} color={colors.mutedForeground} />
+              <Ionicons name="add" size={24} color={colors.mutedForeground} />
             </TouchableOpacity>
           </View>
         </View>
