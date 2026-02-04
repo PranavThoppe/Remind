@@ -80,7 +80,7 @@ export function InlineReminderPanel({
         return d;
     };
 
-    const formatDisplayDate = (dateStr?: string) => {
+    const formatDisplayDate = (dateStr?: string | null) => {
         if (!dateStr) return 'Add date';
         const d = new Date(dateStr + 'T00:00:00');
         if (isNaN(d.getTime())) return 'Add date';
@@ -88,7 +88,7 @@ export function InlineReminderPanel({
         return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
     };
 
-    const formatDisplayTime = (timeStr?: string) => {
+    const formatDisplayTime = (timeStr?: string | null) => {
         if (!timeStr) return 'Add time';
         const [hours, minutes] = timeStr.split(':').map(Number);
         if (isNaN(hours) || isNaN(minutes)) return 'Add time';
@@ -250,15 +250,39 @@ export function InlineReminderPanel({
                                 key={reminder.id}
                                 style={[
                                     styles.searchItem,
-                                    tag && {
+                                    tag && !reminder.completed && {
                                         backgroundColor: `${tag.color}${isDark ? '15' : '08'}`,
                                         borderColor: tag.color,
-                                    }
+                                    },
+                                    reminder.completed && styles.searchItemCompleted
                                 ]}
                                 onPress={() => onSelectReminder?.(reminder)}
                             >
+                                <View style={[
+                                    styles.searchCheckbox,
+                                    reminder.completed && styles.searchCheckboxCompleted,
+                                    tag && !reminder.completed && { borderColor: tag.color }
+                                ]}>
+                                    {reminder.completed && (
+                                        <Ionicons name="checkmark" size={10} color={colors.successForeground} />
+                                    )}
+                                </View>
                                 <View style={styles.searchContent}>
-                                    <Text style={styles.searchTitle} numberOfLines={1}>{reminder.title}</Text>
+                                    <View style={styles.searchTitleRow}>
+                                        <Text
+                                            style={[
+                                                styles.searchTitle,
+                                                tag && !reminder.completed && { color: tag.color },
+                                                reminder.completed && styles.searchTitleCompleted
+                                            ]}
+                                            numberOfLines={1}
+                                        >
+                                            {reminder.title}
+                                        </Text>
+                                        {tag && !reminder.completed && (
+                                            <View style={[styles.tagBadgeSmall, { backgroundColor: tag.color }]} />
+                                        )}
+                                    </View>
                                     <View style={styles.searchMeta}>
                                         {reminder.date && (
                                             <View style={styles.searchMetaItem}>
@@ -462,8 +486,8 @@ const createStyles = (colors: any) =>
             backgroundColor: colors.background,
             paddingHorizontal: spacing.md,
             paddingVertical: spacing.sm,
-            fontFamily: typography.fontFamily.regular,
-            fontSize: typography.fontSize.base,
+            fontFamily: typography.fontFamily.title,
+            fontSize: typography.fontSize.lg,
             color: colors.foreground,
             marginBottom: spacing.sm,
         },
@@ -562,8 +586,8 @@ const createStyles = (colors: any) =>
             color: colors.primary,
         },
         staticReminderTitle: {
-            fontFamily: typography.fontFamily.semibold,
-            fontSize: typography.fontSize.base,
+            fontFamily: typography.fontFamily.title,
+            fontSize: typography.fontSize.xl,
             color: colors.foreground,
             marginBottom: spacing.xs,
         },
@@ -609,16 +633,48 @@ const createStyles = (colors: any) =>
             marginBottom: spacing.xs,
             borderWidth: 1,
             borderColor: colors.border,
+            gap: spacing.sm,
+        },
+        searchItemCompleted: {
+            opacity: 0.6,
+            backgroundColor: colors.muted + '50',
+        },
+        searchCheckbox: {
+            width: 18,
+            height: 18,
+            borderRadius: 9,
+            borderWidth: 1.5,
+            borderColor: colors.mutedForeground + '40',
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        searchCheckboxCompleted: {
+            backgroundColor: colors.success,
+            borderColor: colors.success,
         },
         searchContent: {
             flex: 1,
-            marginRight: spacing.sm,
         },
         searchTitle: {
-            fontFamily: typography.fontFamily.medium,
-            fontSize: typography.fontSize.sm,
+            fontFamily: typography.fontFamily.title,
+            fontSize: typography.fontSize.lg,
             color: colors.foreground,
+            flexShrink: 1,
+        },
+        searchTitleCompleted: {
+            textDecorationLine: 'line-through',
+            color: colors.mutedForeground,
+        },
+        searchTitleRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.xs,
             marginBottom: 2,
+        },
+        tagBadgeSmall: {
+            width: 6,
+            height: 6,
+            borderRadius: 3,
         },
         searchMeta: {
             flexDirection: 'row',
