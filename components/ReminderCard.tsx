@@ -1,4 +1,5 @@
 import { useRef, useEffect } from 'react';
+import { isToday } from 'date-fns';
 import {
   View,
   Text,
@@ -215,12 +216,14 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
 
               {/* Meta Info */}
               <View style={styles.metaContainer}>
-                {reminder.time && (
+                {(reminder.time || (reminder.date && isToday(new Date(reminder.date + 'T00:00:00')))) ? (
                   <View style={styles.metaItem}>
                     <Ionicons name="time-outline" size={14} color={isBirthday && !reminder.completed ? 'rgba(0,0,0,0.6)' : colors.mutedForeground} />
-                    <Text style={[styles.metaText, isBirthday && !reminder.completed && styles.birthdayMetaText]}>{formatTime(reminder.time)}</Text>
+                    <Text style={[styles.metaText, isBirthday && !reminder.completed && styles.birthdayMetaText]}>
+                      {reminder.time ? formatTime(reminder.time) : 'Anytime'}
+                    </Text>
                   </View>
-                )}
+                ) : null}
               </View>
             </View>
           </View>

@@ -43,20 +43,27 @@ export const DaySection = ({
     return format(date, 'EEEE, MMMM d');
   };
 
+  const dateLabel = date ? getDateLabel(date) : null;
+  const isTodayOrTomorrow = dateLabel === 'Today' || dateLabel === 'Tomorrow';
+  const headerText = title || (isTodayOrTomorrow ? dateLabel : null);
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <Text style={[styles.sectionHeader, headerColor ? { color: headerColor } : null]}>
-          {title || (date ? getDateLabel(date) : '')}
-        </Text>
-        {showSort && onSortChange && currentSort && (
-          <SortSelector
-            currentSort={currentSort}
-            onSortChange={onSortChange}
-          />
-        )}
-      </View>
+      {(headerText || (showSort && onSortChange && currentSort)) && (
+        <View style={styles.headerRow}>
+          {headerText && (
+            <Text style={[styles.sectionHeader, headerColor ? { color: headerColor } : null]}>
+              {headerText}
+            </Text>
+          )}
+          {showSort && onSortChange && currentSort && (
+            <SortSelector
+              currentSort={currentSort}
+              onSortChange={onSortChange}
+            />
+          )}
+        </View>
+      )}
       <View style={styles.remindersList}>
         {reminders.map((reminder, index) => (
           <ReminderCard

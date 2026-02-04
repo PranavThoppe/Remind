@@ -151,12 +151,12 @@ function MessageBubble({
             </Text>
           ) : (
             // AI messages: Highlight tags if they appear in text
-            <Text style={[styles.messageText, { color: colors.foreground }]}>
+            <Text style={[styles.aiMessageText, { color: colors.foreground }]}>
               {message.content.split(/(\b\w+\b)/g).map((part, i) => {
                 const tag = tags.find(t => t.name.toLowerCase() === part.toLowerCase());
                 if (tag) {
                   return (
-                    <Text key={i} style={{ color: tag.color, fontWeight: 'bold' }}>
+                    <Text key={i} style={{ color: tag.color, fontWeight: 'regular' }}>
                       {part}
                     </Text>
                   );
@@ -616,7 +616,7 @@ export default function AIChatScreen() {
     }
   }, [messages, isThinking]);
 
-  const dynamicStyles = createDynamicStyles(colors);
+  const dynamicStyles = createDynamicStyles(colors, insets);
 
   return (
     <KeyboardAvoidingView
@@ -664,14 +664,7 @@ export default function AIChatScreen() {
       </View>
 
       {/* Input Area */}
-      <View
-        style={[
-          dynamicStyles.inputContainer,
-          {
-            paddingBottom: Math.max(insets.bottom, spacing.md),
-          },
-        ]}
-      >
+      <View style={dynamicStyles.inputContainer}>
         {/* Image Preview - Shows above input if selected */}
         {selectedImage && (
           <View style={dynamicStyles.imagePreviewContainer}>
@@ -833,6 +826,11 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.base,
     lineHeight: 22,
   },
+  aiMessageText: {
+    fontFamily: typography.fontFamily.title,
+    fontSize: typography.fontSize.lg,
+    lineHeight: 22,
+  },
   typingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -846,7 +844,7 @@ const styles = StyleSheet.create({
   },
 });
 
-const createDynamicStyles = (colors: any) => StyleSheet.create({
+const createDynamicStyles = (colors: any, insets: any) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -864,8 +862,8 @@ const createDynamicStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xl,
+    fontFamily: typography.fontFamily.title,
+    fontSize: typography.fontSize['2xl'],
     color: colors.foreground,
   },
   headerSubtitle: {
@@ -881,13 +879,14 @@ const createDynamicStyles = (colors: any) => StyleSheet.create({
   },
   messagesList: {
     paddingTop: spacing.lg,
-    paddingBottom: spacing.xl,
+    paddingBottom: 48 + insets.bottom + spacing.xl,
   },
 
   // New Input Bar Styles
   inputContainer: {
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
+    paddingBottom: 25 + insets.bottom,
     backgroundColor: colors.background,
   },
   inputRow: {

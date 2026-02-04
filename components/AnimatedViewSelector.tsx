@@ -282,6 +282,10 @@ const styles = StyleSheet.create({
     imageContainer: {
         width: 60,
         height: 60,
+        overflow: 'hidden',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRadius: borderRadius.sm,
     },
     labelContainer: {
         paddingVertical: spacing.xs,
@@ -291,6 +295,7 @@ const styles = StyleSheet.create({
     previewImage: {
         width: '100%',
         height: '100%',
+        transform: [{ scale: 1.5 }], // Zoom in to crop out empty padding
     },
     optionLabel: {
         fontFamily: typography.fontFamily.semibold,
