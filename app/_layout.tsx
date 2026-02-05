@@ -45,13 +45,48 @@ function NotificationHandler() {
         } else {
           console.log(`Successfully marked "${title || 'Unknown'}" as complete`);
         }
-      } else if (actionId === 'snooze-30' || actionId === 'snooze-60') {
+      } else if (actionId?.startsWith('snooze-')) {
         if (!title) {
           console.error('Cannot snooze: Title is missing from notification data');
           return;
         }
 
-        const minutes = actionId === 'snooze-30' ? 30 : 60;
+        let minutes = 60; // Default 1 hour
+
+        if (actionId === 'snooze-15') {
+          minutes = 15;
+        } else if (actionId === 'snooze-60') {
+          minutes = 60;
+        } else if (actionId === 'snooze-custom') {
+          const text = (response as any).userText;
+          if (text) {
+            const lowerText = text.toLowerCase().trim();
+
+            // Handle "tomorrow" or "tmw"
+            if (lowerText.includes('tomorrow') || lowerText.includes('tmw')) {
+              minutes = 24 * 60; // 24 hours
+            }
+            // Try parsing "1.5h" or "2h"
+            else if (lowerText.includes('h')) {
+              const hours = parseFloat(lowerText.replace('h', ''));
+              if (!isNaN(hours)) {
+                minutes = Math.round(hours * 60);
+              }
+            } else {
+              // Try parsing straight number as minutes
+              const parsed = parseInt(lowerText, 10);
+              if (!isNaN(parsed) && parsed > 0) {
+                minutes = parsed;
+              } else {
+                // Potential Error Solution: If input is invalid (e.g. "hi"), 
+                // default to 60m so the reminder isn't lost.
+                minutes = 60;
+                console.log(`[NotificationHandler] Invalid input "${text}", defaulting to 60m`);
+              }
+            }
+          }
+        }
+
         const now = new Date();
         const snoozeDate = addMinutes(now, minutes);
 

@@ -72,7 +72,7 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const styles = createStyles(colors);
-  
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(8)).current;
   const { user, profile, signOut } = useAuth();
@@ -193,7 +193,7 @@ export default function SettingsScreen() {
               onPress={() => setShowThemeSelector(!showThemeSelector)}
               colors={colors}
             />
-            
+
             {showThemeSelector && (
               <View style={styles.themeSelector}>
                 {(['system', 'light', 'dark'] as ThemeType[]).map((t) => (
@@ -205,6 +205,7 @@ export default function SettingsScreen() {
                     ]}
                     onPress={() => {
                       setTheme(t);
+                      setShowThemeSelector(false);
                       // On some systems Appearance changes don't trigger immediately, 
                       // but here we rely on SettingsContext -> useTheme
                     }}
@@ -225,6 +226,12 @@ export default function SettingsScreen() {
 
             <SettingItem
               icon="time-outline"
+              label="Common Times"
+              onPress={() => router.push('/settings/common-times')}
+              colors={colors}
+            />
+            <SettingItem
+              icon="calendar-outline"
               label="Date & Time"
               onPress={() => router.push('/settings/datetime')}
               isLast
@@ -238,7 +245,7 @@ export default function SettingsScreen() {
               icon="information-circle-outline"
               label="About"
               value="v1.0.0"
-              onPress={() => {}}
+              onPress={() => { }}
               isLast
               colors={colors}
             />
@@ -280,7 +287,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     backgroundColor: colors.background,
   },
   title: {
-    fontFamily: typography.fontFamily.bold,
+    fontFamily: typography.fontFamily.title,
     fontSize: typography.fontSize['2xl'],
     color: colors.foreground,
   },

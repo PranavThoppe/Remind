@@ -33,7 +33,7 @@ const viewOptions: ViewOption[] = [
         label: 'List',
         icon: 'list',
         description: 'Organized by date',
-        image: require('../assets/List.png'),
+        image: require('../assets/List.jpeg'),
     },
     {
         mode: 'week',
@@ -47,7 +47,7 @@ const viewOptions: ViewOption[] = [
         label: 'Calendar',
         icon: 'calendar',
         description: 'Monthly view',
-        image: require('../assets/Cal.png'),
+        image: require('../assets/Cal.jpeg'),
     },
 ];
 
@@ -216,6 +216,20 @@ export const AnimatedViewSelector: React.FC<AnimatedViewSelectorProps> = ({
                                                     resizeMode="cover"
                                                 />
                                             </View>
+                                            <View style={styles.labelContainer}>
+                                                <Text
+                                                    style={[
+                                                        styles.optionLabel,
+                                                        {
+                                                            color: isSelected
+                                                                ? colors.primaryForeground
+                                                                : colors.foreground,
+                                                        },
+                                                    ]}
+                                                >
+                                                    {option.label}
+                                                </Text>
+                                            </View>
                                         </TouchableOpacity>
                                     </Animated.View>
                                 );
@@ -251,14 +265,14 @@ const styles = StyleSheet.create({
     },
     optionsContainer: {
         borderRadius: borderRadius.lg,
-        padding: spacing.md,
-        gap: spacing.sm,
+        padding: spacing.sm,
+        flexDirection: 'row',
+        gap: spacing.xs,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.15,
         shadowRadius: 12,
         elevation: 8,
-        minWidth: 200,
     },
     optionCard: {
         borderRadius: borderRadius.md,
@@ -266,16 +280,26 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
     },
     imageContainer: {
-        width: 120,
-        height: 120,
+        width: 60,
+        height: 60,
+        overflow: 'hidden',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderRadius: borderRadius.sm,
+    },
+    labelContainer: {
+        paddingVertical: spacing.xs,
+        paddingHorizontal: spacing.xs,
+        alignItems: 'center',
     },
     previewImage: {
         width: '100%',
         height: '100%',
+        transform: [{ scale: 1.5 }], // Zoom in to crop out empty padding
     },
     optionLabel: {
         fontFamily: typography.fontFamily.semibold,
-        fontSize: typography.fontSize.sm,
+        fontSize: typography.fontSize.xs,
     },
     optionDescription: {
         fontFamily: typography.fontFamily.regular,

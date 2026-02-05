@@ -6,7 +6,8 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { shadows, borderRadius } from '../constants/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { shadows } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 
 interface FloatingAddButtonProps {
@@ -15,7 +16,8 @@ interface FloatingAddButtonProps {
 
 export function FloatingAddButton({ onPress }: FloatingAddButtonProps) {
   const { colors } = useTheme();
-  const styles = createStyles(colors);
+  const insets = useSafeAreaInsets();
+  const styles = createStyles(colors, insets);
 
   const scaleAnim = useRef(new Animated.Value(0)).current;
 
@@ -66,11 +68,11 @@ export function FloatingAddButton({ onPress }: FloatingAddButtonProps) {
   );
 }
 
-const createStyles = (colors: any) => StyleSheet.create({
+const createStyles = (colors: any, insets: any) => StyleSheet.create({
   container: {
     position: 'absolute',
     right: 20,
-    bottom: 32,
+    bottom: 32 + insets.bottom,
     zIndex: 30,
   },
   button: {

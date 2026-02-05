@@ -290,9 +290,34 @@ If no date is mentioned, return startDate: null.`
       }
     })
 
-    const topResults = Array.from(allResults.values())
+    const topResultsRaw = Array.from(allResults.values())
       .sort((a, b) => b.score - a.score)
       .slice(0, 10)
+
+    // Step 5.5: Hydrate results with full metadata from reminders table
+    // This ensures tag_id, priority_id, etc. are always present regardless of search source
+    const resultIds = topResultsRaw.map(r => r.reminder_id)
+    let topResults = topResultsRaw
+
+    if (resultIds.length > 0) {
+      const { data: fullReminders, error: hydrateError } = await supabase
+        .from('reminders')
+        .select('*')
+        .in('id', resultIds)
+
+      if (!hydrateError && fullReminders) {
+        topResults = topResultsRaw.map(raw => {
+          const full = fullReminders.find(f => f.id === raw.reminder_id)
+          if (!full) return raw
+          return {
+            ...full,
+            reminder_id: full.id, // Ensure we keep reminder_id for compatibility
+            source: raw.source,
+            score: raw.score
+          }
+        })
+      }
+    }
 
     // Step 6: Deterministically filter reminders for target date
     // KEY IMPROVEMENT: We do the "does this reminder exist?" check in CODE, not in the LLM.

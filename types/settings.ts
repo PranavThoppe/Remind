@@ -30,3 +30,17 @@ export const DEFAULT_TAGS: Tag[] = [
   { id: '2', name: 'Work', color: '#F59E0B' },
   { id: '3', name: 'Urgent', color: '#EC4899' },
 ];
+
+export interface CommonTimes {
+  morning: string;   // HH:mm
+  afternoon: string; // HH:mm
+  evening: string;   // HH:mm
+  night: string;     // HH:mm
+}
+
+export const DEFAULT_COMMON_TIMES: CommonTimes = {
+  morning: '08:00',
+  afternoon: '13:00',
+  evening: '18:00',
+  night: '21:00',
+};
