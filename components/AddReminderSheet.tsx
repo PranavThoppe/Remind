@@ -66,7 +66,7 @@ export function AddReminderSheet({
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
-  const { tags, priorities, addTag, addPriority } = useSettings();
+  const { tags, priorities, addTag, addPriority, commonTimes } = useSettings();
 
   const [isAddingTag, setIsAddingTag] = useState(false);
   const [newTagName, setNewTagName] = useState('');
@@ -326,7 +326,8 @@ export function AddReminderSheet({
         dateString,
         time || undefined,
         repeat,
-        savedReminder.id // Pass the ID for completion logic
+        savedReminder.id, // Pass the ID for completion logic
+        commonTimes // Pass common times for default logic
       ).catch(err => console.error('[AddReminderSheet] Failed to schedule notification:', err));
     } else {
       console.log('[AddReminderSheet] Skipping notification scheduling:', { hasError: !!error, hasSavedReminder: !!savedReminder, hasDateString: !!dateString });
@@ -506,6 +507,36 @@ export function AddReminderSheet({
                 </TouchableOpacity>
               </Animated.View>
             </View>
+
+            {/* Common Times Quick Pickers */}
+            {!time && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.commonTimesScroll}
+              >
+                {(Object.keys(commonTimes) as (keyof typeof commonTimes)[]).map((key) => (
+                  <TouchableOpacity
+                    key={key}
+                    style={styles.commonTimeChip}
+                    onPress={() => setTime(commonTimes[key])}
+                  >
+                    <Ionicons
+                      name={
+                        key === 'morning' ? 'sunny-outline' :
+                          key === 'afternoon' ? 'partly-sunny-outline' :
+                            key === 'evening' ? 'moon-outline' : 'cloudy-night-outline'
+                      }
+                      size={14}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.commonTimeChipText}>
+                      {key.charAt(0).toUpperCase() + key.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
 
             {/* Time Picker Modal */}
             {showTimePicker && (
@@ -1064,5 +1095,26 @@ const createStyles = (colors: any) => StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  commonTimesScroll: {
+    marginTop: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  commonTimeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    marginRight: spacing.sm,
+  },
+  commonTimeChipText: {
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    color: colors.mutedForeground,
   },
 });

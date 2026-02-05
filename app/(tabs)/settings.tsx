@@ -226,6 +226,12 @@ export default function SettingsScreen() {
 
             <SettingItem
               icon="time-outline"
+              label="Common Times"
+              onPress={() => router.push('/settings/common-times')}
+              colors={colors}
+            />
+            <SettingItem
+              icon="calendar-outline"
               label="Date & Time"
               onPress={() => router.push('/settings/datetime')}
               isLast

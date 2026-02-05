@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { CommonTimes } from '../types/settings';
 
 /**
  * Request permissions and set up notification handler
@@ -83,6 +84,7 @@ export async function initializeNotifications() {
  * @param time Time string (HH:mm)
  * @param repeat Optional repeat pattern
  * @param id Optional reminder ID for actions
+ * @param commonTimes Optional common times for default logic
  * @returns notification identifier string
  */
 export async function scheduleReminderNotification(
@@ -90,11 +92,48 @@ export async function scheduleReminderNotification(
   date: string,
   time?: string,
   repeat?: 'none' | 'daily' | 'weekly' | 'monthly',
-  id?: string
+  id?: string,
+  commonTimes?: CommonTimes
 ): Promise<string | null> {
   try {
     const [year, month, day] = date.split('-').map(Number);
-    const timeParts = (time || '09:00').split(':').map(Number);
+
+    // Determine default time if not provided
+    let finalTime = time;
+    if (!finalTime && commonTimes) {
+      const now = new Date();
+      const isToday = now.getFullYear() === year && (now.getMonth() + 1) === month && now.getDate() === day;
+
+      if (isToday) {
+        // Find the next logical common time
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+        const currentTimeInMinutes = currentHour * 60 + currentMinute;
+
+        const times = [
+          { key: 'morning', value: commonTimes.morning },
+          { key: 'afternoon', value: commonTimes.afternoon },
+          { key: 'evening', value: commonTimes.evening },
+          { key: 'night', value: commonTimes.night },
+        ];
+
+        for (const t of times) {
+          const [h, m] = t.value.split(':').map(Number);
+          const timeInMinutes = h * 60 + m;
+          if (timeInMinutes > currentTimeInMinutes + 5) { // 5 min buffer
+            finalTime = t.value;
+            break;
+          }
+        }
+
+        // If all common times passed for today, or none found, we'll default to 09:00 below
+      } else {
+        // If it's a future date, default to the user's morning time
+        finalTime = commonTimes.morning;
+      }
+    }
+
+    const timeParts = (finalTime || '09:00').split(':').map(Number);
     const hour = isNaN(timeParts[0]) ? 9 : timeParts[0];
     const minute = isNaN(timeParts[1]) ? 0 : timeParts[1];
 
