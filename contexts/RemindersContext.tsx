@@ -17,14 +17,14 @@ interface RemindersContextType {
 const RemindersContext = createContext<RemindersContextType | undefined>(undefined);
 
 export function RemindersProvider({ children }: { children: React.ReactNode }) {
-  const { user, loading: authLoading } = useAuth();
+  const { user, session, loading: authLoading } = useAuth();
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchReminders = useCallback(async () => {
     // Don't fetch if auth is still loading or if we don't have a user
     if (authLoading) return;
-    
+
     if (!user) {
       setReminders([]);
       setLoading(false);
@@ -52,7 +52,7 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [user, authLoading]);
+  }, [user, session?.access_token, authLoading]);
 
   useEffect(() => {
     fetchReminders();
@@ -61,9 +61,9 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
   const getNextDate = (dateStr: string | undefined, repeat: 'daily' | 'weekly' | 'monthly'): string | undefined => {
     // We use T00:00:00 to ensure it's parsed as local time
     const baseDate = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
-    
+
     if (isNaN(baseDate.getTime())) return undefined;
-    
+
     let nextDate: Date;
     switch (repeat) {
       case 'daily':
@@ -78,7 +78,7 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
       default:
         return undefined;
     }
-    
+
     return format(nextDate, 'yyyy-MM-dd');
   };
 
@@ -113,7 +113,7 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
 
     try {
       console.log(`[RemindersContext] Toggling reminder ${id} to ${newStatus}`);
-      
+
       // Ensure we have a session before updating
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -138,7 +138,7 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
 
       // Update local state if the reminder exists in our list
       const reminder = reminders.find((r) => r.id === id);
-      
+
       setReminders(prev => prev.map((r) =>
         r.id === id ? { ...r, completed: newStatus } : r
       ));
@@ -147,8 +147,8 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
       // If we don't have the reminder in state, we might miss the repeating logic
       // This is a trade-off for background actions. 
       if (newStatus && reminder && reminder.repeat && reminder.repeat !== 'none') {
-        const nextDate = getNextDate(reminder.date, reminder.repeat);
-        
+        const nextDate = getNextDate(reminder.date || undefined, reminder.repeat);
+
         const nextReminder = {
           title: reminder.title,
           date: nextDate,

@@ -355,7 +355,7 @@ export default function HomeScreen() {
         <View style={styles.headerTop}>
           <View>
             <Text style={styles.dateText}>{formatDate()}</Text>
-            <Text style={styles.greeting}>{greeting()} ✨</Text>
+            <Text style={styles.greeting}>{greeting()}</Text>
           </View>
 
           {/* View Mode Selector */}
@@ -452,7 +452,7 @@ export default function HomeScreen() {
                     </View>
                   )}
                   <View style={styles.remindersList}>
-                    {item.reminders.map((reminder, index) => (
+                    {item.reminders.map((reminder: Reminder, index: number) => (
                       <ReminderCard
                         key={reminder.id}
                         reminder={reminder}
@@ -480,7 +480,7 @@ export default function HomeScreen() {
                 onSortChange={setSortMode as any}
                 currentSort={sortMode}
                 showSort={
-                  groupIndex === 0 || ((item as any).date && isToday((item as any).date))
+                  groupIndex === 0
                 }
               />
             );
