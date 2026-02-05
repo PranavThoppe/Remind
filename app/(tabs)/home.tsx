@@ -64,7 +64,21 @@ export default function HomeScreen() {
   const activeReminders = useMemo(() => {
     return reminders.filter(r => {
       // Always show incomplete reminders
-      if (!r.completed) return true;
+      if (!r.completed) {
+        // Special logic for birthdays: only show if within 7 days
+        const isBirthday = r.title.toLowerCase().includes('birthday');
+        if (isBirthday && r.date) {
+          const reminderDate = new Date(r.date + 'T00:00:00');
+          const today = startOfDay(new Date());
+          const nextWeek = addDays(today, 7);
+
+          // If it's a birthday and not within the next 7 days (and not today/past), hide it
+          if (isAfter(reminderDate, nextWeek)) {
+            return false;
+          }
+        }
+        return true;
+      }
 
       // Show recently completed reminders
       if (recentlyCompletedIds.has(r.id)) return true;

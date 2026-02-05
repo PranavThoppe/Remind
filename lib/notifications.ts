@@ -29,25 +29,35 @@ export async function initializeNotifications() {
     }),
   });
 
-  // Define notification categories for actions
-  await Notifications.setNotificationCategoryAsync('reminder-actions', [
+  await Notifications.setNotificationCategoryAsync('reminder-snooze-v1', [
     {
       identifier: 'complete',
       buttonTitle: '✅ Mark as Complete',
       options: {
-        opensAppToForeground: true,
+        opensAppToForeground: true, // Opens app to update UI state immediately
       },
     },
     {
-      identifier: 'snooze-30',
-      buttonTitle: '⏳ Snooze 30 Min',
+      identifier: 'snooze-15',
+      buttonTitle: '15m',
       options: {
         opensAppToForeground: false,
       },
     },
     {
       identifier: 'snooze-60',
-      buttonTitle: '⏳ Snooze 1 Hour',
+      buttonTitle: '1h',
+      options: {
+        opensAppToForeground: false,
+      },
+    },
+    {
+      identifier: 'snooze-custom',
+      buttonTitle: 'Custom Snooze...',
+      textInput: {
+        submitButtonTitle: 'Snooze',
+        placeholder: 'e.g., "30" or "1.5h"',
+      },
       options: {
         opensAppToForeground: false,
       },
@@ -89,13 +99,13 @@ export async function scheduleReminderNotification(
     const minute = isNaN(timeParts[1]) ? 0 : timeParts[1];
 
     const triggerDate = new Date(year, month - 1, day, hour, minute);
-    
+
     // Check if date is valid
     if (isNaN(triggerDate.getTime())) {
       console.error('[Notifications] Invalid date/time for notification:', { date, time, year, month, day, hour, minute });
       return null;
     }
-    
+
     const isRepeating = repeat && repeat !== 'none';
     const isPast = triggerDate.getTime() <= Date.now();
 
@@ -158,7 +168,7 @@ export async function scheduleReminderNotification(
         body: 'Long-press for options',
         sound: true,
         priority: Notifications.AndroidNotificationPriority.HIGH,
-        categoryIdentifier: 'reminder-actions',
+        categoryIdentifier: 'reminder-snooze-v1',
         data: {
           title,
           date,

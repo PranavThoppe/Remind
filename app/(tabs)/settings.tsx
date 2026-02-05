@@ -205,6 +205,7 @@ export default function SettingsScreen() {
                     ]}
                     onPress={() => {
                       setTheme(t);
+                      setShowThemeSelector(false);
                       // On some systems Appearance changes don't trigger immediately, 
                       // but here we rely on SettingsContext -> useTheme
                     }}
