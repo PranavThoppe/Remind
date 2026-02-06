@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import * as React from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { addDays, addWeeks, addMonths, format, parseISO } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
@@ -12,6 +13,7 @@ interface RemindersContextType {
   updateReminder: (id: string, updates: Partial<Omit<Reminder, 'id' | 'user_id' | 'created_at'>>) => Promise<{ data: Reminder | null; error: any }>;
   deleteReminder: (id: string) => Promise<{ error: any }>;
   refreshReminders: () => Promise<void>;
+  hasFetched: boolean;
 }
 
 const RemindersContext = createContext<RemindersContextType | undefined>(undefined);
@@ -20,6 +22,7 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
   const { user, session, loading: authLoading } = useAuth();
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasFetched, setHasFetched] = useState(false);
 
   const fetchReminders = useCallback(async () => {
     // Don't fetch if auth is still loading or if we don't have a user
@@ -44,6 +47,7 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
         console.error('Error fetching reminders:', error);
         setReminders([]);
       } else {
+        console.log(`Fetched ${data?.length || 0} reminders`);
         setReminders(data || []);
       }
     } catch (error) {
@@ -51,6 +55,7 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
       setReminders([]);
     } finally {
       setLoading(false);
+      setHasFetched(true);
     }
   }, [user, session?.access_token, authLoading]);
 
@@ -224,6 +229,7 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
     updateReminder,
     deleteReminder,
     refreshReminders: fetchReminders,
+    hasFetched,
   };
 
   return <RemindersContext.Provider value={value}>{children}</RemindersContext.Provider>;

@@ -1,3 +1,4 @@
+import * as React from 'react';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
@@ -32,7 +33,7 @@ export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const styles = createStyles(colors);
 
-  const { reminders, loading, addReminder, toggleComplete, refreshReminders, updateReminder, deleteReminder } = useReminders();
+  const { reminders, loading, addReminder, toggleComplete, refreshReminders, updateReminder, deleteReminder, hasFetched } = useReminders();
   const { tags, priorities, lastViewMode: viewMode, setLastViewMode: setViewMode, lastSortMode: sortMode, setLastSortMode: setSortMode } = useSettings();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
@@ -367,7 +368,7 @@ export default function HomeScreen() {
       </View>
 
       {/* Content */}
-      {loading && reminders.length === 0 ? (
+      {!hasFetched ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           {showRetry && (

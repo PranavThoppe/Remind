@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import * as React from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Tag, PriorityLevel, DEFAULT_TAGS, ThemeType, CommonTime, DEFAULT_COMMON_TIMES } from '../types/settings';
 import { supabase } from '../lib/supabase';
@@ -139,7 +140,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         .from('profiles')
         .select('last_view_mode, last_sort_mode')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error('Error fetching profile settings:', error);
