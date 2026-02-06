@@ -91,7 +91,7 @@ export async function scheduleReminderNotification(
   title: string,
   date: string,
   time?: string,
-  repeat?: 'none' | 'daily' | 'weekly' | 'monthly',
+  repeat?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly',
   id?: string,
   commonTimes?: CommonTime[]
 ): Promise<string | null> {
@@ -180,6 +180,16 @@ export async function scheduleReminderNotification(
         case 'monthly':
           trigger = {
             type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+            day: triggerDate.getDate(),
+            hour,
+            minute,
+            repeats: true,
+          };
+          break;
+        case 'yearly':
+          trigger = {
+            type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+            month: triggerDate.getMonth() + 1,
             day: triggerDate.getDate(),
             hour,
             minute,

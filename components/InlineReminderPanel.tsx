@@ -19,13 +19,14 @@ import { useSettings } from '../contexts/SettingsContext';
 import { ModalFieldUpdates } from '../types/ai-chat';
 import { Reminder } from '../types/reminder';
 
-type RepeatValue = 'none' | 'daily' | 'weekly' | 'monthly';
+type RepeatValue = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 const repeatOptions: { value: RepeatValue; label: string }[] = [
     { value: 'none', label: 'No repeat' },
     { value: 'daily', label: 'Daily' },
     { value: 'weekly', label: 'Weekly' },
     { value: 'monthly', label: 'Monthly' },
+    { value: 'yearly', label: 'Yearly' },
 ];
 
 interface InlineReminderPanelProps {

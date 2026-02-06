@@ -136,6 +136,11 @@ export default function HomeScreen() {
         .map(group => ({
           ...group,
           reminders: [...group.reminders].sort((a, b) => {
+            // Primary sort by date
+            const dateA = a.date ? new Date(a.date + 'T00:00:00').getTime() : Infinity;
+            const dateB = b.date ? new Date(b.date + 'T00:00:00').getTime() : Infinity;
+            if (dateA !== dateB) return dateA - dateB;
+
             if (a.time && b.time) return a.time.localeCompare(b.time);
             if (a.time) return -1;
             if (b.time) return 1;
@@ -174,6 +179,11 @@ export default function HomeScreen() {
         .map(group => ({
           ...group,
           reminders: [...group.reminders].sort((a, b) => {
+            // Primary sort by date
+            const dateA = a.date ? new Date(a.date + 'T00:00:00').getTime() : Infinity;
+            const dateB = b.date ? new Date(b.date + 'T00:00:00').getTime() : Infinity;
+            if (dateA !== dateB) return dateA - dateB;
+
             if (a.time && b.time) return a.time.localeCompare(b.time);
             if (a.time) return -1;
             if (b.time) return 1;

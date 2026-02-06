@@ -63,7 +63,7 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
     fetchReminders();
   }, [fetchReminders]);
 
-  const getNextDate = (dateStr: string | undefined, repeat: 'daily' | 'weekly' | 'monthly'): string | undefined => {
+  const getNextDate = (dateStr: string | undefined, repeat: 'daily' | 'weekly' | 'monthly' | 'yearly'): string | undefined => {
     // We use T00:00:00 to ensure it's parsed as local time
     const baseDate = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
 
@@ -79,6 +79,9 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
         break;
       case 'monthly':
         nextDate = addMonths(baseDate, 1);
+        break;
+      case 'yearly':
+        nextDate = addMonths(baseDate, 12);
         break;
       default:
         return undefined;

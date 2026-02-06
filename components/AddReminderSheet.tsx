@@ -41,6 +41,7 @@ const repeatOptions = [
   { value: 'daily' as const, label: 'Daily' },
   { value: 'weekly' as const, label: 'Weekly' },
   { value: 'monthly' as const, label: 'Monthly' },
+  { value: 'yearly' as const, label: 'Yearly' },
 ];
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -59,7 +60,7 @@ export function AddReminderSheet({
   const [title, setTitle] = useState('');
   const [date, setDate] = useState<Date | undefined>();
   const [time, setTime] = useState('');
-  const [repeat, setRepeat] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none');
+  const [repeat, setRepeat] = useState<'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'>('none');
   const [tagId, setTagId] = useState<string | null | undefined>();
   const [priorityId, setPriorityId] = useState<string | null | undefined>();
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -284,6 +285,19 @@ export function AddReminderSheet({
       ]).start();
     }
   }, [isOpen, liveMode, slideAnim, backdropAnim]);
+
+  const handleBackdropPress = () => {
+    if (keyboardHeight > 0) {
+      Keyboard.dismiss();
+      return;
+    }
+    if (showDatePicker || showTimePicker) {
+      setShowDatePicker(false);
+      setShowTimePicker(false);
+      return;
+    }
+    handleClose();
+  };
 
   const handleClose = () => {
     Keyboard.dismiss();
@@ -815,7 +829,7 @@ export function AddReminderSheet({
           },
         ]}
       >
-        <Pressable style={styles.backdropPressable} onPress={handleClose} />
+        <Pressable style={styles.backdropPressable} onPress={handleBackdropPress} />
       </Animated.View>
 
       {/* Sheet */}
