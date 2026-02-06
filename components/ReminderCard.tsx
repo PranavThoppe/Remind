@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Animated,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -139,12 +140,12 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
             opacity: fadeAnim,
             transform: [{ translateY: slideAnim }],
           },
-          reminder.completed && styles.containerCompleted,
         ]}
       >
         <TouchableOpacity
           style={[
             styles.card,
+            reminder.completed && styles.cardCompleted,
             tag && !reminder.completed && {
               backgroundColor: `${tag.color}${isDark ? '15' : '08'}`,
               borderLeftWidth: 1,
@@ -173,12 +174,13 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
 
           {isBirthday && !reminder.completed && <BirthdayArt />}
 
-          <View style={[styles.content, !reminder.time && { alignItems: 'center' }]}>
+          <View style={[styles.content, !reminder.time && { alignItems: 'center' }, { backgroundColor: 'transparent' }]}>
             {/* Checkbox */}
             <TouchableOpacity
               onPress={handleComplete}
               activeOpacity={0.7}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={{ backgroundColor: 'transparent' }}
             >
               <Animated.View
                 style={[
@@ -191,14 +193,14 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
                 ]}
               >
                 {reminder.completed && (
-                  <Ionicons name="checkmark" size={14} color={colors.successForeground} strokeWidth={3} />
+                  <Ionicons name="checkmark" size={14} color={colors.successForeground} />
                 )}
               </Animated.View>
             </TouchableOpacity>
 
             {/* Text Content */}
-            <View style={styles.textContent}>
-              <View style={[styles.titleRow, priority && { paddingRight: 24 }]}>
+            <View style={[styles.textContent, { backgroundColor: 'transparent' }]}>
+              <View style={[styles.titleRow, priority && { paddingRight: 24 }, { backgroundColor: 'transparent' }]}>
                 <Text
                   style={[
                     styles.title,
@@ -237,7 +239,11 @@ const createStyles = (colors: any) => StyleSheet.create({
   container: {
   },
   containerCompleted: {
+  },
+  cardCompleted: {
     opacity: 0.6,
+    elevation: 0, // Shadows can cause "opaque box" artifacts with transparency on Android
+    shadowOpacity: 0,
   },
   card: {
     backgroundColor: colors.card,
@@ -314,8 +320,10 @@ const createStyles = (colors: any) => StyleSheet.create({
     alignSelf: 'center',
   },
   titleCompleted: {
-    textDecorationLine: 'line-through',
+    textDecorationLine: Platform.OS === 'ios' ? 'line-through' : 'none',
     color: colors.mutedForeground,
+    opacity: Platform.OS === 'android' ? 0.7 : 1,
+    lineHeight: Platform.OS === 'android' ? undefined : 24,
   },
   metaContainer: {
     flexDirection: 'row',
