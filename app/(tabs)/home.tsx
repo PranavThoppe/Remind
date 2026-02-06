@@ -501,7 +501,9 @@ export default function HomeScreen() {
       )}
 
       {/* Floating Add Button */}
-      <FloatingAddButton onPress={() => setIsSheetOpen(true)} />
+      <FloatingAddButton
+        onPress={() => setIsSheetOpen(true)}
+      />
 
       {/* Add/Edit Sheet */}
       <AddReminderSheet

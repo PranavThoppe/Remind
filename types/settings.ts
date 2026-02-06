@@ -31,16 +31,15 @@ export const DEFAULT_TAGS: Tag[] = [
   { id: '3', name: 'Urgent', color: '#EC4899' },
 ];
 
-export interface CommonTimes {
-  morning: string;   // HH:mm
-  afternoon: string; // HH:mm
-  evening: string;   // HH:mm
-  night: string;     // HH:mm
+export interface CommonTime {
+  id: string;
+  name: string;
+  time: string; // HH:mm
+  user_id?: string;
 }
 
-export const DEFAULT_COMMON_TIMES: CommonTimes = {
-  morning: '08:00',
-  afternoon: '13:00',
-  evening: '18:00',
-  night: '21:00',
-};
+export const DEFAULT_COMMON_TIMES: CommonTime[] = [
+  { id: '1', name: 'Morning', time: '09:00' },
+  { id: '2', name: 'Afternoon', time: '12:00' },
+  { id: '3', name: 'Evening', time: '17:00' },
+];

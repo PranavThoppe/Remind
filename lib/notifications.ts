@@ -1,6 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { CommonTimes } from '../types/settings';
+import { CommonTime } from '../types/settings';
 
 /**
  * Request permissions and set up notification handler
@@ -84,7 +84,7 @@ export async function initializeNotifications() {
  * @param time Time string (HH:mm)
  * @param repeat Optional repeat pattern
  * @param id Optional reminder ID for actions
- * @param commonTimes Optional common times for default logic
+ * @param commonTimes Optional common times array for default logic
  * @returns notification identifier string
  */
 export async function scheduleReminderNotification(
@@ -93,14 +93,14 @@ export async function scheduleReminderNotification(
   time?: string,
   repeat?: 'none' | 'daily' | 'weekly' | 'monthly',
   id?: string,
-  commonTimes?: CommonTimes
+  commonTimes?: CommonTime[]
 ): Promise<string | null> {
   try {
     const [year, month, day] = date.split('-').map(Number);
 
     // Determine default time if not provided
     let finalTime = time;
-    if (!finalTime && commonTimes) {
+    if (!finalTime && commonTimes && commonTimes.length > 0) {
       const now = new Date();
       const isToday = now.getFullYear() === year && (now.getMonth() + 1) === month && now.getDate() === day;
 
@@ -110,26 +110,26 @@ export async function scheduleReminderNotification(
         const currentMinute = now.getMinutes();
         const currentTimeInMinutes = currentHour * 60 + currentMinute;
 
-        const times = [
-          { key: 'morning', value: commonTimes.morning },
-          { key: 'afternoon', value: commonTimes.afternoon },
-          { key: 'evening', value: commonTimes.evening },
-          { key: 'night', value: commonTimes.night },
-        ];
+        // Sort common times by time value
+        const sortedTimes = [...commonTimes].sort((a, b) => a.time.localeCompare(b.time));
 
-        for (const t of times) {
-          const [h, m] = t.value.split(':').map(Number);
+        for (const ct of sortedTimes) {
+          const [h, m] = ct.time.split(':').map(Number);
           const timeInMinutes = h * 60 + m;
           if (timeInMinutes > currentTimeInMinutes + 5) { // 5 min buffer
-            finalTime = t.value;
+            finalTime = ct.time;
             break;
           }
         }
 
-        // If all common times passed for today, or none found, we'll default to 09:00 below
+        // If all common times passed for today, use first one (or default to 09:00)
+        if (!finalTime) {
+          finalTime = sortedTimes[0]?.time || '09:00';
+        }
       } else {
-        // If it's a future date, default to the user's morning time
-        finalTime = commonTimes.morning;
+        // If it's a future date, default to the first common time (usually morning)
+        const sortedTimes = [...commonTimes].sort((a, b) => a.time.localeCompare(b.time));
+        finalTime = sortedTimes[0]?.time || '09:00';
       }
     }
 

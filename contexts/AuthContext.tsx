@@ -49,7 +49,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('Auth state change event:', event);
       if (!mounted) return;
 
+      // Always update session to get the new token
       setSession(session);
+
+      // For TOKEN_REFRESHED, we only need to update the session token
+      // Don't update user/profile to avoid triggering Expo's hot reload in dev
+      if (event === 'TOKEN_REFRESHED') {
+        console.log('Token refreshed, session updated');
+        return;
+      }
+
+      // For all other events, update user and profile
       setUser(session?.user ?? null);
 
       if (session?.user) {

@@ -31,6 +31,7 @@ interface SettingItemProps {
 
 const SettingItem = ({ icon, label, value, onPress, isLast, rightElement, colors }: SettingItemProps) => {
   const styles = createStyles(colors);
+
   return (
     <TouchableOpacity
       style={[styles.settingItem, !isLast && styles.settingItemBorder]}

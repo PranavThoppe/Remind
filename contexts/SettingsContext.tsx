@@ -1,8 +1,19 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Tag, PriorityLevel, DEFAULT_TAGS, ThemeType, CommonTimes, DEFAULT_COMMON_TIMES } from '../types/settings';
+import { Tag, PriorityLevel, DEFAULT_TAGS, ThemeType, CommonTime, DEFAULT_COMMON_TIMES } from '../types/settings';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
+
+interface CommonTimesSettings {
+  morning?: string;
+  afternoon?: string;
+  evening?: string;
+  night?: string;
+}
+
+interface Settings {
+  commonTimes?: CommonTimesSettings;
+}
 
 interface SettingsContextType {
   tags: Tag[];
@@ -13,6 +24,12 @@ interface SettingsContextType {
   addPriority: (name: string, color: string, rank: number) => Promise<void>;
   updatePriority: (id: string, name: string, color: string, rank?: number) => Promise<void>;
   deletePriority: (id: string) => Promise<void>;
+  commonTimes: CommonTime[];
+  addCommonTime: (name: string, time: string) => Promise<void>;
+  updateCommonTime: (id: string, name: string, time: string) => Promise<void>;
+  deleteCommonTime: (id: string) => Promise<void>;
+  settings: Settings;
+  updateSettings: (updates: Partial<Settings>) => Promise<void>;
   notificationsEnabled: boolean;
   setNotificationsEnabled: (enabled: boolean) => Promise<void>;
   timeFormat: '12h' | '24h';
@@ -29,8 +46,6 @@ interface SettingsContextType {
   setLastSortMode: (mode: 'time' | 'tag' | 'priority') => Promise<void>;
   isSortExpanded: boolean;
   setIsSortExpanded: (expanded: boolean) => void;
-  commonTimes: CommonTimes;
-  updateCommonTimes: (times: Partial<CommonTimes>) => Promise<void>;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -44,12 +59,15 @@ const STORAGE_KEYS = {
   RELATIVE_DATES: 'settings_relative_dates',
   THEME: 'settings_theme',
   COMMON_TIMES: 'settings_common_times',
+  COMMON_TIMES_V2: 'settings_common_times_v2',
 };
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [tags, setTags] = useState<Tag[]>(DEFAULT_TAGS);
   const [priorities, setPriorities] = useState<PriorityLevel[]>([]);
+  const [commonTimes, setCommonTimes] = useState<CommonTime[]>(DEFAULT_COMMON_TIMES);
+  const [settings, setSettings] = useState<Settings>({});
   const [notificationsEnabled, setNotificationsEnabledState] = useState(true);
   const [timeFormat, setTimeFormatState] = useState<'12h' | '24h'>('12h');
   const [weekStart, setWeekStartState] = useState<'Sunday' | 'Monday'>('Sunday');
@@ -58,7 +76,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [lastViewMode, setLastViewModeState] = useState<'list' | 'week' | 'calendar'>('list');
   const [lastSortMode, setLastSortModeState] = useState<'time' | 'tag' | 'priority'>('time');
   const [isSortExpanded, setIsSortExpanded] = useState(false);
-  const [commonTimes, setCommonTimesState] = useState<CommonTimes>(DEFAULT_COMMON_TIMES);
   const [loadingTags, setLoadingTags] = useState(false);
   const [loadingPriorities, setLoadingPriorities] = useState(false);
 
@@ -154,6 +171,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         savedRelativeDates,
         savedTheme,
         savedCommonTimes,
+        savedCommonTimesV2,
       ] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.NOTIFICATIONS),
         AsyncStorage.getItem(STORAGE_KEYS.TIME_FORMAT),
@@ -161,6 +179,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         AsyncStorage.getItem(STORAGE_KEYS.RELATIVE_DATES),
         AsyncStorage.getItem(STORAGE_KEYS.THEME),
         AsyncStorage.getItem(STORAGE_KEYS.COMMON_TIMES),
+        AsyncStorage.getItem(STORAGE_KEYS.COMMON_TIMES_V2),
       ]);
 
       if (savedNotifications) setNotificationsEnabledState(JSON.parse(savedNotifications));
@@ -168,7 +187,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       if (savedWeekStart) setWeekStartState(JSON.parse(savedWeekStart));
       if (savedRelativeDates) setShowRelativeDatesState(JSON.parse(savedRelativeDates));
       if (savedTheme) setThemeState(JSON.parse(savedTheme));
-      if (savedCommonTimes) setCommonTimesState(JSON.parse(savedCommonTimes));
+      if (savedCommonTimes) setCommonTimes(JSON.parse(savedCommonTimes));
+      if (savedCommonTimesV2) setSettings(JSON.parse(savedCommonTimesV2));
     } catch (error) {
       console.error('Error loading settings:', error);
     }
@@ -290,6 +310,53 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const addCommonTime = async (name: string, time: string) => {
+    try {
+      const newTime: CommonTime = {
+        id: Date.now().toString(),
+        name,
+        time,
+      };
+      const updated = [...commonTimes, newTime].sort((a, b) => a.time.localeCompare(b.time));
+      await AsyncStorage.setItem(STORAGE_KEYS.COMMON_TIMES, JSON.stringify(updated));
+      setCommonTimes(updated);
+    } catch (error) {
+      console.error('Error adding common time:', error);
+    }
+  };
+
+  const updateCommonTime = async (id: string, name: string, time: string) => {
+    try {
+      const updated = commonTimes
+        .map(ct => ct.id === id ? { ...ct, name, time } : ct)
+        .sort((a, b) => a.time.localeCompare(b.time));
+      await AsyncStorage.setItem(STORAGE_KEYS.COMMON_TIMES, JSON.stringify(updated));
+      setCommonTimes(updated);
+    } catch (error) {
+      console.error('Error updating common time:', error);
+    }
+  };
+
+  const deleteCommonTime = async (id: string) => {
+    try {
+      const updated = commonTimes.filter(ct => ct.id !== id);
+      await AsyncStorage.setItem(STORAGE_KEYS.COMMON_TIMES, JSON.stringify(updated));
+      setCommonTimes(updated);
+    } catch (error) {
+      console.error('Error deleting common time:', error);
+    }
+  };
+
+  const updateSettings = async (updates: Partial<Settings>) => {
+    try {
+      const newSettings = { ...settings, ...updates };
+      await AsyncStorage.setItem(STORAGE_KEYS.COMMON_TIMES_V2, JSON.stringify(newSettings));
+      setSettings(newSettings);
+    } catch (error) {
+      console.error('Error updating settings:', error);
+    }
+  };
+
   const setNotificationsEnabled = async (enabled: boolean) => {
     setNotificationsEnabledState(enabled);
     await AsyncStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(enabled));
@@ -341,12 +408,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const updateCommonTimes = async (newTimes: Partial<CommonTimes>) => {
-    const updatedTimes = { ...commonTimes, ...newTimes };
-    setCommonTimesState(updatedTimes);
-    await AsyncStorage.setItem(STORAGE_KEYS.COMMON_TIMES, JSON.stringify(updatedTimes));
-  };
-
   const value = {
     tags,
     addTag,
@@ -356,6 +417,12 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     addPriority,
     updatePriority,
     deletePriority,
+    commonTimes,
+    addCommonTime,
+    updateCommonTime,
+    deleteCommonTime,
+    settings,
+    updateSettings,
     notificationsEnabled,
     setNotificationsEnabled,
     timeFormat,
@@ -372,8 +439,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     setLastSortMode,
     isSortExpanded,
     setIsSortExpanded,
-    commonTimes,
-    updateCommonTimes,
   };
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;

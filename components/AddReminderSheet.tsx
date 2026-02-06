@@ -509,29 +509,25 @@ export function AddReminderSheet({
             </View>
 
             {/* Common Times Quick Pickers */}
-            {!time && (
+            {!time && commonTimes && commonTimes.length > 0 && (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 style={styles.commonTimesScroll}
               >
-                {(Object.keys(commonTimes) as (keyof typeof commonTimes)[]).map((key) => (
+                {commonTimes.map((ct) => (
                   <TouchableOpacity
-                    key={key}
+                    key={ct.id}
                     style={styles.commonTimeChip}
-                    onPress={() => setTime(commonTimes[key])}
+                    onPress={() => setTime(ct.time)}
                   >
                     <Ionicons
-                      name={
-                        key === 'morning' ? 'sunny-outline' :
-                          key === 'afternoon' ? 'partly-sunny-outline' :
-                            key === 'evening' ? 'moon-outline' : 'cloudy-night-outline'
-                      }
+                      name="time-outline"
                       size={14}
                       color={colors.primary}
                     />
                     <Text style={styles.commonTimeChipText}>
-                      {key.charAt(0).toUpperCase() + key.slice(1)}
+                      {ct.name}
                     </Text>
                   </TouchableOpacity>
                 ))}
