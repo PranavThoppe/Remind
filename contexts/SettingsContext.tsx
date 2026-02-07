@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Tag, PriorityLevel, DEFAULT_TAGS, ThemeType, CommonTime, DEFAULT_COMMON_TIMES } from '../types/settings';
+import { Tag, PriorityLevel, DEFAULT_TAGS, ThemeType, CommonTimes } from '../types/settings';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 
@@ -25,10 +25,13 @@ interface SettingsContextType {
   addPriority: (name: string, color: string, rank: number) => Promise<void>;
   updatePriority: (id: string, name: string, color: string, rank?: number) => Promise<void>;
   deletePriority: (id: string) => Promise<void>;
-  commonTimes: CommonTime[];
-  addCommonTime: (name: string, time: string) => Promise<void>;
-  updateCommonTime: (id: string, name: string, time: string) => Promise<void>;
-  deleteCommonTime: (id: string) => Promise<void>;
+  commonTimes: {
+    morning: string;
+    afternoon: string;
+    evening: string;
+    night: string;
+  };
+  updateCommonTime: (key: 'morning' | 'afternoon' | 'evening' | 'night', time: string) => Promise<void>;
   settings: Settings;
   updateSettings: (updates: Partial<Settings>) => Promise<void>;
   notificationsEnabled: boolean;
@@ -67,7 +70,12 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [tags, setTags] = useState<Tag[]>(DEFAULT_TAGS);
   const [priorities, setPriorities] = useState<PriorityLevel[]>([]);
-  const [commonTimes, setCommonTimes] = useState<CommonTime[]>(DEFAULT_COMMON_TIMES);
+  const [commonTimes, setCommonTimes] = useState({
+    morning: '09:00',
+    afternoon: '14:00',
+    evening: '18:00',
+    night: '21:00',
+  });
   const [settings, setSettings] = useState<Settings>({});
   const [notificationsEnabled, setNotificationsEnabledState] = useState(true);
   const [timeFormat, setTimeFormatState] = useState<'12h' | '24h'>('12h');
@@ -79,6 +87,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [isSortExpanded, setIsSortExpanded] = useState(false);
   const [loadingTags, setLoadingTags] = useState(false);
   const [loadingPriorities, setLoadingPriorities] = useState(false);
+  const [loadingCommonTimes, setLoadingCommonTimes] = useState(false);
 
   const fetchTags = useCallback(async () => {
     if (!user) {
@@ -132,6 +141,52 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
+  const fetchCommonTimes = useCallback(async () => {
+    if (!user) return;
+
+    setLoadingCommonTimes(true);
+    try {
+      const { data, error } = await supabase
+        .from('common_times')
+        .select('morning, afternoon, evening, night')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching common times:', error);
+      } else if (data) {
+        setCommonTimes(data);
+      } else {
+        // Row doesn't exist, insert defaults
+        const defaults = {
+          user_id: user.id,
+          morning: '09:00',
+          afternoon: '14:00',
+          evening: '18:00',
+          night: '21:00',
+        };
+        const { error: insertError } = await supabase
+          .from('common_times')
+          .insert([defaults]);
+
+        if (insertError) {
+          console.error('Error creating default common times:', insertError);
+        } else {
+          setCommonTimes({
+            morning: defaults.morning,
+            afternoon: defaults.afternoon,
+            evening: defaults.evening,
+            night: defaults.night,
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Unexpected error fetching common times:', error);
+    } finally {
+      setLoadingCommonTimes(false);
+    }
+  }, [user]);
+
   const fetchProfileSettings = useCallback(async () => {
     if (!user) return;
 
@@ -160,8 +215,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     fetchTags();
     fetchPriorities();
+    fetchCommonTimes();
     fetchProfileSettings();
-  }, [fetchTags, fetchPriorities, fetchProfileSettings]);
+  }, [fetchTags, fetchPriorities, fetchCommonTimes, fetchProfileSettings]);
 
   const loadSettings = async () => {
     try {
@@ -188,7 +244,25 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       if (savedWeekStart) setWeekStartState(JSON.parse(savedWeekStart));
       if (savedRelativeDates) setShowRelativeDatesState(JSON.parse(savedRelativeDates));
       if (savedTheme) setThemeState(JSON.parse(savedTheme));
-      if (savedCommonTimes) setCommonTimes(JSON.parse(savedCommonTimes));
+      if (savedCommonTimes) {
+        try {
+          const parsed = JSON.parse(savedCommonTimes);
+          // If it was the old array format, we might need to handle it or just reset to defaults
+          if (Array.isArray(parsed)) {
+            // Keep keys if they match or use defaults
+            setCommonTimes({
+              morning: parsed.find(t => t.name.toLowerCase() === 'morning')?.time || '09:00',
+              afternoon: parsed.find(t => t.name.toLowerCase() === 'afternoon')?.time || '14:00',
+              evening: parsed.find(t => t.name.toLowerCase() === 'evening')?.time || '18:00',
+              night: parsed.find(t => t.name.toLowerCase() === 'night')?.time || '21:00',
+            });
+          } else {
+            setCommonTimes(parsed);
+          }
+        } catch (e) {
+          console.error('Error parsing local common times:', e);
+        }
+      }
       if (savedCommonTimesV2) setSettings(JSON.parse(savedCommonTimesV2));
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -311,40 +385,29 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const addCommonTime = async (name: string, time: string) => {
-    try {
-      const newTime: CommonTime = {
-        id: Date.now().toString(),
-        name,
-        time,
-      };
-      const updated = [...commonTimes, newTime].sort((a, b) => a.time.localeCompare(b.time));
-      await AsyncStorage.setItem(STORAGE_KEYS.COMMON_TIMES, JSON.stringify(updated));
-      setCommonTimes(updated);
-    } catch (error) {
-      console.error('Error adding common time:', error);
-    }
-  };
+  const updateCommonTime = async (key: 'morning' | 'afternoon' | 'evening' | 'night', time: string) => {
+    const updated = { ...commonTimes, [key]: time };
 
-  const updateCommonTime = async (id: string, name: string, time: string) => {
-    try {
-      const updated = commonTimes
-        .map(ct => ct.id === id ? { ...ct, name, time } : ct)
-        .sort((a, b) => a.time.localeCompare(b.time));
-      await AsyncStorage.setItem(STORAGE_KEYS.COMMON_TIMES, JSON.stringify(updated));
-      setCommonTimes(updated);
-    } catch (error) {
-      console.error('Error updating common time:', error);
+    if (!user) {
+      try {
+        await AsyncStorage.setItem(STORAGE_KEYS.COMMON_TIMES, JSON.stringify(updated));
+        setCommonTimes(updated);
+      } catch (error) {
+        console.error('Error updating common time local:', error);
+      }
+      return;
     }
-  };
 
-  const deleteCommonTime = async (id: string) => {
     try {
-      const updated = commonTimes.filter(ct => ct.id !== id);
-      await AsyncStorage.setItem(STORAGE_KEYS.COMMON_TIMES, JSON.stringify(updated));
+      const { error } = await supabase
+        .from('common_times')
+        .update({ [key]: time })
+        .eq('user_id', user.id);
+
+      if (error) throw error;
       setCommonTimes(updated);
     } catch (error) {
-      console.error('Error deleting common time:', error);
+      console.error('Error updating common time in DB:', error);
     }
   };
 
@@ -419,9 +482,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     updatePriority,
     deletePriority,
     commonTimes,
-    addCommonTime,
     updateCommonTime,
-    deleteCommonTime,
     settings,
     updateSettings,
     notificationsEnabled,

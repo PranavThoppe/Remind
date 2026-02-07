@@ -31,20 +31,21 @@ const TIME_LABELS: Record<TimeOfDay, string> = {
     night: 'Night',
 };
 
+const TIME_ICONS: Record<TimeOfDay, keyof typeof Ionicons.glyphMap> = {
+    morning: 'sunny-outline',
+    afternoon: 'sunny',
+    evening: 'partly-sunny-outline',
+    night: 'moon-outline',
+};
+
 export default function CommonTimesScreen() {
     const router = useRouter();
     const { colors } = useTheme();
     const styles = createStyles(colors);
 
-    const { settings, updateSettings } = useSettings();
+    const { commonTimes, updateCommonTime } = useSettings();
 
-    // Get current times or use defaults
-    const currentTimes = {
-        morning: settings.commonTimes?.morning || DEFAULT_TIMES.morning,
-        afternoon: settings.commonTimes?.afternoon || DEFAULT_TIMES.afternoon,
-        evening: settings.commonTimes?.evening || DEFAULT_TIMES.evening,
-        night: settings.commonTimes?.night || DEFAULT_TIMES.night,
-    };
+    const currentTimes = commonTimes;
 
     const [showTimePicker, setShowTimePicker] = useState<TimeOfDay | null>(null);
     const [tempTime, setTempTime] = useState(new Date());
@@ -65,12 +66,7 @@ export default function CommonTimesScreen() {
 
         if (selectedDate && showTimePicker) {
             const timeStr = format(selectedDate, 'HH:mm');
-            updateSettings({
-                commonTimes: {
-                    ...currentTimes,
-                    [showTimePicker]: timeStr,
-                },
-            });
+            updateCommonTime(showTimePicker, timeStr);
 
             if (Platform.OS === 'ios') {
                 setTempTime(selectedDate);
@@ -91,6 +87,9 @@ export default function CommonTimesScreen() {
                 onPress={() => handleTimePress(timeOfDay)}
                 activeOpacity={0.7}
             >
+                <View style={styles.timeIconContainer}>
+                    <Ionicons name={TIME_ICONS[timeOfDay]} size={24} color={colors.primary} />
+                </View>
                 <View style={styles.timeInfo}>
                     <Text style={styles.timeName}>{TIME_LABELS[timeOfDay]}</Text>
                     <Text style={styles.timeValue}>{displayTime}</Text>
@@ -161,15 +160,24 @@ const createStyles = (colors: any) => StyleSheet.create({
         backgroundColor: colors.card,
         borderRadius: borderRadius.lg,
         padding: spacing.lg,
-        marginBottom: spacing.md,
-        ...shadows.sm,
+        marginBottom: spacing.sm,
+        ...shadows.soft,
+    },
+    timeIconContainer: {
+        width: 44,
+        height: 44,
+        borderRadius: borderRadius.md,
+        backgroundColor: `${colors.primary}10`,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: spacing.md,
     },
     timeInfo: {
         flex: 1,
     },
     timeName: {
         fontFamily: typography.fontFamily.medium,
-        fontSize: typography.fontSize.md,
+        fontSize: typography.fontSize.base,
         color: colors.foreground,
         marginBottom: 4,
     },

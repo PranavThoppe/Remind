@@ -21,13 +21,14 @@ import { ModalFieldUpdates } from '../types/ai-chat';
 
 import { Reminder } from '../types/reminder';
 
-type RepeatValue = 'none' | 'daily' | 'weekly' | 'monthly';
+type RepeatValue = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 const repeatOptions: { value: RepeatValue; label: string }[] = [
-  { value: 'none', label: 'No repeat' },
+  { value: 'none', label: 'None' },
   { value: 'daily', label: 'Daily' },
   { value: 'weekly', label: 'Weekly' },
   { value: 'monthly', label: 'Monthly' },
+  { value: 'yearly', label: 'Yearly' },
 ];
 
 export interface AiLiveReminderPanelProps {
@@ -40,7 +41,7 @@ export interface AiLiveReminderPanelProps {
   onSave: () => Promise<void> | void;
 }
 
-type ActivePicker = 'repeat' | 'tag' | null;
+type ActivePicker = 'repeat' | 'tag' | 'priority' | null;
 
 export function AiLiveReminderPanel({
   isOpen,
@@ -76,7 +77,7 @@ export function AiLiveReminderPanel({
   const selectedRepeat: RepeatValue = fields.repeat || 'none';
 
   const selectedRepeatLabel =
-    repeatOptions.find((opt) => opt.value === selectedRepeat)?.label ?? 'No repeat';
+    repeatOptions.find((opt) => opt.value === selectedRepeat)?.label ?? 'None';
 
   const selectedTag = tags.find((t) => t.id === fields.tag_id);
 
@@ -96,7 +97,7 @@ export function AiLiveReminderPanel({
     return d;
   };
 
-  const formatDisplayDate = (dateStr?: string) => {
+  const formatDisplayDate = (dateStr?: string | null) => {
     if (!dateStr) return 'Add date';
     const d = new Date(dateStr + 'T00:00:00');
     if (isNaN(d.getTime())) return 'Add date';
@@ -104,7 +105,7 @@ export function AiLiveReminderPanel({
     return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
   };
 
-  const formatDisplayTime = (timeStr?: string) => {
+  const formatDisplayTime = (timeStr?: string | null) => {
     if (!timeStr) return 'Add time';
     const [hours, minutes] = timeStr.split(':').map(Number);
     if (isNaN(hours) || isNaN(minutes)) return 'Add time';
@@ -190,7 +191,9 @@ export function AiLiveReminderPanel({
       if (activePicker === 'repeat') {
         onChangeFields({ repeat: id as RepeatValue });
       } else if (activePicker === 'tag') {
-        onChangeFields({ tag_id: id === 'none' ? undefined : id });
+        onChangeFields({ tag_id: id === 'none' ? null : id });
+      } else if (activePicker === 'priority') {
+        onChangeFields({ priority_id: id === 'none' ? null : id });
       }
       setActivePicker(null);
     };

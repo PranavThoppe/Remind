@@ -37,7 +37,7 @@ interface AddReminderSheetProps {
 
 
 const repeatOptions = [
-  { value: 'none' as const, label: 'No repeat' },
+  { value: 'none' as const, label: 'None' },
   { value: 'daily' as const, label: 'Daily' },
   { value: 'weekly' as const, label: 'Weekly' },
   { value: 'monthly' as const, label: 'Monthly' },
@@ -523,25 +523,30 @@ export function AddReminderSheet({
             </View>
 
             {/* Common Times Quick Pickers */}
-            {!time && commonTimes && commonTimes.length > 0 && (
+            {!time && commonTimes && (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 style={styles.commonTimesScroll}
               >
-                {commonTimes.map((ct) => (
+                {[
+                  { key: 'morning', label: 'Morning', icon: 'sunny-outline' as const },
+                  { key: 'afternoon', label: 'Afternoon', icon: 'sunny' as const },
+                  { key: 'evening', label: 'Evening', icon: 'partly-sunny-outline' as const },
+                  { key: 'night', label: 'Night', icon: 'moon-outline' as const },
+                ].map((ct) => (
                   <TouchableOpacity
-                    key={ct.id}
+                    key={ct.key}
                     style={styles.commonTimeChip}
-                    onPress={() => setTime(ct.time)}
+                    onPress={() => setTime(commonTimes[ct.key as keyof typeof commonTimes])}
                   >
                     <Ionicons
-                      name="time-outline"
+                      name={ct.icon}
                       size={14}
                       color={colors.primary}
                     />
                     <Text style={styles.commonTimeChipText}>
-                      {ct.name}
+                      {ct.label}
                     </Text>
                   </TouchableOpacity>
                 ))}
