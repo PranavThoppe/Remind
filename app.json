@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.remind.app",
+      "bundleIdentifier": "com.pranavthoppe.remind",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSMicrophoneUsageDescription": "This app needs access to your microphone for voice mode interactions."
@@ -27,7 +27,7 @@
         "backgroundColor": "#FDFBF9"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.remind.app",
+      "package": "com.pranavthoppe.remind",
       "permissions": [
         "RECORD_AUDIO"
       ]
