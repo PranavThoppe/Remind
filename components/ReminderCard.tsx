@@ -1,5 +1,5 @@
 import { useRef, useEffect } from 'react';
-import { isToday } from 'date-fns';
+import { isToday, isTomorrow, format } from 'date-fns';
 import {
   View,
   Text,
@@ -223,6 +223,14 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
                     <Ionicons name="time-outline" size={14} color={isBirthday && !reminder.completed ? 'rgba(0,0,0,0.6)' : colors.mutedForeground} />
                     <Text style={[styles.metaText, isBirthday && !reminder.completed && styles.birthdayMetaText]}>
                       {reminder.time ? formatTime(reminder.time) : 'Anytime'}
+                    </Text>
+                  </View>
+                ) : null}
+                {reminder.date && !isToday(new Date(reminder.date + 'T00:00:00')) && !isTomorrow(new Date(reminder.date + 'T00:00:00')) ? (
+                  <View style={styles.metaItem}>
+                    <Ionicons name="calendar-outline" size={14} color={isBirthday && !reminder.completed ? 'rgba(0,0,0,0.6)' : colors.mutedForeground} />
+                    <Text style={[styles.metaText, isBirthday && !reminder.completed && styles.birthdayMetaText]}>
+                      {format(new Date(reminder.date + 'T00:00:00'), 'MMM d')}
                     </Text>
                   </View>
                 ) : null}
