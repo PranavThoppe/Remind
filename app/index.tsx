@@ -28,7 +28,9 @@ export default function AuthScreen() {
 
   const [showEmailLogin, setShowEmailLogin] = useState(false);
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isSignInMode, setIsSignInMode] = useState(false); // Toggle between sign-up and sign-in
 
   const [emailSent, setEmailSent] = useState(false);
   const [otp, setOtp] = useState('');
@@ -110,6 +112,33 @@ export default function AuthScreen() {
       setCooldown(60); // Start cooldown after successful send
     } catch (error: any) {
       console.error('Error signing in with email:', error.message);
+      alert('An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordSignIn = async () => {
+    console.log('Password sign-in attempt for:', email);
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password,
+      });
+
+      if (error) {
+        console.error('Supabase Password Sign-In error:', error);
+        alert(error.message);
+        return;
+      }
+
+      console.log('Password sign-in successful!');
+      if (data?.user) {
+        await createProfile(data.user);
+      }
+    } catch (error: any) {
+      console.error('Error signing in with password:', error.message);
       alert('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
@@ -351,6 +380,45 @@ export default function AuthScreen() {
                     },
                   ]}
                 >
+                  {/* Sign In / Sign Up Toggle */}
+                  <View style={styles.toggleContainer}>
+                    <TouchableOpacity
+                      style={[
+                        styles.toggleButton,
+                        !isSignInMode && styles.toggleButtonActive,
+                      ]}
+                      onPress={() => {
+                        setIsSignInMode(false);
+                        setPassword('');
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.toggleButtonText,
+                          !isSignInMode && styles.toggleButtonTextActive,
+                        ]}
+                      >
+                        Sign Up
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.toggleButton,
+                        isSignInMode && styles.toggleButtonActive,
+                      ]}
+                      onPress={() => setIsSignInMode(true)}
+                    >
+                      <Text
+                        style={[
+                          styles.toggleButtonText,
+                          isSignInMode && styles.toggleButtonTextActive,
+                        ]}
+                      >
+                        Sign In
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
                   <TextInput
                     style={styles.input}
                     placeholder="Enter your email"
@@ -361,19 +429,61 @@ export default function AuthScreen() {
                     autoCapitalize="none"
                     autoFocus
                   />
+
+                  {/* Password field - only show in sign-in mode */}
+                  {isSignInMode && (
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Enter your password"
+                      placeholderTextColor={colors.mutedForeground}
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry
+                      autoCapitalize="none"
+                    />
+                  )}
+
                   <TouchableOpacity
                     style={[
                       styles.continueButton,
-                      (!isValidEmail || loading || cooldown > 0) && styles.continueButtonDisabled,
+                      (isSignInMode
+                        ? (!isValidEmail || !password || loading)
+                        : (!isValidEmail || loading || cooldown > 0)
+                      ) && styles.continueButtonDisabled,
                     ]}
-                    onPress={handleLogin}
-                    disabled={!isValidEmail || loading || cooldown > 0}
+                    onPress={isSignInMode ? handlePasswordSignIn : handleLogin}
+                    disabled={
+                      isSignInMode
+                        ? (!isValidEmail || !password || loading)
+                        : (!isValidEmail || loading || cooldown > 0)
+                    }
                     activeOpacity={0.8}
                   >
                     <Text style={styles.continueButtonText}>
-                      {loading ? 'Sending link...' : cooldown > 0 ? `Wait ${cooldown}s` : 'Continue'}
+                      {loading
+                        ? (isSignInMode ? 'Signing in...' : 'Sending link...')
+                        : (isSignInMode
+                          ? 'Sign In'
+                          : (cooldown > 0 ? `Wait ${cooldown}s` : 'Continue')
+                        )
+                      }
                     </Text>
-                    {!loading && cooldown === 0 && <Ionicons name="arrow-forward" size={18} color={colors.primaryForeground} />}
+                    {!loading && (isSignInMode || cooldown === 0) && (
+                      <Ionicons name="arrow-forward" size={18} color={colors.primaryForeground} />
+                    )}
+                  </TouchableOpacity>
+
+                  {/* Back button */}
+                  <TouchableOpacity
+                    style={styles.backToOptionsButton}
+                    onPress={() => {
+                      setShowEmailLogin(false);
+                      setEmail('');
+                      setPassword('');
+                      setIsSignInMode(false);
+                    }}
+                  >
+                    <Text style={styles.backButtonText}>← Back to options</Text>
                   </TouchableOpacity>
                 </Animated.View>
               )}
@@ -604,6 +714,36 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.sm,
     color: colors.primary,
+  },
+  toggleContainer: {
+    flexDirection: 'row',
+    borderRadius: borderRadius.lg,
+    backgroundColor: colors.secondary,
+    padding: 4,
+    gap: 4,
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+  },
+  toggleButtonActive: {
+    backgroundColor: colors.background,
+    ...shadows.soft,
+  },
+  toggleButtonText: {
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.base,
+    color: colors.mutedForeground,
+  },
+  toggleButtonTextActive: {
+    color: colors.foreground,
+  },
+  backToOptionsButton: {
+    padding: spacing.sm,
+    alignItems: 'center',
+    marginTop: spacing.sm,
   },
 });
 
