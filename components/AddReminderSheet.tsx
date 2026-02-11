@@ -37,10 +37,11 @@ interface AddReminderSheetProps {
 
 
 const repeatOptions = [
-  { value: 'none' as const, label: 'No repeat' },
+  { value: 'none' as const, label: 'None' },
   { value: 'daily' as const, label: 'Daily' },
   { value: 'weekly' as const, label: 'Weekly' },
   { value: 'monthly' as const, label: 'Monthly' },
+  { value: 'yearly' as const, label: 'Yearly' },
 ];
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -59,7 +60,7 @@ export function AddReminderSheet({
   const [title, setTitle] = useState('');
   const [date, setDate] = useState<Date | undefined>();
   const [time, setTime] = useState('');
-  const [repeat, setRepeat] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none');
+  const [repeat, setRepeat] = useState<'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'>('none');
   const [tagId, setTagId] = useState<string | null | undefined>();
   const [priorityId, setPriorityId] = useState<string | null | undefined>();
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -285,6 +286,19 @@ export function AddReminderSheet({
     }
   }, [isOpen, liveMode, slideAnim, backdropAnim]);
 
+  const handleBackdropPress = () => {
+    if (keyboardHeight > 0) {
+      Keyboard.dismiss();
+      return;
+    }
+    if (showDatePicker || showTimePicker) {
+      setShowDatePicker(false);
+      setShowTimePicker(false);
+      return;
+    }
+    handleClose();
+  };
+
   const handleClose = () => {
     Keyboard.dismiss();
     onClose();
@@ -509,29 +523,30 @@ export function AddReminderSheet({
             </View>
 
             {/* Common Times Quick Pickers */}
-            {!time && (
+            {!time && commonTimes && (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 style={styles.commonTimesScroll}
               >
-                {(Object.keys(commonTimes) as (keyof typeof commonTimes)[]).map((key) => (
+                {[
+                  { key: 'morning', label: 'Morning', icon: 'sunny-outline' as const },
+                  { key: 'afternoon', label: 'Afternoon', icon: 'sunny' as const },
+                  { key: 'evening', label: 'Evening', icon: 'partly-sunny-outline' as const },
+                  { key: 'night', label: 'Night', icon: 'moon-outline' as const },
+                ].map((ct) => (
                   <TouchableOpacity
-                    key={key}
+                    key={ct.key}
                     style={styles.commonTimeChip}
-                    onPress={() => setTime(commonTimes[key])}
+                    onPress={() => setTime(commonTimes[ct.key as keyof typeof commonTimes])}
                   >
                     <Ionicons
-                      name={
-                        key === 'morning' ? 'sunny-outline' :
-                          key === 'afternoon' ? 'partly-sunny-outline' :
-                            key === 'evening' ? 'moon-outline' : 'cloudy-night-outline'
-                      }
+                      name={ct.icon}
                       size={14}
                       color={colors.primary}
                     />
                     <Text style={styles.commonTimeChipText}>
-                      {key.charAt(0).toUpperCase() + key.slice(1)}
+                      {ct.label}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -819,7 +834,7 @@ export function AddReminderSheet({
           },
         ]}
       >
-        <Pressable style={styles.backdropPressable} onPress={handleClose} />
+        <Pressable style={styles.backdropPressable} onPress={handleBackdropPress} />
       </Animated.View>
 
       {/* Sheet */}

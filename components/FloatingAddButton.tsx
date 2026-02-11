@@ -1,14 +1,8 @@
-import { useRef, useEffect } from 'react';
-import {
-  TouchableOpacity,
-  StyleSheet,
-  Animated,
-  Platform,
-} from 'react-native';
+import React from 'react';
+import { Animated, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { shadows } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
+import { shadows } from '../constants/theme';
 
 interface FloatingAddButtonProps {
   onPress: () => void;
@@ -16,19 +10,7 @@ interface FloatingAddButtonProps {
 
 export function FloatingAddButton({ onPress }: FloatingAddButtonProps) {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
-  const styles = createStyles(colors, insets);
-
-  const scaleAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      friction: 5,
-      tension: 100,
-      useNativeDriver: true,
-    }).start();
-  }, []);
+  const scaleAnim = React.useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
@@ -47,14 +29,7 @@ export function FloatingAddButton({ onPress }: FloatingAddButtonProps) {
   };
 
   return (
-    <Animated.View
-      style={[
-        styles.container,
-        {
-          transform: [{ scale: scaleAnim }],
-        },
-      ]}
-    >
+    <Animated.View style={[styles.container, { transform: [{ scale: scaleAnim }] }]}>
       <TouchableOpacity
         style={styles.button}
         onPress={onPress}
@@ -68,18 +43,18 @@ export function FloatingAddButton({ onPress }: FloatingAddButtonProps) {
   );
 }
 
-const createStyles = (colors: any, insets: any) => StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
     position: 'absolute',
+    bottom: 90,
     right: 20,
-    bottom: 32 + insets.bottom,
-    zIndex: 30,
+    zIndex: 1000,
   },
   button: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: colors.primary,
+    backgroundColor: '#3B82F6',
     justifyContent: 'center',
     alignItems: 'center',
     ...shadows.fab,

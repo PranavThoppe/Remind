@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import * as React from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { Profile } from '../types/reminder';
@@ -9,6 +10,8 @@ interface AuthContextType {
   profile: Profile | null;
   loading: boolean;
   signOut: () => Promise<void>;
+  createProfile: (user: User) => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,7 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          await fetchProfile(session.user.id);
+          await fetchProfile(session.user);
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
@@ -49,11 +52,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('Auth state change event:', event);
       if (!mounted) return;
 
+      // Always update session to get the new token
       setSession(session);
+
+      // For TOKEN_REFRESHED, we only need to update the session token
+      // Don't update user/profile to avoid triggering Expo's hot reload in dev
+      if (event === 'TOKEN_REFRESHED') {
+        console.log('Token refreshed, session updated');
+        return;
+      }
+
+      // For all other events, update user and profile
       setUser(session?.user ?? null);
 
       if (session?.user) {
-        await fetchProfile(session.user.id);
+        await fetchProfile(session.user);
       } else {
         setProfile(null);
       }
@@ -66,21 +79,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (user: User) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', userId)
-        .single();
+        .eq('id', user.id)
+        .maybeSingle();
 
       if (error) {
-        if (error.code === 'PGRST116') {
-          console.log('Profile not found, user might need to create one');
-          // We don't set an error here because it's a valid state (new user or deleted profile)
-        } else {
-          console.error('Error fetching profile:', error);
-        }
+        console.error('Error fetching profile:', error);
+        setProfile(null);
+      } else if (!data) {
+        console.log('Profile not found for user:', user.id);
         setProfile(null);
       } else {
         setProfile(data);
@@ -93,8 +104,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const createProfile = async (user: User) => {
+    try {
+      console.log('Creating initial profile for user:', user.id);
+      const { data, error } = await supabase
+        .from('profiles')
+        .insert([{
+          id: user.id,
+          email: user.email,
+          full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+          pro: false
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating profile:', error);
+        setProfile(null);
+      } else {
+        console.log('Successfully created profile:', data);
+        setProfile(data);
+      }
+    } catch (error) {
+      console.error('Unexpected error creating profile:', error);
+      setProfile(null);
+    }
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
+  };
+
+  const refreshProfile = async () => {
+    if (user) {
+      await fetchProfile(user);
+    }
   };
 
   const value = {
@@ -103,6 +147,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     profile,
     loading,
     signOut,
+    createProfile,
+    refreshProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

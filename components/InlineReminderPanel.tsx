@@ -19,13 +19,14 @@ import { useSettings } from '../contexts/SettingsContext';
 import { ModalFieldUpdates } from '../types/ai-chat';
 import { Reminder } from '../types/reminder';
 
-type RepeatValue = 'none' | 'daily' | 'weekly' | 'monthly';
+type RepeatValue = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 const repeatOptions: { value: RepeatValue; label: string }[] = [
-    { value: 'none', label: 'No repeat' },
+    { value: 'none', label: 'None' },
     { value: 'daily', label: 'Daily' },
     { value: 'weekly', label: 'Weekly' },
     { value: 'monthly', label: 'Monthly' },
+    { value: 'yearly', label: 'Yearly' },
 ];
 
 interface InlineReminderPanelProps {
@@ -60,7 +61,7 @@ export function InlineReminderPanel({
     const [showTimePicker, setShowTimePicker] = useState(false);
 
     const selectedRepeat: RepeatValue = fields.repeat || 'none';
-    const selectedRepeatLabel = repeatOptions.find((opt) => opt.value === selectedRepeat)?.label ?? 'No repeat';
+    const selectedRepeatLabel = repeatOptions.find((opt) => opt.value === selectedRepeat)?.label ?? 'None';
     const selectedTag = tags.find((t) => t.id === fields.tag_id);
 
     // Helper functions

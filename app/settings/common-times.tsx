@@ -4,133 +4,132 @@ import {
     Text,
     StyleSheet,
     TouchableOpacity,
-    Platform,
     ScrollView,
+    Platform,
 } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { format } from 'date-fns';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useTheme } from '../../hooks/useTheme';
-import { spacing, borderRadius, typography, shadows } from '../../constants/theme';
-import { CommonTimes } from '../../types/settings';
+import { shadows, spacing, borderRadius, typography } from '../../constants/theme';
+
+type TimeOfDay = 'morning' | 'afternoon' | 'evening' | 'night';
+
+const DEFAULT_TIMES: Record<TimeOfDay, string> = {
+    morning: '09:00',
+    afternoon: '14:00',
+    evening: '18:00',
+    night: '21:00',
+};
+
+const TIME_LABELS: Record<TimeOfDay, string> = {
+    morning: 'Morning',
+    afternoon: 'Afternoon',
+    evening: 'Evening',
+    night: 'Night',
+};
+
+const TIME_ICONS: Record<TimeOfDay, keyof typeof Ionicons.glyphMap> = {
+    morning: 'sunny-outline',
+    afternoon: 'sunny',
+    evening: 'partly-sunny-outline',
+    night: 'moon-outline',
+};
 
 export default function CommonTimesScreen() {
-    const insets = useSafeAreaInsets();
-    const { colors, isDark } = useTheme();
-    const { commonTimes, updateCommonTimes } = useSettings();
-    const [activePicker, setActivePicker] = useState<keyof CommonTimes | null>(null);
-
+    const router = useRouter();
+    const { colors } = useTheme();
     const styles = createStyles(colors);
 
-    const formatDisplayTime = (time: string) => {
-        const [hours, minutes] = time.split(':').map(Number);
-        const period = hours >= 12 ? 'PM' : 'AM';
-        const displayHours = hours % 12 || 12;
-        return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
-    };
+    const { commonTimes, updateCommonTime } = useSettings();
 
-    const onTimeChange = (event: any, selectedDate?: Date) => {
-        if (Platform.OS === 'android') {
-            setActivePicker(null);
-        }
+    const currentTimes = commonTimes;
 
-        if (selectedDate && activePicker) {
-            const hours = selectedDate.getHours().toString().padStart(2, '0');
-            const minutes = selectedDate.getMinutes().toString().padStart(2, '0');
-            const timeString = `${hours}:${minutes}`;
-            updateCommonTimes({ [activePicker]: timeString });
-        }
-    };
+    const [showTimePicker, setShowTimePicker] = useState<TimeOfDay | null>(null);
+    const [tempTime, setTempTime] = useState(new Date());
 
-    const getPickerDate = () => {
-        if (!activePicker) return new Date();
-        const [hours, minutes] = commonTimes[activePicker].split(':').map(Number);
+    const handleTimePress = (timeOfDay: TimeOfDay) => {
+        // Parse current time to Date object
+        const [hours, minutes] = currentTimes[timeOfDay].split(':').map(Number);
         const date = new Date();
         date.setHours(hours, minutes, 0, 0);
-        return date;
+        setTempTime(date);
+        setShowTimePicker(timeOfDay);
+    };
+
+    const handleTimeChange = (event: any, selectedDate?: Date) => {
+        if (Platform.OS === 'android') {
+            setShowTimePicker(null);
+        }
+
+        if (selectedDate && showTimePicker) {
+            const timeStr = format(selectedDate, 'HH:mm');
+            updateCommonTime(showTimePicker, timeStr);
+
+            if (Platform.OS === 'ios') {
+                setTempTime(selectedDate);
+            }
+        }
+    };
+
+    const renderTimeCard = (timeOfDay: TimeOfDay) => {
+        const [h, m] = currentTimes[timeOfDay].split(':').map(Number);
+        const displayDate = new Date();
+        displayDate.setHours(h, m);
+        const displayTime = format(displayDate, 'h:mm a');
+
+        return (
+            <TouchableOpacity
+                key={timeOfDay}
+                style={styles.timeCard}
+                onPress={() => handleTimePress(timeOfDay)}
+                activeOpacity={0.7}
+            >
+                <View style={styles.timeIconContainer}>
+                    <Ionicons name={TIME_ICONS[timeOfDay]} size={24} color={colors.primary} />
+                </View>
+                <View style={styles.timeInfo}>
+                    <Text style={styles.timeName}>{TIME_LABELS[timeOfDay]}</Text>
+                    <Text style={styles.timeValue}>{displayTime}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={colors.mutedForeground} />
+            </TouchableOpacity>
+        );
     };
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
-            <Stack.Screen options={{ headerShown: false }} />
-
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <Ionicons name="chevron-back" size={24} color={colors.foreground} />
-                </TouchableOpacity>
-                <Text style={styles.title}>Common Times</Text>
-                <View style={{ width: 24 }} />
-            </View>
-
-            <ScrollView
-                style={styles.scrollView}
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-            >
-                <View style={styles.descriptionCard}>
-                    <Text style={styles.descriptionText}>
-                        Define default times for different parts of the day. These will be used for reminders when you don't specify a time.
-                    </Text>
-                </View>
-
-                <View style={styles.timesContainer}>
-                    {(Object.keys(commonTimes) as (keyof CommonTimes)[]).map((key, index) => (
-                        <TouchableOpacity
-                            key={key}
-                            style={[
-                                styles.timeRow,
-                                index !== 0 && styles.borderTop,
-                                activePicker === key && styles.timeRowActive
-                            ]}
-                            onPress={() => setActivePicker(activePicker === key ? null : key)}
-                        >
-                            <View style={styles.timeLabelContainer}>
-                                <Ionicons
-                                    name={
-                                        key === 'morning' ? 'sunny-outline' :
-                                            key === 'afternoon' ? 'partly-sunny-outline' :
-                                                key === 'evening' ? 'moon-outline' : 'cloudy-night-outline'
-                                    }
-                                    size={22}
-                                    color={colors.primary}
-                                />
-                                <Text style={styles.timeLabel}>{key.charAt(0).toUpperCase() + key.slice(1)}</Text>
-                            </View>
-                            <Text style={styles.timeValue}>{formatDisplayTime(commonTimes[key])}</Text>
+        <View style={styles.container}>
+            <Stack.Screen
+                options={{
+                    headerShown: true,
+                    headerTitle: 'Common Times',
+                    headerStyle: { backgroundColor: colors.background },
+                    headerTintColor: colors.foreground,
+                    headerShadowVisible: false,
+                    headerLeft: () => (
+                        <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: -8, padding: 8 }}>
+                            <Ionicons name="arrow-back" size={24} color={colors.primary} />
                         </TouchableOpacity>
-                    ))}
-                </View>
+                    ),
+                }}
+            />
 
-                {activePicker && Platform.OS === 'ios' && (
-                    <View style={styles.iosPickerContainer}>
-                        <DateTimePicker
-                            value={getPickerDate()}
-                            mode="time"
-                            is24Hour={false}
-                            display="spinner"
-                            onChange={onTimeChange}
-                            textColor={colors.foreground}
-                            themeVariant={isDark ? 'dark' : 'light'}
-                        />
-                        <TouchableOpacity
-                            style={styles.doneButton}
-                            onPress={() => setActivePicker(null)}
-                        >
-                            <Text style={styles.doneButtonText}>Done</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
+            <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 100 }}>
+                <Text style={styles.description}>
+                    Set default times for different parts of the day. These will be used as quick options when adding reminders.
+                </Text>
 
-                {activePicker && Platform.OS === 'android' && (
+                {(Object.keys(TIME_LABELS) as TimeOfDay[]).map(renderTimeCard)}
+
+                {showTimePicker && (
                     <DateTimePicker
-                        value={getPickerDate()}
+                        value={tempTime}
                         mode="time"
-                        is24Hour={false}
-                        display="default"
-                        onChange={onTimeChange}
+                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                        onChange={handleTimeChange}
+                        style={Platform.OS === 'ios' ? styles.iosTimePicker : undefined}
                     />
                 )}
             </ScrollView>
@@ -143,97 +142,51 @@ const createStyles = (colors: any) => StyleSheet.create({
         flex: 1,
         backgroundColor: colors.background,
     },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: spacing.lg,
-        paddingVertical: spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
-    },
-    backButton: {
-        padding: spacing.xs,
-    },
-    title: {
-        fontFamily: typography.fontFamily.bold,
-        fontSize: typography.fontSize.xl,
-        color: colors.foreground,
-    },
-    scrollView: {
+    content: {
         flex: 1,
+        padding: spacing.xl,
     },
-    scrollContent: {
-        padding: spacing.lg,
-        paddingBottom: 40,
-    },
-    descriptionCard: {
-        backgroundColor: `${colors.primary}10`,
-        padding: spacing.lg,
-        borderRadius: borderRadius.lg,
-        marginBottom: spacing.xl,
-        borderWidth: 1,
-        borderColor: `${colors.primary}20`,
-    },
-    descriptionText: {
+    description: {
         fontFamily: typography.fontFamily.regular,
         fontSize: typography.fontSize.sm,
         color: colors.mutedForeground,
+        marginBottom: spacing.xl,
         lineHeight: 20,
-        textAlign: 'center',
     },
-    timesContainer: {
-        backgroundColor: colors.card,
-        borderRadius: borderRadius.xl,
-        overflow: 'hidden',
-        ...shadows.card,
-    },
-    timeRow: {
+    timeCard: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: spacing.xl,
-        borderBottomWidth: 0, // Handled by borderTop for and check index
+        backgroundColor: colors.card,
+        borderRadius: borderRadius.lg,
+        padding: spacing.lg,
+        marginBottom: spacing.sm,
+        ...shadows.soft,
     },
-    borderTop: {
-        borderTopWidth: 1,
-        borderTopColor: colors.border,
-    },
-    timeRowActive: {
-        backgroundColor: `${colors.primary}05`,
-    },
-    timeLabelContainer: {
-        flexDirection: 'row',
+    timeIconContainer: {
+        width: 44,
+        height: 44,
+        borderRadius: borderRadius.md,
+        backgroundColor: `${colors.primary}10`,
         alignItems: 'center',
-        gap: spacing.md,
+        justifyContent: 'center',
+        marginRight: spacing.md,
     },
-    timeLabel: {
+    timeInfo: {
+        flex: 1,
+    },
+    timeName: {
         fontFamily: typography.fontFamily.medium,
-        fontSize: typography.fontSize.lg,
+        fontSize: typography.fontSize.base,
         color: colors.foreground,
+        marginBottom: 4,
     },
     timeValue: {
-        fontFamily: typography.fontFamily.semibold,
-        fontSize: typography.fontSize.lg,
+        fontFamily: typography.fontFamily.regular,
+        fontSize: typography.fontSize.sm,
         color: colors.primary,
     },
-    iosPickerContainer: {
-        marginTop: spacing.xl,
-        backgroundColor: colors.card,
-        borderRadius: borderRadius.xl,
-        padding: spacing.md,
-        ...shadows.card,
-    },
-    doneButton: {
-        backgroundColor: colors.primary,
-        padding: spacing.md,
-        borderRadius: borderRadius.lg,
-        alignItems: 'center',
-        marginTop: spacing.sm,
-    },
-    doneButtonText: {
-        fontFamily: typography.fontFamily.semibold,
-        color: 'white',
-        fontSize: typography.fontSize.base,
+    iosTimePicker: {
+        marginTop: spacing.lg,
     },
 });

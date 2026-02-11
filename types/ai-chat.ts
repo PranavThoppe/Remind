@@ -24,7 +24,7 @@ export interface ModalFieldUpdates {
   time?: string | null;  // HH:mm
   tag_id?: string | null;
   priority_id?: string | null;
-  repeat?: 'none' | 'daily' | 'weekly' | 'monthly';
+  repeat?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 }
 
 export interface MockAIResponse {

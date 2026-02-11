@@ -32,15 +32,8 @@ export const DEFAULT_TAGS: Tag[] = [
 ];
 
 export interface CommonTimes {
-  morning: string;   // HH:mm
-  afternoon: string; // HH:mm
-  evening: string;   // HH:mm
-  night: string;     // HH:mm
+  morning: string;
+  afternoon: string;
+  evening: string;
+  night: string;
 }
-
-export const DEFAULT_COMMON_TIMES: CommonTimes = {
-  morning: '08:00',
-  afternoon: '13:00',
-  evening: '18:00',
-  night: '21:00',
-};

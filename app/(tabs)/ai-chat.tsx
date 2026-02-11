@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useRouter } from 'expo-router';
 import {
   View,
   Text,
@@ -29,6 +30,7 @@ import { Reminder } from '../../types/reminder';
 import { scheduleReminderNotification } from '../../lib/notifications';
 import { extractReminderFields, searchReminders } from '../../lib/ai-extract';
 import { VoiceModeButton } from '../../components/voice/VoiceModeButton';
+import { PremiumLockOverlay } from '../../components/PremiumLockOverlay';
 
 // Typing indicator component
 function TypingIndicator({ colors }: { colors: any }) {
@@ -185,17 +187,18 @@ function MessageBubble({
 }
 
 export default function AIChatScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { tags, priorities } = useSettings();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { addReminder, updateReminder } = useReminders();
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
       role: 'assistant',
-      content: "Hi! I can help you create, find, or update reminders.",
+      content: "Hi, I'm Mind. I can help you create, find, or update reminders.",
       timestamp: new Date(),
     },
   ]);
@@ -584,7 +587,7 @@ export default function AIChatScreen() {
       {
         id: 'welcome',
         role: 'assistant',
-        content: "Hi! I can help you create, find, or update reminders.",
+        content: "Hi, I'm Mind. I can help you create, find, or update reminders.",
         timestamp: new Date(),
       },
     ]);
@@ -618,6 +621,12 @@ export default function AIChatScreen() {
 
   const dynamicStyles = createDynamicStyles(colors, insets);
 
+  const handleUnlock = () => {
+    router.push('/subscription');
+  };
+
+  const isPro = profile?.pro === true;
+
   return (
     <KeyboardAvoidingView
       style={dynamicStyles.container}
@@ -628,7 +637,7 @@ export default function AIChatScreen() {
         {/* Header */}
         <View style={[dynamicStyles.header, { paddingTop: insets.top + spacing.md }]}>
           <View style={dynamicStyles.headerContent}>
-            <Text style={dynamicStyles.headerTitle}>Chat Mode</Text>
+            <Text style={dynamicStyles.headerTitle}>Mind</Text>
             <TouchableOpacity
               onPress={handleClearChat}
               style={dynamicStyles.clearButton}
@@ -660,6 +669,7 @@ export default function AIChatScreen() {
           ListFooterComponent={isThinking ? <TypingIndicator colors={colors} /> : null}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          scrollEnabled={isPro}
         />
       </View>
 
@@ -684,7 +694,7 @@ export default function AIChatScreen() {
           <TouchableOpacity
             style={dynamicStyles.addButton}
             onPress={handlePickImage}
-            disabled={isThinking}
+            disabled={isThinking || !isPro}
           >
             <Ionicons name="add" size={24} color={colors.background} />
           </TouchableOpacity>
@@ -694,7 +704,7 @@ export default function AIChatScreen() {
             <TextInput
               ref={inputRef}
               style={dynamicStyles.input}
-              placeholder="Ask anything..."
+              placeholder={isPro ? "What's on your mind?" : "Upgrade to unlock Mind"}
               placeholderTextColor={colors.mutedForeground}
               value={inputText}
               onChangeText={setInputText}
@@ -702,22 +712,23 @@ export default function AIChatScreen() {
               maxLength={500}
               onSubmitEditing={handleSend}
               blurOnSubmit={false}
-              editable={!isThinking}
+              editable={!isThinking && isPro}
             />
 
             {/* Action Icon (Right side of pill) */}
             {inputText.trim() || selectedImage ? (
               <TouchableOpacity
                 onPress={handleSend}
-                disabled={isThinking}
+                disabled={isThinking || !isPro}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Ionicons name="arrow-up-circle" size={32} color={colors.primary} />
+                <Ionicons name="arrow-up-circle" size={32} color={colors.gold} />
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
                 onPress={() => Alert.alert("Coming Soon", "Voice dictation is under development!")}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                disabled={!isPro}
               >
                 <Ionicons name="mic" size={22} color={colors.mutedForeground} />
               </TouchableOpacity>
@@ -733,6 +744,8 @@ export default function AIChatScreen() {
           />
         </View>
       </View>
+
+      {!isPro && <PremiumLockOverlay onUnlock={handleUnlock} />}
     </KeyboardAvoidingView>
   );
 }
@@ -864,7 +877,7 @@ const createDynamicStyles = (colors: any, insets: any) => StyleSheet.create({
   headerTitle: {
     fontFamily: typography.fontFamily.title,
     fontSize: typography.fontSize['2xl'],
-    color: colors.foreground,
+    color: colors.gold,
   },
   headerSubtitle: {
     fontFamily: typography.fontFamily.regular,
@@ -875,7 +888,7 @@ const createDynamicStyles = (colors: any, insets: any) => StyleSheet.create({
   clearButton: {
     padding: spacing.sm,
     borderRadius: borderRadius.md,
-    backgroundColor: colors.muted,
+    backgroundColor: colors.goldLight,
   },
   messagesList: {
     paddingTop: spacing.lg,
@@ -898,7 +911,7 @@ const createDynamicStyles = (colors: any, insets: any) => StyleSheet.create({
     width: 35,
     height: 35,
     borderRadius: 21,
-    backgroundColor: '#FFFFFF', // Specifically white as requested
+    backgroundColor: colors.gold,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 0,

@@ -1,3 +1,4 @@
+import * as React from 'react';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
@@ -32,7 +33,7 @@ export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const styles = createStyles(colors);
 
-  const { reminders, loading, addReminder, toggleComplete, refreshReminders, updateReminder, deleteReminder } = useReminders();
+  const { reminders, loading, addReminder, toggleComplete, refreshReminders, updateReminder, deleteReminder, hasFetched } = useReminders();
   const { tags, priorities, lastViewMode: viewMode, setLastViewMode: setViewMode, lastSortMode: sortMode, setLastSortMode: setSortMode } = useSettings();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
@@ -135,6 +136,11 @@ export default function HomeScreen() {
         .map(group => ({
           ...group,
           reminders: [...group.reminders].sort((a, b) => {
+            // Primary sort by date
+            const dateA = a.date ? new Date(a.date + 'T00:00:00').getTime() : Infinity;
+            const dateB = b.date ? new Date(b.date + 'T00:00:00').getTime() : Infinity;
+            if (dateA !== dateB) return dateA - dateB;
+
             if (a.time && b.time) return a.time.localeCompare(b.time);
             if (a.time) return -1;
             if (b.time) return 1;
@@ -173,6 +179,11 @@ export default function HomeScreen() {
         .map(group => ({
           ...group,
           reminders: [...group.reminders].sort((a, b) => {
+            // Primary sort by date
+            const dateA = a.date ? new Date(a.date + 'T00:00:00').getTime() : Infinity;
+            const dateB = b.date ? new Date(b.date + 'T00:00:00').getTime() : Infinity;
+            if (dateA !== dateB) return dateA - dateB;
+
             if (a.time && b.time) return a.time.localeCompare(b.time);
             if (a.time) return -1;
             if (b.time) return 1;
@@ -224,9 +235,14 @@ export default function HomeScreen() {
           groupTitle = 'Older';
           groupDate = undefined;
         }
-      } else if (isToday(reminderDate) || isTomorrow(reminderDate) || isBefore(reminderDate, nextWeekStart)) {
-        // Individual days for Today, Tomorrow, and anything else this week
+      } else if (isToday(reminderDate) || isTomorrow(reminderDate)) {
+        // Individual days for Today and Tomorrow
         groupId = reminderDate.toISOString();
+      } else if (isBefore(reminderDate, nextWeekStart)) {
+        // Group everything else this week together
+        groupId = 'this-week';
+        groupDate = undefined;
+        groupTitle = 'This Week';
       } else if (reminderDate >= nextWeekStart && reminderDate <= nextWeekEnd) {
         // Group everything in next week together
         groupId = 'next-week';
@@ -315,7 +331,7 @@ export default function HomeScreen() {
         if (g.date) {
           return isToday(g.date) || isAfter(g.date, startOfDay(new Date()));
         }
-        return g.id === 'anytime' || g.id === 'future' || g.id === 'next-week';
+        return g.id === 'anytime' || g.id === 'future' || g.id === 'next-week' || g.id === 'this-week';
       });
 
       if (targetGroupIndex !== -1 && targetGroupIndex > 0) {
@@ -355,7 +371,7 @@ export default function HomeScreen() {
         <View style={styles.headerTop}>
           <View>
             <Text style={styles.dateText}>{formatDate()}</Text>
-            <Text style={styles.greeting}>{greeting()} ✨</Text>
+            <Text style={styles.greeting}>{greeting()}</Text>
           </View>
 
           {/* View Mode Selector */}
@@ -367,7 +383,7 @@ export default function HomeScreen() {
       </View>
 
       {/* Content */}
-      {loading && reminders.length === 0 ? (
+      {!hasFetched ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           {showRetry && (
@@ -452,7 +468,7 @@ export default function HomeScreen() {
                     </View>
                   )}
                   <View style={styles.remindersList}>
-                    {item.reminders.map((reminder, index) => (
+                    {item.reminders.map((reminder: Reminder, index: number) => (
                       <ReminderCard
                         key={reminder.id}
                         reminder={reminder}
@@ -480,7 +496,7 @@ export default function HomeScreen() {
                 onSortChange={setSortMode as any}
                 currentSort={sortMode}
                 showSort={
-                  groupIndex === 0 || ((item as any).date && isToday((item as any).date))
+                  groupIndex === 0
                 }
               />
             );
@@ -501,7 +517,9 @@ export default function HomeScreen() {
       )}
 
       {/* Floating Add Button */}
-      <FloatingAddButton onPress={() => setIsSheetOpen(true)} />
+      <FloatingAddButton
+        onPress={() => setIsSheetOpen(true)}
+      />
 
       {/* Add/Edit Sheet */}
       <AddReminderSheet

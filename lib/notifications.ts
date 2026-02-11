@@ -84,14 +84,14 @@ export async function initializeNotifications() {
  * @param time Time string (HH:mm)
  * @param repeat Optional repeat pattern
  * @param id Optional reminder ID for actions
- * @param commonTimes Optional common times for default logic
+ * @param commonTimes Optional common times array for default logic
  * @returns notification identifier string
  */
 export async function scheduleReminderNotification(
   title: string,
   date: string,
   time?: string,
-  repeat?: 'none' | 'daily' | 'weekly' | 'monthly',
+  repeat?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly',
   id?: string,
   commonTimes?: CommonTimes
 ): Promise<string | null> {
@@ -104,32 +104,35 @@ export async function scheduleReminderNotification(
       const now = new Date();
       const isToday = now.getFullYear() === year && (now.getMonth() + 1) === month && now.getDate() === day;
 
+      const timesArray = [
+        commonTimes.morning,
+        commonTimes.afternoon,
+        commonTimes.evening,
+        commonTimes.night,
+      ].sort();
+
       if (isToday) {
         // Find the next logical common time
         const currentHour = now.getHours();
         const currentMinute = now.getMinutes();
         const currentTimeInMinutes = currentHour * 60 + currentMinute;
 
-        const times = [
-          { key: 'morning', value: commonTimes.morning },
-          { key: 'afternoon', value: commonTimes.afternoon },
-          { key: 'evening', value: commonTimes.evening },
-          { key: 'night', value: commonTimes.night },
-        ];
-
-        for (const t of times) {
-          const [h, m] = t.value.split(':').map(Number);
+        for (const t of timesArray) {
+          const [h, m] = t.split(':').map(Number);
           const timeInMinutes = h * 60 + m;
           if (timeInMinutes > currentTimeInMinutes + 5) { // 5 min buffer
-            finalTime = t.value;
+            finalTime = t;
             break;
           }
         }
 
-        // If all common times passed for today, or none found, we'll default to 09:00 below
+        // If all common times passed for today, use first one (or default to 09:00)
+        if (!finalTime) {
+          finalTime = timesArray[0] || '09:00';
+        }
       } else {
-        // If it's a future date, default to the user's morning time
-        finalTime = commonTimes.morning;
+        // If it's a future date, default to the first common time (usually morning)
+        finalTime = timesArray[0] || '09:00';
       }
     }
 
@@ -180,6 +183,16 @@ export async function scheduleReminderNotification(
         case 'monthly':
           trigger = {
             type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+            day: triggerDate.getDate(),
+            hour,
+            minute,
+            repeats: true,
+          };
+          break;
+        case 'yearly':
+          trigger = {
+            type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+            month: triggerDate.getMonth() + 1,
             day: triggerDate.getDate(),
             hour,
             minute,

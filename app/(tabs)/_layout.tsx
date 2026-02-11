@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import {
   createMaterialTopTabNavigator,
   MaterialTopTabNavigationEventMap,
@@ -109,9 +110,15 @@ export default function TabLayout() {
         name="ai-chat"
         options={{
           title: 'AI',
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'} focused={focused} colors={colors} />
-          ),
+          tabBarIcon: ({ focused }) => {
+            const { profile } = useAuth();
+            const isPro = profile?.pro === true;
+            return (
+              <View style={{ alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 18, backgroundColor: isPro ? colors.primary : colors.gold, ...shadows.soft }}>
+                <Ionicons name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'} size={22} color={isPro ? colors.primaryForeground : colors.goldForeground} />
+              </View>
+            )
+          },
           tabBarLabel: () => null,
         }}
       />
