@@ -85,98 +85,6 @@ export default function AuthScreen() {
     }
   }, [showEmailLogin]);
 
-  const handleLogin = async () => {
-    if (cooldown > 0) return;
-
-    console.log('Email login attempt for:', email);
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
-      });
-
-      if (error) {
-        console.error('Supabase Email OTP error:', error);
-
-        // Handle rate limit specifically
-        if (error.message.includes('rate limit')) {
-          Alert.alert('Error', 'Too many attempts. Please wait 60 seconds before trying again.');
-          setCooldown(60);
-          return;
-        }
-
-        Alert.alert('Error', error.message);
-        return;
-      }
-
-      console.log('Email OTP link/code sent successfully');
-      setEmailSent(true);
-      setCooldown(60); // Start cooldown after successful send
-    } catch (error: any) {
-      console.error('Error signing in with email:', error.message);
-      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePasswordSignIn = async () => {
-    console.log('Password sign-in attempt for:', email);
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password: password,
-      });
-
-      if (error) {
-        console.error('Supabase Password Sign-In error:', error);
-        Alert.alert('Error', error.message);
-        return;
-      }
-
-      console.log('Password sign-in successful!');
-      if (data?.user) {
-        await createProfile(data.user);
-      }
-    } catch (error: any) {
-      console.error('Error signing in with password:', error.message);
-      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyOtp = async () => {
-    if (otp.length !== 6) return;
-
-    console.log('Verifying OTP for:', email);
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.auth.verifyOtp({
-        email: email.trim(),
-        token: otp,
-        type: 'email',
-      });
-
-      if (error) {
-        console.error('OTP Verification error:', error);
-        Alert.alert('Error', 'Invalid or expired code. Please try again.');
-        return;
-      }
-
-      console.log('OTP verified successfully!');
-      if (data?.user) {
-        await createProfile(data.user);
-      }
-    } catch (error: any) {
-      console.error('Error verifying OTP:', error.message);
-      Alert.alert('Error', 'Failed to verify code. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleGoogleLogin = async () => {
     console.log('Google login button pressed');
     setLoading(true);
@@ -239,7 +147,69 @@ export default function AuthScreen() {
     }
   };
 
+  const handleSignUp = async () => {
+    console.log('Sign up attempt for:', email);
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password: password,
+      });
+
+      if (error) {
+        console.error('Supabase Sign-Up error:', error);
+        Alert.alert('Error', error.message);
+        return;
+      }
+
+      console.log('Sign up successful!', data);
+      if (data?.user) {
+        await createProfile(data.user);
+
+        if (!data.session) {
+          Alert.alert(
+            'Check your email',
+            'Please verify your email address to continue.'
+          );
+        }
+      }
+    } catch (error: any) {
+      console.error('Error signing up:', error.message);
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePasswordSignIn = async () => {
+    console.log('Password sign-in attempt for:', email);
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password,
+      });
+
+      if (error) {
+        console.error('Supabase Password Sign-In error:', error);
+        Alert.alert('Error', error.message);
+        return;
+      }
+
+      console.log('Password sign-in successful!');
+      if (data?.user) {
+        await createProfile(data.user);
+      }
+    } catch (error: any) {
+      console.error('Error signing in with password:', error.message);
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const isValidEmail = email.includes('@');
+  const isValidPassword = password.length >= 6;
 
   return (
     <KeyboardAvoidingView
@@ -280,221 +250,142 @@ export default function AuthScreen() {
             },
           ]}
         >
-          {emailSent ? (
-            <View style={styles.emailSentContainer}>
-              <View style={styles.emailSentIcon}>
-                <Ionicons name="mail-open-outline" size={32} color={colors.primary} />
+          {/* Google Sign In */}
+          <TouchableOpacity
+            style={styles.googleButton}
+            onPress={handleGoogleLogin}
+            activeOpacity={0.8}
+            disabled={loading}
+          >
+            <Image
+              source={require('../assets/google-g.png')}
+              style={styles.googleIconImage}
+            />
+            <Text style={styles.googleButtonText}>
+              {loading && !showEmailLogin ? 'Connecting...' : 'Continue with Google'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Email Login */}
+          {!showEmailLogin ? (
+            <TouchableOpacity
+              style={styles.emailButton}
+              onPress={() => setShowEmailLogin(true)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="mail-outline" size={20} color={colors.secondaryForeground} />
+              <Text style={styles.emailButtonText}>Continue with Email</Text>
+            </TouchableOpacity>
+          ) : (
+            <Animated.View
+              style={[
+                styles.emailInputContainer,
+                {
+                  opacity: emailFadeAnim,
+                  transform: [{ scale: emailScaleAnim }],
+                },
+              ]}
+            >
+              {/* Sign In / Sign Up Toggle */}
+              <View style={styles.toggleContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.toggleButton,
+                    !isSignInMode && styles.toggleButtonActive,
+                  ]}
+                  onPress={() => {
+                    setIsSignInMode(false);
+                    // Don't clear password when switching to signup to keep input if user mis-clicked
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.toggleButtonText,
+                      !isSignInMode && styles.toggleButtonTextActive,
+                    ]}
+                  >
+                    Sign Up
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.toggleButton,
+                    isSignInMode && styles.toggleButtonActive,
+                  ]}
+                  onPress={() => setIsSignInMode(true)}
+                >
+                  <Text
+                    style={[
+                      styles.toggleButtonText,
+                      isSignInMode && styles.toggleButtonTextActive,
+                    ]}
+                  >
+                    Sign In
+                  </Text>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.emailSentTitle}>Enter verification code</Text>
-              <Text style={styles.emailSentText}>
-                We've sent a 6-digit code to <Text style={styles.emailSentHighlight}>{email}</Text>.
-              </Text>
 
               <TextInput
-                style={[styles.input, styles.otpInput]}
-                placeholder="000000"
+                style={styles.input}
+                placeholder="Enter your email"
                 placeholderTextColor={colors.mutedForeground}
-                value={otp}
-                onChangeText={(text) => {
-                  const cleaned = text.replace(/[^0-9]/g, '').slice(0, 6);
-                  setOtp(cleaned);
-                  if (cleaned.length === 6) {
-                    // Logic to auto-submit could go here, but manual is safer for first iteration
-                  }
-                }}
-                keyboardType="number-pad"
-                maxLength={6}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
                 autoFocus
+              />
+
+              <TextInput
+                style={styles.input}
+                placeholder={isSignInMode ? "Enter your password" : "Create a password (min 6 chars)"}
+                placeholderTextColor={colors.mutedForeground}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                autoCapitalize="none"
               />
 
               <TouchableOpacity
                 style={[
                   styles.continueButton,
-                  (otp.length !== 6 || loading) && styles.continueButtonDisabled,
+                  (!isValidEmail || !isValidPassword || loading) && styles.continueButtonDisabled,
                 ]}
-                onPress={handleVerifyOtp}
-                disabled={otp.length !== 6 || loading}
+                onPress={isSignInMode ? handlePasswordSignIn : handleSignUp}
+                disabled={!isValidEmail || !isValidPassword || loading}
                 activeOpacity={0.8}
               >
                 <Text style={styles.continueButtonText}>
-                  {loading ? 'Verifying...' : 'Verify Code'}
+                  {loading
+                    ? (isSignInMode ? 'Signing in...' : 'Creating account...')
+                    : (isSignInMode ? 'Sign In' : 'Sign Up')
+                  }
                 </Text>
-                {!loading && <Ionicons name="checkmark-circle" size={18} color={colors.primaryForeground} />}
+                {!loading && (
+                  <Ionicons name="arrow-forward" size={18} color={colors.primaryForeground} />
+                )}
               </TouchableOpacity>
 
+              {/* Back button */}
               <TouchableOpacity
-                style={[styles.resendButton, cooldown > 0 && styles.resendButtonDisabled]}
-                onPress={handleLogin}
-                disabled={loading || cooldown > 0}
-              >
-                <Text style={styles.resendButtonText}>
-                  {cooldown > 0 ? `Resend code in ${cooldown}s` : 'Resend code'}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.backButton}
+                style={styles.backToOptionsButton}
                 onPress={() => {
-                  setEmailSent(false);
-                  setOtp('');
+                  setShowEmailLogin(false);
+                  setEmail('');
+                  setPassword('');
+                  setIsSignInMode(false);
                 }}
               >
-                <Text style={styles.backButtonText}>Use a different email</Text>
+                <Text style={styles.backButtonText}>← Back to options</Text>
               </TouchableOpacity>
-            </View>
-          ) : (
-            <>
-              {/* Google Sign In */}
-              <TouchableOpacity
-                style={styles.googleButton}
-                onPress={handleGoogleLogin}
-                activeOpacity={0.8}
-                disabled={loading}
-              >
-                <Image
-                  source={require('../assets/google-g.png')}
-                  style={styles.googleIconImage}
-                />
-                <Text style={styles.googleButtonText}>
-                  {loading && !showEmailLogin ? 'Connecting...' : 'Continue with Google'}
-                </Text>
-              </TouchableOpacity>
-
-              {/* Divider */}
-              <View style={styles.divider}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>or</Text>
-                <View style={styles.dividerLine} />
-              </View>
-
-              {/* Email Login */}
-              {!showEmailLogin ? (
-                <TouchableOpacity
-                  style={styles.emailButton}
-                  onPress={() => setShowEmailLogin(true)}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="mail-outline" size={20} color={colors.secondaryForeground} />
-                  <Text style={styles.emailButtonText}>Continue with Email</Text>
-                </TouchableOpacity>
-              ) : (
-                <Animated.View
-                  style={[
-                    styles.emailInputContainer,
-                    {
-                      opacity: emailFadeAnim,
-                      transform: [{ scale: emailScaleAnim }],
-                    },
-                  ]}
-                >
-                  {/* Sign In / Sign Up Toggle */}
-                  <View style={styles.toggleContainer}>
-                    <TouchableOpacity
-                      style={[
-                        styles.toggleButton,
-                        !isSignInMode && styles.toggleButtonActive,
-                      ]}
-                      onPress={() => {
-                        setIsSignInMode(false);
-                        setPassword('');
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.toggleButtonText,
-                          !isSignInMode && styles.toggleButtonTextActive,
-                        ]}
-                      >
-                        Sign Up
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.toggleButton,
-                        isSignInMode && styles.toggleButtonActive,
-                      ]}
-                      onPress={() => setIsSignInMode(true)}
-                    >
-                      <Text
-                        style={[
-                          styles.toggleButtonText,
-                          isSignInMode && styles.toggleButtonTextActive,
-                        ]}
-                      >
-                        Sign In
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter your email"
-                    placeholderTextColor={colors.mutedForeground}
-                    value={email}
-                    onChangeText={setEmail}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoFocus
-                  />
-
-                  {/* Password field - only show in sign-in mode */}
-                  {isSignInMode && (
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Enter your password"
-                      placeholderTextColor={colors.mutedForeground}
-                      value={password}
-                      onChangeText={setPassword}
-                      secureTextEntry
-                      autoCapitalize="none"
-                    />
-                  )}
-
-                  <TouchableOpacity
-                    style={[
-                      styles.continueButton,
-                      (isSignInMode
-                        ? (!isValidEmail || !password || loading)
-                        : (!isValidEmail || loading || cooldown > 0)
-                      ) && styles.continueButtonDisabled,
-                    ]}
-                    onPress={isSignInMode ? handlePasswordSignIn : handleLogin}
-                    disabled={
-                      isSignInMode
-                        ? (!isValidEmail || !password || loading)
-                        : (!isValidEmail || loading || cooldown > 0)
-                    }
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.continueButtonText}>
-                      {loading
-                        ? (isSignInMode ? 'Signing in...' : 'Sending link...')
-                        : (isSignInMode
-                          ? 'Sign In'
-                          : (cooldown > 0 ? `Wait ${cooldown}s` : 'Continue')
-                        )
-                      }
-                    </Text>
-                    {!loading && (isSignInMode || cooldown === 0) && (
-                      <Ionicons name="arrow-forward" size={18} color={colors.primaryForeground} />
-                    )}
-                  </TouchableOpacity>
-
-                  {/* Back button */}
-                  <TouchableOpacity
-                    style={styles.backToOptionsButton}
-                    onPress={() => {
-                      setShowEmailLogin(false);
-                      setEmail('');
-                      setPassword('');
-                      setIsSignInMode(false);
-                    }}
-                  >
-                    <Text style={styles.backButtonText}>← Back to options</Text>
-                  </TouchableOpacity>
-                </Animated.View>
-              )}
-            </>
+            </Animated.View>
           )}
         </Animated.View>
 
