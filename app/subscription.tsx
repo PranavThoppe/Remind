@@ -17,6 +17,9 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { spacing, typography, borderRadius, shadows } from '../constants/theme';
 
+// Must match the entitlement identifier in the RevenueCat dashboard exactly
+const PRO_ENTITLEMENT_ID = 'AI Reminders';
+
 export default function SubscriptionScreen() {
     const { colors } = useTheme();
     const { user, profile, refreshProfile } = useAuth();
@@ -76,8 +79,11 @@ export default function SubscriptionScreen() {
         try {
             const { customerInfo } = await Purchases.purchasePackage(pkg);
 
-            // Check if the "pro" entitlement is now active
-            if (customerInfo.entitlements.active['pro']) {
+            // Debug: log what entitlements are actually active
+            console.log('📦 Active entitlements:', Object.keys(customerInfo.entitlements.active));
+
+            // Check if the pro entitlement is now active
+            if (customerInfo.entitlements.active[PRO_ENTITLEMENT_ID]) {
                 // Update Supabase profile
                 const { error } = await supabase
                     .from('profiles')
@@ -93,6 +99,15 @@ export default function SubscriptionScreen() {
                         { text: 'Let\'s go!', onPress: () => router.back() },
                     ]);
                 }
+            } else {
+                // Purchase went through but entitlement not found — log for debugging
+                console.warn('⚠️ Purchase completed but entitlement not found.');
+                console.warn('Expected:', PRO_ENTITLEMENT_ID);
+                console.warn('Active:', Object.keys(customerInfo.entitlements.active));
+                Alert.alert(
+                    'Purchase Successful',
+                    'Your payment went through, but Pro could not be activated automatically. Please try "Restore Purchases" or restart the app.'
+                );
             }
         } catch (e: any) {
             if (!e.userCancelled) {
@@ -108,7 +123,9 @@ export default function SubscriptionScreen() {
         setPurchasing(true);
         try {
             const customerInfo = await Purchases.restorePurchases();
-            if (customerInfo.entitlements.active['pro']) {
+            console.log('📦 Restore - Active entitlements:', Object.keys(customerInfo.entitlements.active));
+
+            if (customerInfo.entitlements.active[PRO_ENTITLEMENT_ID]) {
                 if (user) {
                     await supabase.from('profiles').update({ pro: true }).eq('id', user.id);
                     await refreshProfile();
@@ -232,11 +249,6 @@ export default function SubscriptionScreen() {
                         </View>
                     )}
 
-                    {/* Debug Panel - REMOVE after debugging */}
-                    <View style={{ marginTop: 24, padding: 12, borderRadius: 8, backgroundColor: colors.card, borderWidth: 1, borderColor: '#EF4444' }}>
-                        <Text style={{ color: '#EF4444', fontWeight: 'bold', marginBottom: 4, fontSize: 12 }}>🔧 DEBUG (remove later)</Text>
-                        <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'monospace' }}>{debugInfo}</Text>
-                    </View>
                 </ScrollView>
             </View>
         </>
