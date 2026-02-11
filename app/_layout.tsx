@@ -161,16 +161,18 @@ function RootContent() {
     initializeNotifications().catch(console.error);
 
     try {
-      if (__DEV__) {
-        console.log('🔑 RevenueCat: Configuring with TEST STORE key');
-        Purchases.configure({ apiKey: 'test_UbGQugWUgtBPAUSpqblBSZWCWIX' });
-      } else if (Platform.OS === 'ios') {
-        console.log('🔑 RevenueCat: Configuring with iOS key');
-        Purchases.configure({ apiKey: 'appl_PejDVLLTYLtWtqVbrjbEQzPqDUr' });
-      } else if (Platform.OS === 'android') {
-        console.log('🔑 RevenueCat: Configuring with Android key');
-        Purchases.configure({ apiKey: 'goog_SOhwxVOHyeCjxadVfIrITqTHMrd' });
-      }
+      // TODO: TEMPORARY — using Test Store for all builds to test purchase flow
+      // Switch back to platform keys before production launch!
+      console.log('🔑 RevenueCat: Configuring with TEST STORE key');
+      Purchases.configure({ apiKey: 'test_UbGQugWUgtBPAUSpqblBSZWCWIX' });
+
+      // UNCOMMENT FOR PRODUCTION:
+      // if (Platform.OS === 'ios') {
+      //   Purchases.configure({ apiKey: 'appl_PejDVLLTYLtWtqVbrjbEQzPqDUr' });
+      // } else if (Platform.OS === 'android') {
+      //   Purchases.configure({ apiKey: 'goog_SOhwxVOHyeCjxadVfIrITqTHMrd' });
+      // }
+
       console.log('✅ RevenueCat: configure() completed');
     } catch (e) {
       console.error('❌ RevenueCat: configure() FAILED:', e);
