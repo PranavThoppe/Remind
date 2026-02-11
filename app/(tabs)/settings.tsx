@@ -85,7 +85,6 @@ export default function SettingsScreen() {
   const { user, profile, signOut, refreshProfile } = useAuth();
   const { notificationsEnabled, setNotificationsEnabled, theme, setTheme } = useSettings();
   const [showThemeSelector, setShowThemeSelector] = useState(false);
-  const [isRestoring, setIsRestoring] = useState(false);
 
   const isPro = profile?.pro === true;
 
@@ -110,32 +109,6 @@ export default function SettingsScreen() {
       router.replace('/');
     } catch (error: any) {
       console.error('Error signing out:', error.message);
-    }
-  };
-
-  const handleRestore = async () => {
-    if (isRestoring || !user) return;
-
-    setIsRestoring(true);
-    try {
-      const customerInfo = await Purchases.restorePurchases();
-      console.log('📦 Settings Restore - Active:', Object.keys(customerInfo.entitlements.active));
-
-      if (customerInfo.entitlements.active[PRO_ENTITLEMENT_ID]) {
-        await supabase.from('profiles').update({ pro: true }).eq('id', user.id);
-        await refreshProfile();
-        Alert.alert('Success', 'Pro status restored! 🎉');
-      } else {
-        // No active subscription — ensure DB reflects this
-        await supabase.from('profiles').update({ pro: false }).eq('id', user.id);
-        await refreshProfile();
-        Alert.alert('No Subscription', 'No active subscription found. Pro access has been removed.');
-      }
-    } catch (e: any) {
-      console.error('Restore error:', e);
-      Alert.alert('Error', 'Failed to restore: ' + (e.message || 'Unknown error'));
-    } finally {
-      setIsRestoring(false);
     }
   };
 
@@ -214,12 +187,6 @@ export default function SettingsScreen() {
               label="Pro Subscription"
               value={isPro ? 'Active' : 'Get Pro'}
               onPress={() => router.push('/subscription')}
-              colors={colors}
-            />
-            <SettingItem
-              icon="refresh-outline"
-              label={isRestoring ? "Restoring..." : "Restore Purchases"}
-              onPress={handleRestore}
               isLast
               colors={colors}
             />

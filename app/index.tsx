@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Image,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -257,9 +258,13 @@ export default function AuthScreen() {
           ]}
         >
           <View style={styles.logoContainer}>
-            <Text style={styles.logoEmoji}>✨</Text>
+            <Image
+              source={require('../assets/icon.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
-          <Text style={styles.title}>Remind</Text>
+          <Text style={styles.title}>Re-Mind</Text>
           <Text style={styles.subtitle}>
             Simple reminders for a clearer mind
           </Text>
@@ -346,9 +351,10 @@ export default function AuthScreen() {
                 activeOpacity={0.8}
                 disabled={loading}
               >
-                <View style={styles.googleIcon}>
-                  <Text style={styles.googleIconText}>G</Text>
-                </View>
+                <Image
+                  source={require('../assets/google-g.png')}
+                  style={styles.googleIconImage}
+                />
                 <Text style={styles.googleButtonText}>
                   {loading && !showEmailLogin ? 'Connecting...' : 'Continue with Google'}
                 </Text>
@@ -533,8 +539,10 @@ const createStyles = (colors: any) => StyleSheet.create({
     marginBottom: spacing.xl,
     ...shadows.soft,
   },
-  logoEmoji: {
-    fontSize: 40,
+  logoImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 24,
   },
   title: {
     fontFamily: typography.fontFamily.bold,
@@ -563,19 +571,10 @@ const createStyles = (colors: any) => StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.card,
   },
-  googleIcon: {
+  googleIconImage: {
     width: 20,
     height: 20,
-    borderRadius: 4,
-    backgroundColor: '#4285F4',
-    justifyContent: 'center',
-    alignItems: 'center',
     marginRight: spacing.md,
-  },
-  googleIconText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
   },
   googleButtonText: {
     fontFamily: typography.fontFamily.medium,

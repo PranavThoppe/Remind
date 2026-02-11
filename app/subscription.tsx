@@ -7,6 +7,8 @@ import {
     ActivityIndicator,
     Alert,
     ScrollView,
+    Platform,
+    Linking,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -261,6 +263,29 @@ export default function SubscriptionScreen() {
                                 Restore Purchases
                             </Text>
                         </TouchableOpacity>
+
+                        {/* Manage Subscription - Pro users only */}
+                        {isPro && (
+                            <TouchableOpacity
+                                style={styles.manageButton}
+                                onPress={async () => {
+                                    try {
+                                        if (Platform.OS === 'ios') {
+                                            await Purchases.showManageSubscriptions();
+                                        } else {
+                                            await Linking.openURL('https://play.google.com/store/account/subscriptions');
+                                        }
+                                    } catch (e) {
+                                        console.error('Manage subscription error:', e);
+                                        Alert.alert('Error', 'Could not open subscription management.');
+                                    }
+                                }}
+                            >
+                                <Text style={[styles.restoreText, { color: colors.mutedForeground }]}>
+                                    Manage Subscription
+                                </Text>
+                            </TouchableOpacity>
+                        )}
                     </View>
 
                 </ScrollView>
@@ -377,5 +402,9 @@ const styles = StyleSheet.create({
     proBadgeText: {
         fontFamily: typography.fontFamily.semibold,
         fontSize: typography.fontSize.sm,
+    },
+    manageButton: {
+        alignItems: 'center',
+        paddingVertical: spacing.lg,
     },
 });
