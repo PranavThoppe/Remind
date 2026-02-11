@@ -9,6 +9,7 @@ import {
   Animated,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -98,12 +99,12 @@ export default function AuthScreen() {
 
         // Handle rate limit specifically
         if (error.message.includes('rate limit')) {
-          alert('Too many attempts. Please wait 60 seconds before trying again.');
+          Alert.alert('Error', 'Too many attempts. Please wait 60 seconds before trying again.');
           setCooldown(60);
           return;
         }
 
-        alert(error.message);
+        Alert.alert('Error', error.message);
         return;
       }
 
@@ -112,7 +113,7 @@ export default function AuthScreen() {
       setCooldown(60); // Start cooldown after successful send
     } catch (error: any) {
       console.error('Error signing in with email:', error.message);
-      alert('An unexpected error occurred. Please try again.');
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -129,7 +130,7 @@ export default function AuthScreen() {
 
       if (error) {
         console.error('Supabase Password Sign-In error:', error);
-        alert(error.message);
+        Alert.alert('Error', error.message);
         return;
       }
 
@@ -139,7 +140,7 @@ export default function AuthScreen() {
       }
     } catch (error: any) {
       console.error('Error signing in with password:', error.message);
-      alert('An unexpected error occurred. Please try again.');
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -159,7 +160,7 @@ export default function AuthScreen() {
 
       if (error) {
         console.error('OTP Verification error:', error);
-        alert('Invalid or expired code. Please try again.');
+        Alert.alert('Error', 'Invalid or expired code. Please try again.');
         return;
       }
 
@@ -169,7 +170,7 @@ export default function AuthScreen() {
       }
     } catch (error: any) {
       console.error('Error verifying OTP:', error.message);
-      alert('Failed to verify code. Please try again.');
+      Alert.alert('Error', 'Failed to verify code. Please try again.');
     } finally {
       setLoading(false);
     }

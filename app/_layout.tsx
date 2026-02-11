@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
+import Purchases from 'react-native-purchases';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
   useFonts,
@@ -158,6 +159,15 @@ function RootContent() {
 
   useEffect(() => {
     initializeNotifications().catch(console.error);
+
+    if (__DEV__) {
+      // Use RevenueCat Test Store for development (mock purchase modal)
+      Purchases.configure({ apiKey: 'test_UbGQugWUgtBPAUSpqblBSZWCWIX' });
+    } else if (Platform.OS === 'ios') {
+      Purchases.configure({ apiKey: 'appl_PejDVLLTYLtWtqVbrjbEQzPqDUr' });
+    } else if (Platform.OS === 'android') {
+      Purchases.configure({ apiKey: 'goog_SOhwxVOHyeCjxadVfIrITqTHMrd' });
+    }
   }, []);
 
   if (!fontsLoaded && !fontError) {

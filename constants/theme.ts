@@ -31,6 +31,11 @@ export const lightColors = {
   destructive: '#EF4444',
   destructiveForeground: '#FFFFFF',
 
+  // Gold - Premium/Pro accent
+  gold: '#D4A017',
+  goldLight: '#F5E6B8',
+  goldForeground: '#FFFFFF',
+
   // Border
   border: '#E5E7EB',
   input: '#E5E7EB',
@@ -68,6 +73,11 @@ export const darkColors = {
   // Destructive - Red for delete/sign out
   destructive: '#EF4444',
   destructiveForeground: '#7F1D1D',
+
+  // Gold - Premium/Pro accent
+  gold: '#F5C842',
+  goldLight: '#3D3520',
+  goldForeground: '#1A1400',
 
   // Border
   border: '#374151',

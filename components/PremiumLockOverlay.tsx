@@ -39,8 +39,8 @@ export function PremiumLockOverlay({ onUnlock }: PremiumLockOverlayProps) {
 function OverlayContent({ colors, onUnlock }: { colors: any, onUnlock: () => void }) {
     return (
         <View style={styles.contentContainer}>
-            <View style={[styles.iconContainer, { backgroundColor: colors.card }]}>
-                <Ionicons name="lock-closed" size={32} color={colors.primary} />
+            <View style={[styles.iconContainer, { backgroundColor: colors.goldLight }]}>
+                <Ionicons name="lock-closed" size={32} color={colors.gold} />
             </View>
 
             <Text style={[styles.title, { color: colors.foreground }]}>
@@ -52,7 +52,7 @@ function OverlayContent({ colors, onUnlock }: { colors: any, onUnlock: () => voi
             </Text>
 
             <TouchableOpacity
-                style={[styles.button, { backgroundColor: colors.primary }]}
+                style={[styles.button, { backgroundColor: colors.gold }]}
                 onPress={onUnlock}
                 activeOpacity={0.8}
             >

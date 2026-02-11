@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useRouter } from 'expo-router';
 import {
   View,
   Text,
@@ -186,6 +187,7 @@ function MessageBubble({
 }
 
 export default function AIChatScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { tags, priorities } = useSettings();
@@ -620,7 +622,7 @@ export default function AIChatScreen() {
   const dynamicStyles = createDynamicStyles(colors, insets);
 
   const handleUnlock = () => {
-    Alert.alert('Upgrade to Pro', 'This feature is available for Pro users.');
+    router.push('/subscription');
   };
 
   const isPro = profile?.pro === true;
@@ -720,7 +722,7 @@ export default function AIChatScreen() {
                 disabled={isThinking || !isPro}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Ionicons name="arrow-up-circle" size={32} color={colors.primary} />
+                <Ionicons name="arrow-up-circle" size={32} color={colors.gold} />
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
@@ -875,7 +877,7 @@ const createDynamicStyles = (colors: any, insets: any) => StyleSheet.create({
   headerTitle: {
     fontFamily: typography.fontFamily.title,
     fontSize: typography.fontSize['2xl'],
-    color: colors.foreground,
+    color: colors.gold,
   },
   headerSubtitle: {
     fontFamily: typography.fontFamily.regular,
@@ -886,7 +888,7 @@ const createDynamicStyles = (colors: any, insets: any) => StyleSheet.create({
   clearButton: {
     padding: spacing.sm,
     borderRadius: borderRadius.md,
-    backgroundColor: colors.muted,
+    backgroundColor: colors.goldLight,
   },
   messagesList: {
     paddingTop: spacing.lg,
@@ -909,7 +911,7 @@ const createDynamicStyles = (colors: any, insets: any) => StyleSheet.create({
     width: 35,
     height: 35,
     borderRadius: 21,
-    backgroundColor: '#FFFFFF', // Specifically white as requested
+    backgroundColor: colors.gold,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 0,

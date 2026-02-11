@@ -111,7 +111,9 @@ export default function TabLayout() {
         options={{
           title: 'AI',
           tabBarIcon: ({ focused }) => (
-            <TabIcon name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'} focused={focused} colors={colors} />
+            <View style={{ alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 18, backgroundColor: colors.gold, ...shadows.soft }}>
+              <Ionicons name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'} size={22} color={colors.goldForeground} />
+            </View>
           ),
           tabBarLabel: () => null,
         }}
