@@ -132,10 +132,10 @@ export default function SubscriptionScreen() {
 
                     {/* Header */}
                     <View style={styles.header}>
-                        <View style={[styles.proIconContainer, { backgroundColor: colors.goldLight }]}>
-                            <Ionicons name="diamond" size={36} color={colors.gold} />
+                        <View style={[styles.proIconContainer, { backgroundColor: isPro ? colors.primaryLight : colors.goldLight }]}>
+                            <Ionicons name="diamond" size={36} color={isPro ? colors.primary : colors.gold} />
                         </View>
-                        <Text style={[styles.title, { color: colors.gold }]}>
+                        <Text style={[styles.title, { color: isPro ? colors.primary : colors.gold }]}>
                             {isPro ? 'You\'re Pro!' : 'Unlock Mind'}
                         </Text>
                         <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
@@ -155,11 +155,11 @@ export default function SubscriptionScreen() {
                                     index < features.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
                                 ]}
                             >
-                                <View style={[styles.featureIcon, { backgroundColor: colors.goldLight }]}>
-                                    <Ionicons name={feature.icon} size={18} color={colors.gold} />
+                                <View style={[styles.featureIcon, { backgroundColor: isPro ? colors.primaryLight : colors.goldLight }]}>
+                                    <Ionicons name={feature.icon} size={18} color={isPro ? colors.primary : colors.gold} />
                                 </View>
                                 <Text style={[styles.featureLabel, { color: colors.foreground }]}>{feature.label}</Text>
-                                <Ionicons name="checkmark-circle" size={20} color={colors.gold} />
+                                <Ionicons name="checkmark-circle" size={20} color={isPro ? colors.primary : colors.gold} />
                             </View>
                         ))}
                     </View>
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
         marginBottom: spacing.lg,
     },
     title: {
-        fontFamily: typography.fontFamily.bold,
+        fontFamily: typography.fontFamily.title,
         fontSize: typography.fontSize['3xl'],
         marginBottom: spacing.sm,
         textAlign: 'center',

@@ -98,8 +98,8 @@ const styles = StyleSheet.create({
         elevation: 5,
     },
     title: {
-        fontFamily: typography.fontFamily.bold,
-        fontSize: typography.fontSize['2xl'],
+        fontFamily: typography.fontFamily.title,
+        fontSize: typography.fontSize['3xl'],
         marginBottom: spacing.sm,
         textAlign: 'center',
     },
