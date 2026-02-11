@@ -129,13 +129,20 @@ function RevenueCatSync() {
         console.log('✅ RevenueCat: logIn() completed');
         console.log('📦 Active entitlements:', Object.keys(customerInfo.entitlements.active));
 
-        // Sync: if RC says the user has pro but the DB doesn't, fix the DB
+        // Two-way sync: DB should always match RevenueCat's actual state
         const hasEntitlement = !!customerInfo.entitlements.active[PRO_ENTITLEMENT_ID];
-        if (hasEntitlement && profile?.pro !== true) {
-          console.log('🔄 Syncing pro status: RC has entitlement but DB is false, updating...');
+        const dbIsPro = profile?.pro === true;
+
+        if (hasEntitlement && !dbIsPro) {
+          console.log('🔄 Syncing pro status: RC has entitlement but DB is false → upgrading');
           await supabase.from('profiles').update({ pro: true }).eq('id', user!.id);
           await refreshProfile();
           console.log('✅ Pro status synced to true');
+        } else if (!hasEntitlement && dbIsPro) {
+          console.log('🔄 Syncing pro status: RC has NO entitlement but DB is true → downgrading');
+          await supabase.from('profiles').update({ pro: false }).eq('id', user!.id);
+          await refreshProfile();
+          console.log('✅ Pro status synced to false');
         }
 
         synced.current = true;

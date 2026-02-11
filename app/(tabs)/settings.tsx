@@ -9,10 +9,13 @@ import {
   Platform,
   Image,
   Switch,
+  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import Purchases from 'react-native-purchases';
+import { supabase } from '../../lib/supabase';
 import { shadows, spacing, borderRadius, typography } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../contexts/SettingsContext';
@@ -69,6 +72,9 @@ const Section = ({ title, children, colors }: { title: string; children: React.R
   );
 };
 
+// Must match the entitlement identifier in the RevenueCat dashboard exactly
+const PRO_ENTITLEMENT_ID = 'AI Reminders';
+
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
@@ -76,9 +82,12 @@ export default function SettingsScreen() {
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(8)).current;
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, refreshProfile } = useAuth();
   const { notificationsEnabled, setNotificationsEnabled, theme, setTheme } = useSettings();
   const [showThemeSelector, setShowThemeSelector] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+
+  const isPro = profile?.pro === true;
 
   useEffect(() => {
     Animated.parallel([
@@ -101,6 +110,32 @@ export default function SettingsScreen() {
       router.replace('/');
     } catch (error: any) {
       console.error('Error signing out:', error.message);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (isRestoring || !user) return;
+
+    setIsRestoring(true);
+    try {
+      const customerInfo = await Purchases.restorePurchases();
+      console.log('📦 Settings Restore - Active:', Object.keys(customerInfo.entitlements.active));
+
+      if (customerInfo.entitlements.active[PRO_ENTITLEMENT_ID]) {
+        await supabase.from('profiles').update({ pro: true }).eq('id', user.id);
+        await refreshProfile();
+        Alert.alert('Success', 'Pro status restored! 🎉');
+      } else {
+        // No active subscription — ensure DB reflects this
+        await supabase.from('profiles').update({ pro: false }).eq('id', user.id);
+        await refreshProfile();
+        Alert.alert('No Subscription', 'No active subscription found. Pro access has been removed.');
+      }
+    } catch (e: any) {
+      console.error('Restore error:', e);
+      Alert.alert('Error', 'Failed to restore: ' + (e.message || 'Unknown error'));
+    } finally {
+      setIsRestoring(false);
     }
   };
 
@@ -167,6 +202,24 @@ export default function SettingsScreen() {
               icon="flag-outline"
               label="Priority Levels"
               onPress={() => router.push('/settings/priority')}
+              isLast
+              colors={colors}
+            />
+          </Section>
+
+          {/* Membership Section */}
+          <Section title="Membership" colors={colors}>
+            <SettingItem
+              icon="diamond-outline"
+              label="Pro Subscription"
+              value={isPro ? 'Active' : 'Get Pro'}
+              onPress={() => router.push('/subscription')}
+              colors={colors}
+            />
+            <SettingItem
+              icon="refresh-outline"
+              label={isRestoring ? "Restoring..." : "Restore Purchases"}
+              onPress={handleRestore}
               isLast
               colors={colors}
             />

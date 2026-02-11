@@ -134,7 +134,12 @@ export default function SubscriptionScreen() {
                     { text: 'Great!', onPress: () => router.back() },
                 ]);
             } else {
-                Alert.alert('No Subscription Found', 'We couldn\'t find an active subscription to restore.');
+                // No active subscription — ensure DB reflects this
+                if (user) {
+                    await supabase.from('profiles').update({ pro: false }).eq('id', user.id);
+                    await refreshProfile();
+                }
+                Alert.alert('No Subscription Found', 'No active subscription found. Pro access has been removed.');
             }
         } catch (e: any) {
             console.error('Restore error:', e);
@@ -181,6 +186,13 @@ export default function SubscriptionScreen() {
                                 ? 'You have full access to all AI features.'
                                 : 'Get the most out of Remind with AI-powered features.'}
                         </Text>
+
+                        {isPro && (
+                            <View style={[styles.proBadge, { borderColor: colors.primary }]}>
+                                <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
+                                <Text style={[styles.proBadgeText, { color: colors.primary }]}>Pro Active</Text>
+                            </View>
+                        )}
                     </View>
 
                     {/* Features List */}
@@ -202,52 +214,54 @@ export default function SubscriptionScreen() {
                         ))}
                     </View>
 
-                    {/* Packages / Purchase */}
-                    {!isPro && (
-                        <View style={styles.packagesSection}>
-                            {loading ? (
-                                <ActivityIndicator size="large" color={colors.gold} />
-                            ) : packages.length > 0 ? (
-                                packages.map((pkg) => (
-                                    <TouchableOpacity
-                                        key={pkg.identifier}
-                                        style={[styles.packageButton, { backgroundColor: colors.gold }]}
-                                        onPress={() => handlePurchase(pkg)}
-                                        disabled={purchasing}
-                                        activeOpacity={0.8}
-                                    >
-                                        {purchasing ? (
-                                            <ActivityIndicator size="small" color={colors.goldForeground} />
-                                        ) : (
-                                            <>
-                                                <Text style={[styles.packageTitle, { color: colors.goldForeground }]}>
-                                                    {pkg.product.title || 'Pro'}
-                                                </Text>
-                                                <Text style={[styles.packagePrice, { color: colors.goldForeground }]}>
-                                                    {pkg.product.priceString}
-                                                </Text>
-                                            </>
-                                        )}
-                                    </TouchableOpacity>
-                                ))
-                            ) : (
-                                <Text style={[styles.noPackages, { color: colors.mutedForeground }]}>
-                                    No subscription packages available yet.
-                                </Text>
-                            )}
+                    {/* Packages / Purchase logic for non-pro, or Restore for everyone */}
+                    <View style={styles.packagesSection}>
+                        {!isPro && (
+                            <>
+                                {loading ? (
+                                    <ActivityIndicator size="large" color={colors.gold} />
+                                ) : packages.length > 0 ? (
+                                    packages.map((pkg) => (
+                                        <TouchableOpacity
+                                            key={pkg.identifier}
+                                            style={[styles.packageButton, { backgroundColor: colors.gold }]}
+                                            onPress={() => handlePurchase(pkg)}
+                                            disabled={purchasing}
+                                            activeOpacity={0.8}
+                                        >
+                                            {purchasing ? (
+                                                <ActivityIndicator size="small" color={colors.goldForeground} />
+                                            ) : (
+                                                <>
+                                                    <Text style={[styles.packageTitle, { color: colors.goldForeground }]}>
+                                                        {pkg.product.title || 'Pro'}
+                                                    </Text>
+                                                    <Text style={[styles.packagePrice, { color: colors.goldForeground }]}>
+                                                        {pkg.product.priceString}
+                                                    </Text>
+                                                </>
+                                            )}
+                                        </TouchableOpacity>
+                                    ))
+                                ) : (
+                                    <Text style={[styles.noPackages, { color: colors.mutedForeground }]}>
+                                        No subscription packages available yet.
+                                    </Text>
+                                )}
+                            </>
+                        )}
 
-                            {/* Restore */}
-                            <TouchableOpacity
-                                style={styles.restoreButton}
-                                onPress={handleRestore}
-                                disabled={purchasing}
-                            >
-                                <Text style={[styles.restoreText, { color: colors.mutedForeground }]}>
-                                    Restore Purchases
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-                    )}
+                        {/* Restore - Always accessible */}
+                        <TouchableOpacity
+                            style={styles.restoreButton}
+                            onPress={handleRestore}
+                            disabled={purchasing}
+                        >
+                            <Text style={[styles.restoreText, { color: colors.mutedForeground }]}>
+                                Restore Purchases
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
 
                 </ScrollView>
             </View>
@@ -349,5 +363,19 @@ const styles = StyleSheet.create({
         fontFamily: typography.fontFamily.medium,
         fontSize: typography.fontSize.sm,
         textDecorationLine: 'underline',
+    },
+    proBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+        borderRadius: borderRadius.full,
+        borderWidth: 1,
+        marginTop: spacing.md,
+        gap: spacing.xs,
+    },
+    proBadgeText: {
+        fontFamily: typography.fontFamily.semibold,
+        fontSize: typography.fontSize.sm,
     },
 });
