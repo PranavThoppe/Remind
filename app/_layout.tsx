@@ -160,13 +160,20 @@ function RootContent() {
   useEffect(() => {
     initializeNotifications().catch(console.error);
 
-    if (__DEV__) {
-      // Use RevenueCat Test Store for development (mock purchase modal)
-      Purchases.configure({ apiKey: 'test_UbGQugWUgtBPAUSpqblBSZWCWIX' });
-    } else if (Platform.OS === 'ios') {
-      Purchases.configure({ apiKey: 'appl_PejDVLLTYLtWtqVbrjbEQzPqDUr' });
-    } else if (Platform.OS === 'android') {
-      Purchases.configure({ apiKey: 'goog_SOhwxVOHyeCjxadVfIrITqTHMrd' });
+    try {
+      if (__DEV__) {
+        console.log('🔑 RevenueCat: Configuring with TEST STORE key');
+        Purchases.configure({ apiKey: 'test_UbGQugWUgtBPAUSpqblBSZWCWIX' });
+      } else if (Platform.OS === 'ios') {
+        console.log('🔑 RevenueCat: Configuring with iOS key');
+        Purchases.configure({ apiKey: 'appl_PejDVLLTYLtWtqVbrjbEQzPqDUr' });
+      } else if (Platform.OS === 'android') {
+        console.log('🔑 RevenueCat: Configuring with Android key');
+        Purchases.configure({ apiKey: 'goog_SOhwxVOHyeCjxadVfIrITqTHMrd' });
+      }
+      console.log('✅ RevenueCat: configure() completed');
+    } catch (e) {
+      console.error('❌ RevenueCat: configure() FAILED:', e);
     }
   }, []);
 

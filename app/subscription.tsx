@@ -26,6 +26,7 @@ export default function SubscriptionScreen() {
     const [packages, setPackages] = useState<PurchasesPackage[]>([]);
     const [loading, setLoading] = useState(true);
     const [purchasing, setPurchasing] = useState(false);
+    const [debugInfo, setDebugInfo] = useState<string>('Loading...');
     const isPro = profile?.pro === true;
 
     useEffect(() => {
@@ -35,11 +36,31 @@ export default function SubscriptionScreen() {
     async function loadOfferings() {
         try {
             const offerings = await Purchases.getOfferings();
+
+            // === DEBUG: Show in UI since no Mac for console ===
+            const debugLines: string[] = [];
+            debugLines.push(`Current: ${offerings.current ? 'EXISTS' : 'NULL'}`);
+            debugLines.push(`All keys: [${Object.keys(offerings.all).join(', ')}]`);
+            if (offerings.current) {
+                debugLines.push(`Offering ID: ${offerings.current.identifier}`);
+                debugLines.push(`Packages: ${offerings.current.availablePackages.length}`);
+                offerings.current.availablePackages.forEach((pkg, i) => {
+                    debugLines.push(`  Pkg ${i}: ${pkg.identifier} - ${pkg.product.title} - ${pkg.product.priceString}`);
+                });
+            } else {
+                Object.entries(offerings.all).forEach(([key, offering]) => {
+                    debugLines.push(`  "${key}": ${offering.availablePackages.length} packages`);
+                });
+            }
+            setDebugInfo(debugLines.join('\n'));
+            // === END DEBUG ===
+
             if (offerings.current?.availablePackages) {
                 setPackages(offerings.current.availablePackages);
             }
-        } catch (e) {
-            console.error('Error fetching offerings:', e);
+        } catch (e: any) {
+            setDebugInfo(`ERROR: ${e.message || String(e)}`);
+            console.error('❌ Error fetching offerings:', e);
         } finally {
             setLoading(false);
         }
@@ -210,6 +231,12 @@ export default function SubscriptionScreen() {
                             </TouchableOpacity>
                         </View>
                     )}
+
+                    {/* Debug Panel - REMOVE after debugging */}
+                    <View style={{ marginTop: 24, padding: 12, borderRadius: 8, backgroundColor: colors.card, borderWidth: 1, borderColor: '#EF4444' }}>
+                        <Text style={{ color: '#EF4444', fontWeight: 'bold', marginBottom: 4, fontSize: 12 }}>🔧 DEBUG (remove later)</Text>
+                        <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'monospace' }}>{debugInfo}</Text>
+                    </View>
                 </ScrollView>
             </View>
         </>
