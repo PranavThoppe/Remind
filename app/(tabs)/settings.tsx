@@ -10,6 +10,7 @@ import {
   Image,
   Switch,
   Alert,
+  Linking,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -267,6 +268,18 @@ export default function SettingsScreen() {
               label="About"
               value="v1.0.0"
               onPress={() => { }}
+              colors={colors}
+            />
+            <SettingItem
+              icon="document-text-outline"
+              label="Privacy Policy"
+              onPress={() => Linking.openURL('https://claude.ai/public/artifacts/949089ac-1ea1-41e9-93d4-a72bb666b28a')}
+              colors={colors}
+            />
+            <SettingItem
+              icon="book-outline"
+              label="Terms of Use"
+              onPress={() => Linking.openURL('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/')}
               isLast
               colors={colors}
             />
@@ -288,9 +301,6 @@ export default function SettingsScreen() {
           </TouchableOpacity>
 
           {/* Version info */}
-          <Text style={styles.versionText}>
-            Made with ❤️ using React Native
-          </Text>
         </Animated.View>
       </ScrollView>
     </View>

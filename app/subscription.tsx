@@ -158,6 +158,27 @@ export default function SubscriptionScreen() {
         { icon: 'image' as const, label: 'Image-to-Reminder Extraction' },
     ];
 
+    function getPackageDuration(pkg: PurchasesPackage): string {
+        switch (pkg.packageType) {
+            case 'MONTHLY':
+                return '/ month';
+            case 'ANNUAL':
+                return '/ year';
+            case 'WEEKLY':
+                return '/ week';
+            case 'LIFETIME':
+                return ' one-time';
+            case 'SIX_MONTH':
+                return ' / 6 months';
+            case 'THREE_MONTH':
+                return ' / 3 months';
+            case 'TWO_MONTH':
+                return ' / 2 months';
+            default:
+                return '';
+        }
+    }
+
     return (
         <>
             <Stack.Screen options={{ headerShown: false }} />
@@ -240,6 +261,9 @@ export default function SubscriptionScreen() {
                                                     </Text>
                                                     <Text style={[styles.packagePrice, { color: colors.goldForeground }]}>
                                                         {pkg.product.priceString}
+                                                        <Text style={{ fontSize: typography.fontSize.base, fontWeight: 'normal' }}>
+                                                            {getPackageDuration(pkg)}
+                                                        </Text>
                                                     </Text>
                                                 </>
                                             )}
@@ -286,6 +310,26 @@ export default function SubscriptionScreen() {
                                 </Text>
                             </TouchableOpacity>
                         )}
+                    </View>
+
+
+                    {/* Legal Links */}
+                    <View style={styles.legalContainer}>
+                        <TouchableOpacity
+                            onPress={() => Linking.openURL('https://claude.ai/public/artifacts/949089ac-1ea1-41e9-93d4-a72bb666b28a')}
+                        >
+                            <Text style={[styles.legalText, { color: colors.mutedForeground }]}>
+                                Privacy Policy
+                            </Text>
+                        </TouchableOpacity>
+                        <View style={[styles.legalSeparator, { backgroundColor: colors.border }]} />
+                        <TouchableOpacity
+                            onPress={() => Linking.openURL('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/')}
+                        >
+                            <Text style={[styles.legalText, { color: colors.mutedForeground }]}>
+                                Terms of Use (EULA)
+                            </Text>
+                        </TouchableOpacity>
                     </View>
 
                 </ScrollView>
@@ -406,5 +450,22 @@ const styles = StyleSheet.create({
     manageButton: {
         alignItems: 'center',
         paddingVertical: spacing.lg,
+    },
+    legalContainer: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: spacing['2xl'],
+        marginBottom: spacing.xl,
+        gap: spacing.md,
+    },
+    legalText: {
+        fontFamily: typography.fontFamily.regular,
+        fontSize: typography.fontSize.xs,
+        textDecorationLine: 'underline',
+    },
+    legalSeparator: {
+        width: 1,
+        height: 12,
     },
 });
