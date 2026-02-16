@@ -157,11 +157,22 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
       if (newStatus && reminder && reminder.repeat && reminder.repeat !== 'none') {
         const nextDate = getNextDate(reminder.date || undefined, reminder.repeat);
 
+        // If repeat_until is set and the next occurrence is past the end date, stop repeating
+        if (reminder.repeat_until && nextDate) {
+          const nextDateObj = new Date(nextDate + 'T00:00:00');
+          const untilDateObj = new Date(reminder.repeat_until + 'T00:00:00');
+          if (nextDateObj > untilDateObj) {
+            console.log('[RemindersContext] Repeat ended: next date', nextDate, 'is past repeat_until', reminder.repeat_until);
+            return { error: null };
+          }
+        }
+
         const nextReminder = {
           title: reminder.title,
           date: nextDate,
           time: reminder.time,
           repeat: reminder.repeat,
+          repeat_until: reminder.repeat_until || null,
           tag_id: reminder.tag_id,
           priority_id: reminder.priority_id,
           user_id: user?.id,

@@ -45,6 +45,10 @@ const createReminderTool = {
                 priority_name: {
                     type: "string",
                     description: "Name of the priority level to assign. Must match one of the user's available priorities. Only include if the user mentions a priority."
+                },
+                repeat_until: {
+                    type: "string",
+                    description: "End date for recurring reminders in YYYY-MM-DD format. Only set when user specifies a time-limited repeat (e.g., 'every Monday for 2 months'). Leave unset for indefinite repeats."
                 }
             },
             required: ["title", "date"]
@@ -61,14 +65,18 @@ const searchRemindersTool = {
             properties: {
                 query: {
                     type: "string",
-                    description: "Natural language search query describing what to search for (e.g., 'doctor', 'what's tomorrow', 'gym reminders')."
+                    description: "Optional keyword to filter reminders by title (e.g., 'doctor', 'gym'). Only set this for keyword searches, NOT for date-based queries."
                 },
-                target_date: {
+                start_date: {
                     type: "string",
-                    description: "Specific date to filter results in YYYY-MM-DD format. Use when user asks about a specific day."
+                    description: "Start of date range in YYYY-MM-DD format (inclusive). For a single day, set start_date and end_date to the same value."
+                },
+                end_date: {
+                    type: "string",
+                    description: "End of date range in YYYY-MM-DD format (inclusive). For a single day, set start_date and end_date to the same value."
                 }
             },
-            required: ["query"]
+            required: []
         }
     }
 }
@@ -166,6 +174,7 @@ async function handleCreateReminder(toolInput: any, userId: string, supabase: an
             date: toolInput.date,
             time: toolInput.time || null,
             repeat: toolInput.repeat || 'none',
+            repeat_until: toolInput.repeat_until || null,
             tag_id: tagId,
             priority_id: priorityId,
             completed: false,
@@ -186,6 +195,7 @@ async function handleCreateReminder(toolInput: any, userId: string, supabase: an
             date: data.date,
             time: data.time,
             repeat: data.repeat,
+            repeat_until: data.repeat_until || null,
             tag: toolInput.tag_name || null,
             priority: toolInput.priority_name || null
         },
@@ -202,13 +212,19 @@ async function handleSearchReminders(toolInput: any, userId: string, supabase: a
         .eq('user_id', userId)
         .order('date', { ascending: true })
 
-    if (toolInput.target_date) {
-        // Date-specific search: filter by date only, ignore the natural language query
-        // Nova often sends the full question as `query` (e.g. "what do I have tomorrow")
-        // which would match zero titles if used as an ilike filter
-        queryBuilder = queryBuilder.eq('date', toolInput.target_date)
-    } else if (toolInput.query) {
-        // No date specified: use keyword search on titles
+    // Date range filtering
+    if (toolInput.start_date && toolInput.end_date) {
+        queryBuilder = queryBuilder
+            .gte('date', toolInput.start_date)
+            .lte('date', toolInput.end_date)
+    } else if (toolInput.start_date) {
+        queryBuilder = queryBuilder.gte('date', toolInput.start_date)
+    } else if (toolInput.end_date) {
+        queryBuilder = queryBuilder.lte('date', toolInput.end_date)
+    }
+
+    // Keyword search only when no date range is specified
+    if (!toolInput.start_date && !toolInput.end_date && toolInput.query) {
         queryBuilder = queryBuilder.ilike('title', `%${toolInput.query}%`)
     }
 
@@ -449,12 +465,20 @@ When the user wants to remove or delete a reminder, use the delete_reminder tool
 
 RULES:
 - Always calculate actual dates from relative references (e.g., "tomorrow" = ${tomorrowStr}).
+- For date ranges, always set both start_date and end_date:
+  - Single day (e.g., "tomorrow") → start_date and end_date = ${tomorrowStr}
+  - "this week" → start_date = ${todayStr}, end_date = the coming Sunday
+  - "next week" → start_date = next Monday, end_date = next Sunday
+  - "this month" → start_date = ${todayStr}, end_date = last day of the month
+- For keyword searches (e.g., "find my gym reminders"), use the query field instead of dates.
 - Keep reminder titles concise (max 6 words).
 - Convert times to 24-hour format (e.g., "7pm" = "19:00").
 - If the user asks for multiple things, handle each one by calling the appropriate tools.
 - After performing actions, give a brief, friendly confirmation.
 - If info is missing (e.g., no date specified), ask the user to clarify.
-- When assigning tags or priorities, use the exact names from the available lists above.`
+- When assigning tags or priorities, use the exact names from the available lists above.
+- If the user specifies a time-limited repeat (e.g., "every Monday for 2 months"), set repeat to the pattern and repeat_until to the calculated end date.
+- Never wrap your response in XML tags like <thinking> or <response>. Just respond naturally.`
 
         // Build conversation messages
         let conversationMessages: any[] = [{
@@ -562,8 +586,14 @@ RULES:
 
             } else if (stopReason === "end_turn") {
                 // Nova is done - extract final text response
-                const finalText = response.output?.message?.content?.find((c: any) => c.text)?.text
+                const rawText = response.output?.message?.content?.find((c: any) => c.text)?.text
                     || "Done!"
+
+                // Strip <thinking>...</thinking> and <response>...</response> XML tags Nova sometimes adds
+                const finalText = rawText
+                    .replace(/<thinking>[\s\S]*?<\/thinking>\s*/g, '')
+                    .replace(/<response>([\s\S]*?)<\/response>/g, '$1')
+                    .trim() || "Done!"
 
                 console.log('[Nova Agent] Final response:', finalText)
                 console.log('[Nova Agent] Tool calls made:', toolCallLog.length)

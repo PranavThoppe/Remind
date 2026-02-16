@@ -13,6 +13,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { spacing, typography, borderRadius, shadows } from '../../constants/theme';
+import { Keyboard, Pressable } from 'react-native';
 import { PRESET_COLORS, PriorityLevel } from '../../types/settings';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useTheme } from '../../hooks/useTheme';
@@ -22,7 +23,7 @@ export default function PriorityScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const styles = createStyles(colors);
-  
+
   const { priorities, addPriority, updatePriority, deletePriority } = useSettings();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
@@ -40,8 +41,8 @@ export default function PriorityScreen() {
     setIsSaving(true);
     try {
       if (isAdding) {
-        const nextRank = priorities.length > 0 
-          ? Math.max(...priorities.map(p => p.rank)) + 1 
+        const nextRank = priorities.length > 0
+          ? Math.max(...priorities.map(p => p.rank)) + 1
           : 1;
         await addPriority(priorityName.trim(), selectedColor, nextRank);
         setIsAdding(false);
@@ -49,7 +50,7 @@ export default function PriorityScreen() {
         await updatePriority(editingId, priorityName.trim(), selectedColor);
         setEditingId(null);
       }
-      
+
       setPriorityName('');
       setSelectedColor('#EF4444');
     } catch (error: any) {
@@ -120,96 +121,100 @@ export default function PriorityScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
-        <Text style={styles.description}>
-          Define priority levels (1, 2, 3...) for your reminders. New levels default to red.
-        </Text>
+        <Pressable onPress={Keyboard.dismiss} style={{ flex: 1 }}>
+          <Text style={styles.description}>
+            Define priority levels (1, 2, 3...) for your reminders. New levels default to red.
+          </Text>
 
-        {(editingId || isAdding) && (
-          <View style={styles.editCard}>
-            <View style={styles.editHeader}>
-              <Text style={styles.editTitle}>{isAdding ? 'Add Priority' : 'Edit Priority'}</Text>
-              {!isAdding && editingId && (
-                <TouchableOpacity onPress={() => handleDeletePriority(editingId)} disabled={isSaving}>
-                  <Ionicons name="trash-outline" size={20} color={isSaving ? colors.mutedForeground : colors.destructive} />
-                </TouchableOpacity>
-              )}
-            </View>
-            <TextInput
-              style={styles.input}
-              placeholder="Priority Name (e.g. High, P1, Urgent)"
-              placeholderTextColor={colors.mutedForeground}
-              value={priorityName}
-              onChangeText={setPriorityName}
-              autoFocus
-              editable={!isSaving}
-            />
-            <Text style={styles.label}>Color</Text>
-            <TouchableOpacity 
-              style={[styles.colorPreview, { backgroundColor: selectedColor }]}
-              onPress={() => setShowPicker(true)}
-              disabled={isSaving}
-            >
-              <Ionicons name="color-palette" size={20} color="white" style={{ textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }} />
-              <Text style={styles.colorPreviewText}>Change Color</Text>
-            </TouchableOpacity>
-
-            <View style={styles.formButtons}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => {
-                  setEditingId(null);
-                  setIsAdding(false);
-                }}
-                disabled={isSaving}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.saveButton, isSaving && { opacity: 0.7 }]} 
-                onPress={handleSavePriority}
-                disabled={isSaving}
-              >
-                {isSaving ? (
-                  <ActivityIndicator size="small" color="white" />
-                ) : (
-                  <Text style={styles.saveButtonText}>{isAdding ? 'Add' : 'Save'}</Text>
+          {(editingId || isAdding) && (
+            <View style={styles.editCard}>
+              <View style={styles.editHeader}>
+                <Text style={styles.editTitle}>{isAdding ? 'Add Priority' : 'Edit Priority'}</Text>
+                {!isAdding && editingId && (
+                  <TouchableOpacity onPress={() => handleDeletePriority(editingId)} disabled={isSaving}>
+                    <Ionicons name="trash-outline" size={20} color={isSaving ? colors.mutedForeground : colors.destructive} />
+                  </TouchableOpacity>
                 )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        <View style={styles.prioritiesList}>
-          {priorities.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No priorities defined yet.</Text>
-              <TouchableOpacity onPress={startAdd} disabled={isSaving}>
-                <Text style={styles.emptyStateLink}>Add your first priority level</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            priorities.map((priority) => (
+              </View>
+              <TextInput
+                style={styles.input}
+                placeholder="Priority Name (e.g. High, P1, Urgent)"
+                placeholderTextColor={colors.mutedForeground}
+                value={priorityName}
+                onChangeText={setPriorityName}
+                autoFocus
+                editable={!isSaving}
+              />
+              <Text style={styles.label}>Color</Text>
               <TouchableOpacity
-                key={priority.id}
-                style={[
-                  styles.priorityItem,
-                  editingId === priority.id && styles.activePriorityItem,
-                ]}
-                onPress={() => startEdit(priority)}
-                activeOpacity={0.7}
+                style={[styles.colorPreview, { backgroundColor: selectedColor }]}
+                onPress={() => setShowPicker(true)}
                 disabled={isSaving}
               >
-                <View style={styles.priorityInfo}>
-                  <Text style={styles.priorityRank}>{priority.rank}.</Text>
-                  <View style={[styles.priorityColor, { backgroundColor: priority.color }]} />
-                  <Text style={styles.priorityName}>{priority.name}</Text>
-                </View>
-                <Ionicons name="pencil-outline" size={20} color={colors.mutedForeground} />
+                <Ionicons name="color-palette" size={20} color="white" style={{ textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }} />
+                <Text style={styles.colorPreviewText}>Change Color</Text>
               </TouchableOpacity>
-            ))
+
+              <View style={styles.formButtons}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => {
+                    setEditingId(null);
+                    setIsAdding(false);
+                  }}
+                  disabled={isSaving}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.saveButton, isSaving && { opacity: 0.7 }]}
+                  onPress={handleSavePriority}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>{isAdding ? 'Add' : 'Save'}</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
           )}
-        </View>
+
+          <View style={styles.prioritiesList}>
+            {priorities.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>No priorities defined yet.</Text>
+                <TouchableOpacity onPress={startAdd} disabled={isSaving}>
+                  <Text style={styles.emptyStateLink}>Add your first priority level</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              priorities.map((priority) => (
+                <TouchableOpacity
+                  key={priority.id}
+                  style={[
+                    styles.priorityItem,
+                    editingId === priority.id && styles.activePriorityItem,
+                  ]}
+                  onPress={() => startEdit(priority)}
+                  activeOpacity={0.7}
+                  disabled={isSaving}
+                >
+                  <View style={styles.priorityInfo}>
+                    <Text style={styles.priorityRank}>{priority.rank}.</Text>
+                    <View style={[styles.priorityColor, { backgroundColor: priority.color }]} />
+                    <Text style={styles.priorityName}>{priority.name}</Text>
+                  </View>
+                  <Ionicons name="pencil-outline" size={20} color={colors.mutedForeground} />
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        </Pressable>
       </ScrollView>
 
       <ColorPicker

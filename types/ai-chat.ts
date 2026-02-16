@@ -25,6 +25,7 @@ export interface ModalFieldUpdates {
   tag_id?: string | null;
   priority_id?: string | null;
   repeat?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+  repeat_until?: string | null;
 }
 
 export interface MockAIResponse {

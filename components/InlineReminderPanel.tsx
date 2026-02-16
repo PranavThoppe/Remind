@@ -223,7 +223,10 @@ export function InlineReminderPanel({
                     {selectedRepeat !== 'none' && (
                         <View style={styles.staticMetaItem}>
                             <Ionicons name="repeat-outline" size={12} color={colors.mutedForeground} />
-                            <Text style={styles.staticMetaText}>{selectedRepeatLabel}</Text>
+                            <Text style={styles.staticMetaText}>
+                                {selectedRepeatLabel}
+                                {fields.repeat_until ? ` until ${formatDisplayDate(fields.repeat_until)}` : ''}
+                            </Text>
                         </View>
                     )}
                 </View>

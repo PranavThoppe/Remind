@@ -5,6 +5,7 @@ export interface Reminder {
   date?: string | null;
   time?: string | null; // Allow null for clearing time
   repeat?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+  repeat_until?: string | null;
   completed: boolean;
   created_at: string;
   tag_id?: string | null; // Allow null for removing tags
