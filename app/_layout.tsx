@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import Purchases from 'react-native-purchases';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { supabase } from '../lib/supabase';
 import {
   useFonts,
   Inter_400Regular,
@@ -105,6 +106,57 @@ function NotificationHandler() {
   return null;
 }
 
+// Must match the entitlement identifier in the RevenueCat dashboard exactly
+const PRO_ENTITLEMENT_ID = 'AI Reminders';
+
+/**
+ * Identifies the Supabase user to RevenueCat and syncs pro status on startup.
+ * Fixes: purchases not appearing in RC customers dashboard, and
+ * pro status getting out of sync if a DB update fails during purchase.
+ */
+function RevenueCatSync() {
+  const { user, profile, refreshProfile } = useAuth();
+  const synced = useRef(false);
+
+  useEffect(() => {
+    if (!user || synced.current) return;
+
+    async function syncRevenueCat() {
+      try {
+        // Identify the user to RevenueCat so purchases are tied to their Supabase ID
+        console.log('🔗 RevenueCat: Logging in user', user!.id);
+        const { customerInfo } = await Purchases.logIn(user!.id);
+        console.log('✅ RevenueCat: logIn() completed');
+        console.log('📦 Active entitlements:', Object.keys(customerInfo.entitlements.active));
+
+        // Two-way sync: DB should always match RevenueCat's actual state
+        const hasEntitlement = !!customerInfo.entitlements.active[PRO_ENTITLEMENT_ID];
+        const dbIsPro = profile?.pro === true;
+
+        if (hasEntitlement && !dbIsPro) {
+          console.log('🔄 Syncing pro status: RC has entitlement but DB is false → upgrading');
+          await supabase.from('profiles').update({ pro: true }).eq('id', user!.id);
+          await refreshProfile();
+          console.log('✅ Pro status synced to true');
+        } else if (!hasEntitlement && dbIsPro) {
+          console.log('🔄 Syncing pro status: RC has NO entitlement but DB is true → downgrading');
+          await supabase.from('profiles').update({ pro: false }).eq('id', user!.id);
+          await refreshProfile();
+          console.log('✅ Pro status synced to false');
+        }
+
+        synced.current = true;
+      } catch (e) {
+        console.error('❌ RevenueCat sync error:', e);
+      }
+    }
+
+    syncRevenueCat();
+  }, [user, profile]);
+
+  return null;
+}
+
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const segments = useSegments();
@@ -161,18 +213,16 @@ function RootContent() {
     initializeNotifications().catch(console.error);
 
     try {
-      // TODO: TEMPORARY — using Test Store for all builds to test purchase flow
-      // Switch back to platform keys before production launch!
-      console.log('🔑 RevenueCat: Configuring with TEST STORE key');
-      Purchases.configure({ apiKey: 'test_UbGQugWUgtBPAUSpqblBSZWCWIX' });
-
-      // UNCOMMENT FOR PRODUCTION:
-      // if (Platform.OS === 'ios') {
-      //   Purchases.configure({ apiKey: 'appl_PejDVLLTYLtWtqVbrjbEQzPqDUr' });
-      // } else if (Platform.OS === 'android') {
-      //   Purchases.configure({ apiKey: 'goog_SOhwxVOHyeCjxadVfIrITqTHMrd' });
-      // }
-
+      if (__DEV__) {
+        console.log('🔑 RevenueCat: Configuring with TEST STORE key');
+        Purchases.configure({ apiKey: 'test_UbGQugWUgtBPAUSpqblBSZWCWIX' });
+      } else if (Platform.OS === 'ios') {
+        console.log('🔑 RevenueCat: Configuring with iOS key');
+        Purchases.configure({ apiKey: 'appl_PejDVLLTYLtWtqVbrjbEQzPqDUr' });
+      } else if (Platform.OS === 'android') {
+        console.log('🔑 RevenueCat: Configuring with Android key');
+        Purchases.configure({ apiKey: 'goog_SOhwxVOHyeCjxadVfIrITqTHMrd' });
+      }
       console.log('✅ RevenueCat: configure() completed');
     } catch (e) {
       console.error('❌ RevenueCat: configure() FAILED:', e);
@@ -186,6 +236,7 @@ function RootContent() {
   return (
     <>
       <NotificationHandler />
+      <RevenueCatSync />
       <StatusBar style={isDark ? "light" : "dark"} />
       <Stack
         screenOptions={{

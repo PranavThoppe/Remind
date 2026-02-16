@@ -9,10 +9,14 @@ import {
   Platform,
   Image,
   Switch,
+  Alert,
+  Linking,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import Purchases from 'react-native-purchases';
+import { supabase } from '../../lib/supabase';
 import { shadows, spacing, borderRadius, typography } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../contexts/SettingsContext';
@@ -69,6 +73,9 @@ const Section = ({ title, children, colors }: { title: string; children: React.R
   );
 };
 
+// Must match the entitlement identifier in the RevenueCat dashboard exactly
+const PRO_ENTITLEMENT_ID = 'AI Reminders';
+
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
@@ -76,9 +83,11 @@ export default function SettingsScreen() {
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(8)).current;
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, signOut, refreshProfile } = useAuth();
   const { notificationsEnabled, setNotificationsEnabled, theme, setTheme } = useSettings();
   const [showThemeSelector, setShowThemeSelector] = useState(false);
+
+  const isPro = profile?.pro === true;
 
   useEffect(() => {
     Animated.parallel([
@@ -172,6 +181,18 @@ export default function SettingsScreen() {
             />
           </Section>
 
+          {/* Membership Section */}
+          <Section title="Membership" colors={colors}>
+            <SettingItem
+              icon="diamond-outline"
+              label="Pro Subscription"
+              value={isPro ? 'Active' : 'Get Pro'}
+              onPress={() => router.push('/subscription')}
+              isLast
+              colors={colors}
+            />
+          </Section>
+
           {/* App Settings Section */}
           <Section title="App Settings" colors={colors}>
             <SettingItem
@@ -247,6 +268,18 @@ export default function SettingsScreen() {
               label="About"
               value="v1.0.0"
               onPress={() => { }}
+              colors={colors}
+            />
+            <SettingItem
+              icon="document-text-outline"
+              label="Privacy Policy"
+              onPress={() => Linking.openURL('https://claude.ai/public/artifacts/949089ac-1ea1-41e9-93d4-a72bb666b28a')}
+              colors={colors}
+            />
+            <SettingItem
+              icon="book-outline"
+              label="Terms of Use"
+              onPress={() => Linking.openURL('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/')}
               isLast
               colors={colors}
             />
@@ -268,9 +301,6 @@ export default function SettingsScreen() {
           </TouchableOpacity>
 
           {/* Version info */}
-          <Text style={styles.versionText}>
-            Made with ❤️ using React Native
-          </Text>
         </Animated.View>
       </ScrollView>
     </View>

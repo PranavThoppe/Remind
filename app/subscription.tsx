@@ -7,6 +7,8 @@ import {
     ActivityIndicator,
     Alert,
     ScrollView,
+    Platform,
+    Linking,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +18,9 @@ import { useTheme } from '../hooks/useTheme';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { spacing, typography, borderRadius, shadows } from '../constants/theme';
+
+// Must match the entitlement identifier in the RevenueCat dashboard exactly
+const PRO_ENTITLEMENT_ID = 'AI Reminders';
 
 export default function SubscriptionScreen() {
     const { colors } = useTheme();
@@ -76,8 +81,11 @@ export default function SubscriptionScreen() {
         try {
             const { customerInfo } = await Purchases.purchasePackage(pkg);
 
-            // Check if the "pro" entitlement is now active
-            if (customerInfo.entitlements.active['pro']) {
+            // Debug: log what entitlements are actually active
+            console.log('📦 Active entitlements:', Object.keys(customerInfo.entitlements.active));
+
+            // Check if the pro entitlement is now active
+            if (customerInfo.entitlements.active[PRO_ENTITLEMENT_ID]) {
                 // Update Supabase profile
                 const { error } = await supabase
                     .from('profiles')
@@ -93,6 +101,15 @@ export default function SubscriptionScreen() {
                         { text: 'Let\'s go!', onPress: () => router.back() },
                     ]);
                 }
+            } else {
+                // Purchase went through but entitlement not found — log for debugging
+                console.warn('⚠️ Purchase completed but entitlement not found.');
+                console.warn('Expected:', PRO_ENTITLEMENT_ID);
+                console.warn('Active:', Object.keys(customerInfo.entitlements.active));
+                Alert.alert(
+                    'Purchase Successful',
+                    'Your payment went through, but Pro could not be activated automatically. Please try "Restore Purchases" or restart the app.'
+                );
             }
         } catch (e: any) {
             if (!e.userCancelled) {
@@ -108,7 +125,9 @@ export default function SubscriptionScreen() {
         setPurchasing(true);
         try {
             const customerInfo = await Purchases.restorePurchases();
-            if (customerInfo.entitlements.active['pro']) {
+            console.log('📦 Restore - Active entitlements:', Object.keys(customerInfo.entitlements.active));
+
+            if (customerInfo.entitlements.active[PRO_ENTITLEMENT_ID]) {
                 if (user) {
                     await supabase.from('profiles').update({ pro: true }).eq('id', user.id);
                     await refreshProfile();
@@ -117,7 +136,12 @@ export default function SubscriptionScreen() {
                     { text: 'Great!', onPress: () => router.back() },
                 ]);
             } else {
-                Alert.alert('No Subscription Found', 'We couldn\'t find an active subscription to restore.');
+                // No active subscription — ensure DB reflects this
+                if (user) {
+                    await supabase.from('profiles').update({ pro: false }).eq('id', user.id);
+                    await refreshProfile();
+                }
+                Alert.alert('No Subscription Found', 'No active subscription found. Pro access has been removed.');
             }
         } catch (e: any) {
             console.error('Restore error:', e);
@@ -133,6 +157,27 @@ export default function SubscriptionScreen() {
         { icon: 'mic' as const, label: 'Voice Mode (Coming Soon)' },
         { icon: 'image' as const, label: 'Image-to-Reminder Extraction' },
     ];
+
+    function getPackageDuration(pkg: PurchasesPackage): string {
+        switch (pkg.packageType) {
+            case 'MONTHLY':
+                return '/ month';
+            case 'ANNUAL':
+                return '/ year';
+            case 'WEEKLY':
+                return '/ week';
+            case 'LIFETIME':
+                return ' one-time';
+            case 'SIX_MONTH':
+                return ' / 6 months';
+            case 'THREE_MONTH':
+                return ' / 3 months';
+            case 'TWO_MONTH':
+                return ' / 2 months';
+            default:
+                return '';
+        }
+    }
 
     return (
         <>
@@ -164,6 +209,13 @@ export default function SubscriptionScreen() {
                                 ? 'You have full access to all AI features.'
                                 : 'Get the most out of Remind with AI-powered features.'}
                         </Text>
+
+                        {isPro && (
+                            <View style={[styles.proBadge, { borderColor: colors.primary }]}>
+                                <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
+                                <Text style={[styles.proBadgeText, { color: colors.primary }]}>Pro Active</Text>
+                            </View>
+                        )}
                     </View>
 
                     {/* Features List */}
@@ -185,58 +237,101 @@ export default function SubscriptionScreen() {
                         ))}
                     </View>
 
-                    {/* Packages / Purchase */}
-                    {!isPro && (
-                        <View style={styles.packagesSection}>
-                            {loading ? (
-                                <ActivityIndicator size="large" color={colors.gold} />
-                            ) : packages.length > 0 ? (
-                                packages.map((pkg) => (
-                                    <TouchableOpacity
-                                        key={pkg.identifier}
-                                        style={[styles.packageButton, { backgroundColor: colors.gold }]}
-                                        onPress={() => handlePurchase(pkg)}
-                                        disabled={purchasing}
-                                        activeOpacity={0.8}
-                                    >
-                                        {purchasing ? (
-                                            <ActivityIndicator size="small" color={colors.goldForeground} />
-                                        ) : (
-                                            <>
-                                                <Text style={[styles.packageTitle, { color: colors.goldForeground }]}>
-                                                    {pkg.product.title || 'Pro'}
-                                                </Text>
-                                                <Text style={[styles.packagePrice, { color: colors.goldForeground }]}>
-                                                    {pkg.product.priceString}
-                                                </Text>
-                                            </>
-                                        )}
-                                    </TouchableOpacity>
-                                ))
-                            ) : (
-                                <Text style={[styles.noPackages, { color: colors.mutedForeground }]}>
-                                    No subscription packages available yet.
-                                </Text>
-                            )}
+                    {/* Packages / Purchase logic for non-pro, or Restore for everyone */}
+                    <View style={styles.packagesSection}>
+                        {!isPro && (
+                            <>
+                                {loading ? (
+                                    <ActivityIndicator size="large" color={colors.gold} />
+                                ) : packages.length > 0 ? (
+                                    packages.map((pkg) => (
+                                        <TouchableOpacity
+                                            key={pkg.identifier}
+                                            style={[styles.packageButton, { backgroundColor: colors.gold }]}
+                                            onPress={() => handlePurchase(pkg)}
+                                            disabled={purchasing}
+                                            activeOpacity={0.8}
+                                        >
+                                            {purchasing ? (
+                                                <ActivityIndicator size="small" color={colors.goldForeground} />
+                                            ) : (
+                                                <>
+                                                    <Text style={[styles.packageTitle, { color: colors.goldForeground }]}>
+                                                        {pkg.product.title || 'Pro'}
+                                                    </Text>
+                                                    <Text style={[styles.packagePrice, { color: colors.goldForeground }]}>
+                                                        {pkg.product.priceString}
+                                                        <Text style={{ fontSize: typography.fontSize.base, fontWeight: 'normal' }}>
+                                                            {getPackageDuration(pkg)}
+                                                        </Text>
+                                                    </Text>
+                                                </>
+                                            )}
+                                        </TouchableOpacity>
+                                    ))
+                                ) : (
+                                    <Text style={[styles.noPackages, { color: colors.mutedForeground }]}>
+                                        No subscription packages available yet.
+                                    </Text>
+                                )}
+                            </>
+                        )}
 
-                            {/* Restore */}
+                        {/* Restore - Always accessible */}
+                        <TouchableOpacity
+                            style={styles.restoreButton}
+                            onPress={handleRestore}
+                            disabled={purchasing}
+                        >
+                            <Text style={[styles.restoreText, { color: colors.mutedForeground }]}>
+                                Restore Purchases
+                            </Text>
+                        </TouchableOpacity>
+
+                        {/* Manage Subscription - Pro users only */}
+                        {isPro && (
                             <TouchableOpacity
-                                style={styles.restoreButton}
-                                onPress={handleRestore}
-                                disabled={purchasing}
+                                style={styles.manageButton}
+                                onPress={async () => {
+                                    try {
+                                        if (Platform.OS === 'ios') {
+                                            await Purchases.showManageSubscriptions();
+                                        } else {
+                                            await Linking.openURL('https://play.google.com/store/account/subscriptions');
+                                        }
+                                    } catch (e) {
+                                        console.error('Manage subscription error:', e);
+                                        Alert.alert('Error', 'Could not open subscription management.');
+                                    }
+                                }}
                             >
                                 <Text style={[styles.restoreText, { color: colors.mutedForeground }]}>
-                                    Restore Purchases
+                                    Manage Subscription
                                 </Text>
                             </TouchableOpacity>
-                        </View>
-                    )}
-
-                    {/* Debug Panel - REMOVE after debugging */}
-                    <View style={{ marginTop: 24, padding: 12, borderRadius: 8, backgroundColor: colors.card, borderWidth: 1, borderColor: '#EF4444' }}>
-                        <Text style={{ color: '#EF4444', fontWeight: 'bold', marginBottom: 4, fontSize: 12 }}>🔧 DEBUG (remove later)</Text>
-                        <Text style={{ color: colors.mutedForeground, fontSize: 11, fontFamily: 'monospace' }}>{debugInfo}</Text>
+                        )}
                     </View>
+
+
+                    {/* Legal Links */}
+                    <View style={styles.legalContainer}>
+                        <TouchableOpacity
+                            onPress={() => Linking.openURL('https://claude.ai/public/artifacts/949089ac-1ea1-41e9-93d4-a72bb666b28a')}
+                        >
+                            <Text style={[styles.legalText, { color: colors.mutedForeground }]}>
+                                Privacy Policy
+                            </Text>
+                        </TouchableOpacity>
+                        <View style={[styles.legalSeparator, { backgroundColor: colors.border }]} />
+                        <TouchableOpacity
+                            onPress={() => Linking.openURL('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/')}
+                        >
+                            <Text style={[styles.legalText, { color: colors.mutedForeground }]}>
+                                Terms of Use (EULA)
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+
                 </ScrollView>
             </View>
         </>
@@ -337,5 +432,40 @@ const styles = StyleSheet.create({
         fontFamily: typography.fontFamily.medium,
         fontSize: typography.fontSize.sm,
         textDecorationLine: 'underline',
+    },
+    proBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+        borderRadius: borderRadius.full,
+        borderWidth: 1,
+        marginTop: spacing.md,
+        gap: spacing.xs,
+    },
+    proBadgeText: {
+        fontFamily: typography.fontFamily.semibold,
+        fontSize: typography.fontSize.sm,
+    },
+    manageButton: {
+        alignItems: 'center',
+        paddingVertical: spacing.lg,
+    },
+    legalContainer: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: spacing['2xl'],
+        marginBottom: spacing.xl,
+        gap: spacing.md,
+    },
+    legalText: {
+        fontFamily: typography.fontFamily.regular,
+        fontSize: typography.fontSize.xs,
+        textDecorationLine: 'underline',
+    },
+    legalSeparator: {
+        width: 1,
+        height: 12,
     },
 });

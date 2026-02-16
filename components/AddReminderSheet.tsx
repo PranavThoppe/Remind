@@ -61,6 +61,8 @@ export function AddReminderSheet({
   const [date, setDate] = useState<Date | undefined>();
   const [time, setTime] = useState('');
   const [repeat, setRepeat] = useState<'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'>('none');
+  const [repeatUntil, setRepeatUntil] = useState<string | null>(null);
+  const [showRepeatUntilPicker, setShowRepeatUntilPicker] = useState(false);
   const [tagId, setTagId] = useState<string | null | undefined>();
   const [priorityId, setPriorityId] = useState<string | null | undefined>();
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -80,6 +82,7 @@ export function AddReminderSheet({
   // Track which entity we are picking a color for
   const [colorPickerMode, setColorPickerMode] = useState<'tag' | 'priority'>('tag');
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
@@ -142,6 +145,12 @@ export function AddReminderSheet({
     }
     setIsAddingTag(!isAddingTag);
     if (isAddingPriority) setIsAddingPriority(false);
+
+    if (!isAddingTag) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 300);
+    }
   };
 
   const toggleAddPriority = () => {
@@ -151,6 +160,12 @@ export function AddReminderSheet({
     }
     setIsAddingPriority(!isAddingPriority);
     if (isAddingTag) setIsAddingTag(false);
+
+    if (!isAddingPriority) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 300);
+    }
   };
 
   const handleColorSelect = (color: string) => {
@@ -169,6 +184,7 @@ export function AddReminderSheet({
       setDate(editReminder.date ? new Date(editReminder.date + 'T00:00:00') : undefined);
       setTime(editReminder.time || '');
       setRepeat(editReminder.repeat || 'none');
+      setRepeatUntil(editReminder.repeat_until || null);
       setTagId(editReminder.tag_id);
       setPriorityId(editReminder.priority_id);
     } else {
@@ -176,12 +192,15 @@ export function AddReminderSheet({
       setDate(undefined);
       setTime('');
       setRepeat('none');
+      setRepeatUntil(null);
       setTagId(null);
       setPriorityId(null);
     }
     // Reset picker visibility when sheet is opened or closed
     setShowDatePicker(false);
     setShowTimePicker(false);
+    setShowRepeatUntilPicker(false);
+    setShowColorPicker(false);
     setIsAddingTag(false);
     setIsAddingPriority(false);
   }, [editReminder, isOpen]);
@@ -321,6 +340,7 @@ export function AddReminderSheet({
       date: dateString,
       time: time || undefined,
       repeat,
+      repeat_until: repeat !== 'none' ? repeatUntil : null,
       tag_id: tagId || null,
       priority_id: priorityId || null,
     }) as any;
@@ -351,6 +371,7 @@ export function AddReminderSheet({
     setDate(undefined);
     setTime('');
     setRepeat('none');
+    setRepeatUntil(null);
     setTagId(null);
     setPriorityId(null);
     handleClose();
@@ -399,412 +420,502 @@ export function AddReminderSheet({
   // Shared sheet content used in both default modal mode and inline liveMode.
   const sheetContent = (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={{ flex: 1 }}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
     >
-      <Animated.View
-        style={[
-          liveMode ? styles.inlineSheet : styles.sheet,
-          !liveMode && {
-            transform: [{ translateY: slideAnim }],
-          },
-        ]}
-      >
-        {/* Handle */}
-        <View style={styles.handleContainer}>
-          <View style={styles.handle} />
-        </View>
-
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>
-            {editReminder ? 'Edit Reminder' : liveMode ? 'Creating Reminder' : 'New Reminder'}
-          </Text>
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={handleClose}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="close" size={24} color={colors.mutedForeground} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Content */}
-        <ScrollView
-          style={styles.content}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
+      <View style={styles.sheetContainer}>
+        <Animated.View
+          style={[
+            liveMode ? styles.inlineSheet : styles.sheet,
+            !liveMode && {
+              transform: [{ translateY: slideAnim }],
+            },
+          ]}
         >
-          <Pressable
-            onPress={() => {
-              Keyboard.dismiss();
-              setShowDatePicker(false);
-              setShowTimePicker(false);
-            }}
-          >
-            {/* Title Input */}
-            <Animated.View style={{ transform: [{ scale: fieldAnimations.title }] }}>
-              <TextInput
-                style={styles.input}
-                placeholder="What do you need to remember?"
-                placeholderTextColor={colors.mutedForeground}
-                value={title}
-                onChangeText={setTitle}
-                onFocus={() => {
-                  setShowDatePicker(false);
-                  setShowTimePicker(false);
-                }}
-              />
-            </Animated.View>
+          {/* Handle */}
+          <View style={styles.handleContainer}>
+            <View style={styles.handle} />
+          </View>
 
-            {/* Date & Time Row */}
-            <View style={styles.dateTimeRow}>
-              {/* Date Picker */}
-              <Animated.View
-                style={[styles.pickerButtonWrapper, { transform: [{ scale: fieldAnimations.date }] }]}
-              >
-                <TouchableOpacity
-                  style={[
-                    styles.pickerButton,
-                    date && styles.pickerButtonActive,
-                  ]}
-                  onPress={() => {
-                    Keyboard.dismiss();
-                    setShowDatePicker(!showDatePicker);
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>
+              {editReminder ? 'Edit Reminder' : liveMode ? 'Creating Reminder' : 'New Reminder'}
+            </Text>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={handleClose}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close" size={24} color={colors.mutedForeground} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Content */}
+          <ScrollView
+            ref={scrollViewRef}
+            style={styles.content}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
+            <Pressable
+              style={{ flex: 1 }}
+              onPress={() => {
+                Keyboard.dismiss();
+                setShowDatePicker(false);
+                setShowTimePicker(false);
+                setShowRepeatUntilPicker(false);
+              }}
+            >
+              {/* Title Input */}
+              <Animated.View style={{ transform: [{ scale: fieldAnimations.title }] }}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="What do you need to remember?"
+                  placeholderTextColor={colors.mutedForeground}
+                  value={title}
+                  onChangeText={setTitle}
+                  onFocus={() => {
+                    setShowDatePicker(false);
                     setShowTimePicker(false);
                   }}
-                >
-                  <Ionicons
-                    name="calendar-outline"
-                    size={18}
-                    color={date ? colors.foreground : colors.mutedForeground}
-                  />
-                  <Text
-                    style={[
-                      styles.pickerButtonText,
-                      date && styles.pickerButtonTextActive,
-                    ]}
-                  >
-                    {date ? formatDate(date) : 'Add date'}
-                  </Text>
-                </TouchableOpacity>
+                />
               </Animated.View>
 
-              {/* Time Picker */}
-              <Animated.View
-                style={[styles.pickerButtonWrapper, { transform: [{ scale: fieldAnimations.time }] }]}
-              >
-                <TouchableOpacity
-                  style={[
-                    styles.pickerButton,
-                    time && styles.pickerButtonActive,
-                  ]}
-                  onPress={() => {
-                    Keyboard.dismiss();
-                    setShowTimePicker(!showTimePicker);
-                    setShowDatePicker(false);
-                  }}
+              {/* Date & Time Row */}
+              <View style={styles.dateTimeRow}>
+                {/* Date Picker */}
+                <Animated.View
+                  style={[styles.pickerButtonWrapper, { transform: [{ scale: fieldAnimations.date }] }]}
                 >
-                  <Ionicons
-                    name="time-outline"
-                    size={18}
-                    color={time ? colors.foreground : colors.mutedForeground}
-                  />
-                  <Text
-                    style={[
-                      styles.pickerButtonText,
-                      time && styles.pickerButtonTextActive,
-                    ]}
-                  >
-                    {formatDisplayTime(time)}
-                  </Text>
-                </TouchableOpacity>
-              </Animated.View>
-            </View>
-
-            {/* Common Times Quick Pickers */}
-            {!time && commonTimes && (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.commonTimesScroll}
-              >
-                {[
-                  { key: 'morning', label: 'Morning', icon: 'sunny-outline' as const },
-                  { key: 'afternoon', label: 'Afternoon', icon: 'sunny' as const },
-                  { key: 'evening', label: 'Evening', icon: 'partly-sunny-outline' as const },
-                  { key: 'night', label: 'Night', icon: 'moon-outline' as const },
-                ].map((ct) => (
                   <TouchableOpacity
-                    key={ct.key}
-                    style={styles.commonTimeChip}
-                    onPress={() => setTime(commonTimes[ct.key as keyof typeof commonTimes])}
+                    style={[
+                      styles.pickerButton,
+                      date && styles.pickerButtonActive,
+                    ]}
+                    onPress={() => {
+                      Keyboard.dismiss();
+                      setShowDatePicker(!showDatePicker);
+                      setShowTimePicker(false);
+                    }}
                   >
                     <Ionicons
-                      name={ct.icon}
-                      size={14}
+                      name="calendar-outline"
+                      size={18}
+                      color={date ? colors.foreground : colors.mutedForeground}
+                    />
+                    <Text
+                      style={[
+                        styles.pickerButtonText,
+                        date && styles.pickerButtonTextActive,
+                      ]}
+                    >
+                      {date ? formatDate(date) : 'Add date'}
+                    </Text>
+                  </TouchableOpacity>
+                </Animated.View>
+
+                {/* Time Picker */}
+                <Animated.View
+                  style={[styles.pickerButtonWrapper, { transform: [{ scale: fieldAnimations.time }] }]}
+                >
+                  <TouchableOpacity
+                    style={[
+                      styles.pickerButton,
+                      time && styles.pickerButtonActive,
+                    ]}
+                    onPress={() => {
+                      Keyboard.dismiss();
+                      setShowTimePicker(!showTimePicker);
+                      setShowDatePicker(false);
+                    }}
+                  >
+                    <Ionicons
+                      name="time-outline"
+                      size={18}
+                      color={time ? colors.foreground : colors.mutedForeground}
+                    />
+                    <Text
+                      style={[
+                        styles.pickerButtonText,
+                        time && styles.pickerButtonTextActive,
+                      ]}
+                    >
+                      {formatDisplayTime(time)}
+                    </Text>
+                  </TouchableOpacity>
+                </Animated.View>
+              </View>
+
+              {/* Common Times Quick Pickers */}
+              {!time && commonTimes && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.commonTimesScroll}
+                >
+                  {[
+                    { key: 'morning', label: 'Morning', icon: 'sunny-outline' as const },
+                    { key: 'afternoon', label: 'Afternoon', icon: 'sunny' as const },
+                    { key: 'evening', label: 'Evening', icon: 'partly-sunny-outline' as const },
+                    { key: 'night', label: 'Night', icon: 'moon-outline' as const },
+                  ].map((ct) => (
+                    <TouchableOpacity
+                      key={ct.key}
+                      style={styles.commonTimeChip}
+                      onPress={() => setTime(commonTimes[ct.key as keyof typeof commonTimes])}
+                    >
+                      <Ionicons
+                        name={ct.icon}
+                        size={14}
+                        color={colors.primary}
+                      />
+                      <Text style={styles.commonTimeChipText}>
+                        {ct.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
+
+              {/* Time Picker Modal */}
+              {showTimePicker && (
+                <Pressable onPress={(e) => e.stopPropagation()}>
+                  <DateTimePicker
+                    value={getTimeDate()}
+                    mode="time"
+                    is24Hour={false}
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={handleTimeChange}
+                    textColor={colors.foreground}
+                    themeVariant={isDark ? 'dark' : 'light'}
+                  />
+                </Pressable>
+              )}
+
+              {/* Date Picker Modal (Android shows inline) */}
+              {showDatePicker && (
+                <Pressable onPress={(e) => e.stopPropagation()}>
+                  <DateTimePicker
+                    value={date || new Date()}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                    onChange={handleDateChange}
+                    minimumDate={new Date()}
+                    textColor={colors.foreground}
+                    themeVariant={isDark ? 'dark' : 'light'}
+                  />
+                </Pressable>
+              )}
+
+              {/* Repeat Options */}
+              <View style={styles.repeatSection}>
+                <View style={styles.repeatHeader}>
+                  <Ionicons name="repeat" size={18} color={colors.mutedForeground} />
+                  <Text style={styles.repeatLabel}>Repeat</Text>
+                </View>
+                <View style={styles.repeatOptions}>
+                  {repeatOptions.map((option) => (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[
+                        styles.repeatOption,
+                        repeat === option.value && styles.repeatOptionActive,
+                      ]}
+                      onPress={() => {
+                        Keyboard.dismiss();
+                        setRepeat(option.value);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.repeatOptionText,
+                          repeat === option.value && styles.repeatOptionTextActive,
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Repeat End Date - only show when a repeat is active */}
+              {repeat !== 'none' && (
+                <View style={styles.repeatSection}>
+                  <View style={styles.repeatHeader}>
+                    <Ionicons name="calendar-outline" size={18} color={colors.mutedForeground} />
+                    <Text style={styles.repeatLabel}>Ends</Text>
+                  </View>
+                  <View style={styles.repeatOptions}>
+                    <TouchableOpacity
+                      style={[
+                        styles.repeatOption,
+                        !repeatUntil && styles.repeatOptionActive,
+                      ]}
+                      onPress={() => {
+                        Keyboard.dismiss();
+                        setRepeatUntil(null);
+                        setShowRepeatUntilPicker(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.repeatOptionText,
+                          !repeatUntil && styles.repeatOptionTextActive,
+                        ]}
+                      >
+                        Never
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.repeatOption,
+                        repeatUntil && styles.repeatOptionActive,
+                      ]}
+                      onPress={() => {
+                        Keyboard.dismiss();
+                        setShowRepeatUntilPicker(!showRepeatUntilPicker);
+                        setShowDatePicker(false);
+                        setShowTimePicker(false);
+                        if (!repeatUntil) {
+                          // Default to 1 month from now
+                          const d = new Date();
+                          d.setMonth(d.getMonth() + 1);
+                          const y = d.getFullYear();
+                          const m = (d.getMonth() + 1).toString().padStart(2, '0');
+                          const dy = d.getDate().toString().padStart(2, '0');
+                          setRepeatUntil(`${y}-${m}-${dy}`);
+                        }
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.repeatOptionText,
+                          repeatUntil && styles.repeatOptionTextActive,
+                        ]}
+                      >
+                        {repeatUntil ? formatDate(new Date(repeatUntil + 'T00:00:00')) : 'On date...'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  {showRepeatUntilPicker && (
+                    <Pressable onPress={(e) => e.stopPropagation()}>
+                      <DateTimePicker
+                        value={repeatUntil ? new Date(repeatUntil + 'T00:00:00') : new Date()}
+                        mode="date"
+                        display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                        onChange={(event: any, selectedDate?: Date) => {
+                          setShowRepeatUntilPicker(Platform.OS === 'ios');
+                          if (selectedDate) {
+                            const y = selectedDate.getFullYear();
+                            const m = (selectedDate.getMonth() + 1).toString().padStart(2, '0');
+                            const dy = selectedDate.getDate().toString().padStart(2, '0');
+                            setRepeatUntil(`${y}-${m}-${dy}`);
+                          }
+                        }}
+                        minimumDate={new Date()}
+                        textColor={colors.foreground}
+                        themeVariant={isDark ? 'dark' : 'light'}
+                      />
+                    </Pressable>
+                  )}
+                </View>
+              )}
+
+              {/* Priority Selection */}
+              <View style={styles.section}>
+                <View style={[styles.sectionHeader, styles.headerSpaceBetween]}>
+                  <View style={styles.headerLabelContainer}>
+                    <Ionicons name="flag-outline" size={18} color={colors.mutedForeground} />
+                    <Text style={styles.sectionLabel}>Priority</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={toggleAddPriority}
+                    style={styles.addTagButton}
+                  >
+                    <Ionicons
+                      name={isAddingPriority ? "close" : "add"}
+                      size={20}
                       color={colors.primary}
                     />
-                    <Text style={styles.commonTimeChipText}>
-                      {ct.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            )}
-
-            {/* Time Picker Modal */}
-            {showTimePicker && (
-              <Pressable onPress={(e) => e.stopPropagation()}>
-                <DateTimePicker
-                  value={getTimeDate()}
-                  mode="time"
-                  is24Hour={false}
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={handleTimeChange}
-                  textColor={colors.foreground}
-                  themeVariant={isDark ? 'dark' : 'light'}
-                />
-              </Pressable>
-            )}
-
-            {/* Date Picker Modal (Android shows inline) */}
-            {showDatePicker && (
-              <Pressable onPress={(e) => e.stopPropagation()}>
-                <DateTimePicker
-                  value={date || new Date()}
-                  mode="date"
-                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                  onChange={handleDateChange}
-                  minimumDate={new Date()}
-                  textColor={colors.foreground}
-                  themeVariant={isDark ? 'dark' : 'light'}
-                />
-              </Pressable>
-            )}
-
-            {/* Repeat Options */}
-            <View style={styles.repeatSection}>
-              <View style={styles.repeatHeader}>
-                <Ionicons name="repeat" size={18} color={colors.mutedForeground} />
-                <Text style={styles.repeatLabel}>Repeat</Text>
-              </View>
-              <View style={styles.repeatOptions}>
-                {repeatOptions.map((option) => (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[
-                      styles.repeatOption,
-                      repeat === option.value && styles.repeatOptionActive,
-                    ]}
-                    onPress={() => {
-                      Keyboard.dismiss();
-                      setRepeat(option.value);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.repeatOptionText,
-                        repeat === option.value && styles.repeatOptionTextActive,
-                      ]}
-                    >
-                      {option.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            {/* Priority Selection */}
-            <View style={styles.section}>
-              <View style={[styles.sectionHeader, styles.headerSpaceBetween]}>
-                <View style={styles.headerLabelContainer}>
-                  <Ionicons name="flag-outline" size={18} color={colors.mutedForeground} />
-                  <Text style={styles.sectionLabel}>Priority</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={toggleAddPriority}
-                  style={styles.addTagButton}
-                >
-                  <Ionicons
-                    name={isAddingPriority ? "close" : "add"}
-                    size={20}
-                    color={colors.primary}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              {isAddingPriority && (
-                <View style={styles.addTagInputContainer}>
-                  <TouchableOpacity
-                    style={[styles.newTagColorPreview, { backgroundColor: newPriorityColor }]}
-                    onPress={() => {
-                      Keyboard.dismiss();
-                      setColorPickerMode('priority');
-                      setShowColorPicker(true);
-                    }}
-                  />
-                  <TextInput
-                    style={styles.addTagInput}
-                    placeholder="New priority name"
-                    placeholderTextColor={colors.mutedForeground}
-                    value={newPriorityName}
-                    onChangeText={setNewPriorityName}
-                    autoFocus
-                    onSubmitEditing={handleAddPriority}
-                  />
-                  <TouchableOpacity
-                    style={styles.addTagConfirmButton}
-                    onPress={handleAddPriority}
-                    disabled={!newPriorityName.trim()}
-                  >
-                    <Ionicons name="checkmark" size={20} color="white" />
                   </TouchableOpacity>
                 </View>
-              )}
 
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.horizontalScroll}
-              >
-                <TouchableOpacity
-                  style={[styles.tagOption, !priorityId && styles.tagOptionActive]}
-                  onPress={() => setPriorityId(null)}
-                >
-                  <Text style={[styles.tagText, !priorityId && styles.tagTextActive]}>None</Text>
-                </TouchableOpacity>
-                {priorities.map((priority) => (
-                  <TouchableOpacity
-                    key={priority.id}
-                    style={[
-                      styles.tagOption,
-                      priorityId === priority.id && {
-                        backgroundColor: priority.color,
-                        borderColor: priority.color,
-                      },
-                    ]}
-                    onPress={() => setPriorityId(priority.id)}
-                  >
-                    <Text
-                      style={[
-                        styles.priorityRankText,
-                        priorityId === priority.id && { color: 'white' },
-                      ]}
-                    >
-                      {priority.rank}
-                    </Text>
-                    <Text
-                      style={[styles.tagText, priorityId === priority.id && { color: 'white' }]}
-                    >
-                      {priority.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-
-            {/* Tag Selection */}
-            <View style={styles.section}>
-              <View style={[styles.sectionHeader, styles.headerSpaceBetween]}>
-                <View style={styles.headerLabelContainer}>
-                  <Ionicons name="pricetag-outline" size={18} color={colors.mutedForeground} />
-                  <Text style={styles.sectionLabel}>Tag</Text>
-                </View>
-                <TouchableOpacity
-                  onPress={toggleAddTag}
-                  style={styles.addTagButton}
-                >
-                  <Ionicons
-                    name={isAddingTag ? "close" : "add"}
-                    size={20}
-                    color={colors.primary}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              {isAddingTag && (
-                <View style={styles.addTagInputContainer}>
-                  <TouchableOpacity
-                    style={[styles.newTagColorPreview, { backgroundColor: newTagColor }]}
-                    onPress={() => {
-                      Keyboard.dismiss();
-                      setColorPickerMode('tag');
-                      setShowColorPicker(true);
-                    }}
-                  />
-                  <TextInput
-                    style={styles.addTagInput}
-                    placeholder="New tag name"
-                    placeholderTextColor={colors.mutedForeground}
-                    value={newTagName}
-                    onChangeText={setNewTagName}
-                    autoFocus
-                    onSubmitEditing={handleAddTag}
-                  />
-                  <TouchableOpacity
-                    style={styles.addTagConfirmButton}
-                    onPress={handleAddTag}
-                    disabled={!newTagName.trim()}
-                  >
-                    <Ionicons name="checkmark" size={20} color="white" />
-                  </TouchableOpacity>
-                </View>
-              )}
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.horizontalScroll}
-              >
-                <TouchableOpacity
-                  style={[styles.tagOption, !tagId && styles.tagOptionActive]}
-                  onPress={() => setTagId(null)}
-                >
-                  <Text style={[styles.tagText, !tagId && styles.tagTextActive]}>None</Text>
-                </TouchableOpacity>
-                {tags.map((tag) => (
-                  <TouchableOpacity
-                    key={tag.id}
-                    style={[
-                      styles.tagOption,
-                      tagId === tag.id && { backgroundColor: tag.color, borderColor: tag.color },
-                    ]}
-                    onPress={() => setTagId(tag.id)}
-                  >
-                    <View
-                      style={[
-                        styles.tagDot,
-                        { backgroundColor: tagId === tag.id ? 'white' : tag.color },
-                      ]}
+                {isAddingPriority && (
+                  <View style={styles.addTagInputContainer}>
+                    <TouchableOpacity
+                      style={[styles.newTagColorPreview, { backgroundColor: newPriorityColor }]}
+                      onPress={() => {
+                        Keyboard.dismiss();
+                        setColorPickerMode('priority');
+                        setShowColorPicker(true);
+                      }}
                     />
-                    <Text style={[styles.tagText, tagId === tag.id && { color: 'white' }]}>
-                      {tag.name}
-                    </Text>
+                    <TextInput
+                      style={styles.addTagInput}
+                      placeholder="New priority name"
+                      placeholderTextColor={colors.mutedForeground}
+                      value={newPriorityName}
+                      onChangeText={setNewPriorityName}
+                      autoFocus
+                      onSubmitEditing={handleAddPriority}
+                    />
+                    <TouchableOpacity
+                      style={styles.addTagConfirmButton}
+                      onPress={handleAddPriority}
+                      disabled={!newPriorityName.trim()}
+                    >
+                      <Ionicons name="checkmark" size={20} color="white" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.horizontalScroll}
+                >
+                  <TouchableOpacity
+                    style={[styles.tagOption, !priorityId && styles.tagOptionActive]}
+                    onPress={() => setPriorityId(null)}
+                  >
+                    <Text style={[styles.tagText, !priorityId && styles.tagTextActive]}>None</Text>
                   </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
+                  {priorities.map((priority) => (
+                    <TouchableOpacity
+                      key={priority.id}
+                      style={[
+                        styles.tagOption,
+                        priorityId === priority.id && {
+                          backgroundColor: priority.color,
+                          borderColor: priority.color,
+                        },
+                      ]}
+                      onPress={() => setPriorityId(priority.id)}
+                    >
+                      <Text
+                        style={[
+                          styles.priorityRankText,
+                          priorityId === priority.id && { color: 'white' },
+                        ]}
+                      >
+                        {priority.rank}
+                      </Text>
+                      <Text
+                        style={[styles.tagText, priorityId === priority.id && { color: 'white' }]}
+                      >
+                        {priority.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
 
-            {/* Save Button */}
-            <TouchableOpacity
-              style={[
-                styles.saveButton,
-                !title.trim() && styles.saveButtonDisabled,
-              ]}
-              onPress={handleSave}
-              disabled={!title.trim()}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.saveButtonText}>
-                {editReminder ? 'Save Changes' : 'Add Reminder'}
-              </Text>
-            </TouchableOpacity>
+              {/* Tag Selection */}
+              <View style={styles.section}>
+                <View style={[styles.sectionHeader, styles.headerSpaceBetween]}>
+                  <View style={styles.headerLabelContainer}>
+                    <Ionicons name="pricetag-outline" size={18} color={colors.mutedForeground} />
+                    <Text style={styles.sectionLabel}>Tag</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={toggleAddTag}
+                    style={styles.addTagButton}
+                  >
+                    <Ionicons
+                      name={isAddingTag ? "close" : "add"}
+                      size={20}
+                      color={colors.primary}
+                    />
+                  </TouchableOpacity>
+                </View>
 
-            {/* Bottom padding for safe area */}
-            <View style={{ height: 40 }} />
-          </Pressable>
-        </ScrollView>
-      </Animated.View>
+                {isAddingTag && (
+                  <View style={styles.addTagInputContainer}>
+                    <TouchableOpacity
+                      style={[styles.newTagColorPreview, { backgroundColor: newTagColor }]}
+                      onPress={() => {
+                        Keyboard.dismiss();
+                        setColorPickerMode('tag');
+                        setShowColorPicker(true);
+                      }}
+                    />
+                    <TextInput
+                      style={styles.addTagInput}
+                      placeholder="New tag name"
+                      placeholderTextColor={colors.mutedForeground}
+                      value={newTagName}
+                      onChangeText={setNewTagName}
+                      autoFocus
+                      onSubmitEditing={handleAddTag}
+                    />
+                    <TouchableOpacity
+                      style={styles.addTagConfirmButton}
+                      onPress={handleAddTag}
+                      disabled={!newTagName.trim()}
+                    >
+                      <Ionicons name="checkmark" size={20} color="white" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.horizontalScroll}
+                >
+                  <TouchableOpacity
+                    style={[styles.tagOption, !tagId && styles.tagOptionActive]}
+                    onPress={() => setTagId(null)}
+                  >
+                    <Text style={[styles.tagText, !tagId && styles.tagTextActive]}>None</Text>
+                  </TouchableOpacity>
+                  {tags.map((tag) => (
+                    <TouchableOpacity
+                      key={tag.id}
+                      style={[
+                        styles.tagOption,
+                        tagId === tag.id && { backgroundColor: tag.color, borderColor: tag.color },
+                      ]}
+                      onPress={() => setTagId(tag.id)}
+                    >
+                      <View
+                        style={[
+                          styles.tagDot,
+                          { backgroundColor: tagId === tag.id ? 'white' : tag.color },
+                        ]}
+                      />
+                      <Text style={[styles.tagText, tagId === tag.id && { color: 'white' }]}>
+                        {tag.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
+              {/* Save Button */}
+              <TouchableOpacity
+                style={[
+                  styles.saveButton,
+                  !title.trim() && styles.saveButtonDisabled,
+                ]}
+                onPress={handleSave}
+                disabled={!title.trim()}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.saveButtonText}>
+                  {editReminder ? 'Save Changes' : 'Add Reminder'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Bottom padding for safe area and keyboard clearance */}
+              <View style={{ height: 100 }} />
+            </Pressable>
+          </ScrollView>
+        </Animated.View>
+      </View>
     </KeyboardAvoidingView>
   );
 
@@ -859,11 +970,11 @@ const createStyles = (colors: any) => StyleSheet.create({
   backdropPressable: {
     flex: 1,
   },
+  sheetContainer: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
   sheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     backgroundColor: colors.card,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,

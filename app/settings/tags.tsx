@@ -12,6 +12,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { spacing, typography, borderRadius, shadows } from '../../constants/theme';
+import { Keyboard, Pressable } from 'react-native';
 import { PRESET_COLORS, Tag } from '../../types/settings';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useTheme } from '../../hooks/useTheme';
@@ -21,7 +22,7 @@ export default function TagsScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const styles = createStyles(colors);
-  
+
   const { tags, addTag, updateTag, deleteTag } = useSettings();
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -99,70 +100,74 @@ export default function TagsScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
-        {isAdding && (
-          <View style={styles.formCard}>
-            <Text style={styles.formTitle}>
-              {editingId ? 'Edit Tag' : 'New Tag'}
-            </Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Tag Name"
-              placeholderTextColor={colors.mutedForeground}
-              value={tagName}
-              onChangeText={setTagName}
-              autoFocus
-            />
-            <Text style={styles.label}>Color</Text>
-            <TouchableOpacity 
-              style={[styles.colorPreview, { backgroundColor: selectedColor }]}
-              onPress={() => setShowPicker(true)}
-            >
-              <Ionicons name="color-palette" size={20} color="white" style={{ textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }} />
-              <Text style={styles.colorPreviewText}>Change Color</Text>
-            </TouchableOpacity>
-
-            <View style={styles.formButtons}>
-              <TouchableOpacity style={styles.cancelButton} onPress={resetForm}>
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
+        <Pressable onPress={Keyboard.dismiss} style={{ flex: 1 }}>
+          {isAdding && (
+            <View style={styles.formCard}>
+              <Text style={styles.formTitle}>
+                {editingId ? 'Edit Tag' : 'New Tag'}
+              </Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Tag Name"
+                placeholderTextColor={colors.mutedForeground}
+                value={tagName}
+                onChangeText={setTagName}
+                autoFocus
+              />
+              <Text style={styles.label}>Color</Text>
               <TouchableOpacity
-                style={styles.saveButton}
-                onPress={editingId ? handleUpdateTag : handleAddTag}
+                style={[styles.colorPreview, { backgroundColor: selectedColor }]}
+                onPress={() => setShowPicker(true)}
               >
-                <Text style={styles.saveButtonText}>Save</Text>
+                <Ionicons name="color-palette" size={20} color="white" style={{ textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }} />
+                <Text style={styles.colorPreviewText}>Change Color</Text>
               </TouchableOpacity>
-            </View>
-          </View>
-        )}
 
-        <View style={styles.tagsList}>
-          {tags.map((tag) => (
-            <View key={tag.id} style={styles.tagItem}>
-              <View style={styles.tagInfo}>
-                <View style={[styles.tagColor, { backgroundColor: tag.color }]} />
-                <Text style={styles.tagName}>{tag.name}</Text>
-              </View>
-              <View style={styles.tagActions}>
-                <TouchableOpacity
-                  onPress={() => startEdit(tag)}
-                  style={styles.actionButton}
-                >
-                  <Ionicons name="pencil-outline" size={20} color={colors.mutedForeground} />
+              <View style={styles.formButtons}>
+                <TouchableOpacity style={styles.cancelButton} onPress={resetForm}>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => handleDeleteTag(tag.id)}
-                  style={styles.actionButton}
+                  style={styles.saveButton}
+                  onPress={editingId ? handleUpdateTag : handleAddTag}
                 >
-                  <Ionicons name="trash-outline" size={20} color={colors.destructive} />
+                  <Text style={styles.saveButtonText}>Save</Text>
                 </TouchableOpacity>
               </View>
             </View>
-          ))}
-          {tags.length === 0 && !isAdding && (
-            <Text style={styles.emptyText}>No tags yet. Add one to get started!</Text>
           )}
-        </View>
+
+          <View style={styles.tagsList}>
+            {tags.map((tag) => (
+              <View key={tag.id} style={styles.tagItem}>
+                <View style={styles.tagInfo}>
+                  <View style={[styles.tagColor, { backgroundColor: tag.color }]} />
+                  <Text style={styles.tagName}>{tag.name}</Text>
+                </View>
+                <View style={styles.tagActions}>
+                  <TouchableOpacity
+                    onPress={() => startEdit(tag)}
+                    style={styles.actionButton}
+                  >
+                    <Ionicons name="pencil-outline" size={20} color={colors.mutedForeground} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleDeleteTag(tag.id)}
+                    style={styles.actionButton}
+                  >
+                    <Ionicons name="trash-outline" size={20} color={colors.destructive} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+            {tags.length === 0 && !isAdding && (
+              <Text style={styles.emptyText}>No tags yet. Add one to get started!</Text>
+            )}
+          </View>
+        </Pressable>
       </ScrollView>
 
       <ColorPicker

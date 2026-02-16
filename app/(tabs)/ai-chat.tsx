@@ -637,10 +637,10 @@ export default function AIChatScreen() {
         {/* Header */}
         <View style={[dynamicStyles.header, { paddingTop: insets.top + spacing.md }]}>
           <View style={dynamicStyles.headerContent}>
-            <Text style={dynamicStyles.headerTitle}>Mind</Text>
+            <Text style={[dynamicStyles.headerTitle, { color: isPro ? colors.primary : colors.gold }]}>Mind</Text>
             <TouchableOpacity
               onPress={handleClearChat}
-              style={dynamicStyles.clearButton}
+              style={[dynamicStyles.clearButton, { backgroundColor: isPro ? colors.primaryLight : colors.goldLight }]}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Ionicons name="add" size={24} color={colors.mutedForeground} />
@@ -692,7 +692,7 @@ export default function AIChatScreen() {
         <View style={dynamicStyles.inputRow}>
           {/* Add Button (Left) */}
           <TouchableOpacity
-            style={dynamicStyles.addButton}
+            style={[dynamicStyles.addButton, { backgroundColor: isPro ? colors.primary : colors.gold }]}
             onPress={handlePickImage}
             disabled={isThinking || !isPro}
           >
@@ -722,7 +722,7 @@ export default function AIChatScreen() {
                 disabled={isThinking || !isPro}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Ionicons name="arrow-up-circle" size={32} color={colors.gold} />
+                <Ionicons name="arrow-up-circle" size={32} color={isPro ? colors.primary : colors.gold} />
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
