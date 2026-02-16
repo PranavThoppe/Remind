@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
     BedrockRuntimeClient,
     ConverseCommand,
@@ -36,6 +37,14 @@ const createReminderTool = {
                     type: "string",
                     enum: ["none", "daily", "weekly", "monthly"],
                     description: "Recurrence pattern. Default is 'none' unless user says 'every day', 'weekly', 'each month', etc."
+                },
+                tag_name: {
+                    type: "string",
+                    description: "Name of the tag/category to assign. Must match one of the user's available tags. Only include if the user mentions a category."
+                },
+                priority_name: {
+                    type: "string",
+                    description: "Name of the priority level to assign. Must match one of the user's available priorities. Only include if the user mentions a priority."
                 }
             },
             required: ["title", "date"]
@@ -97,73 +106,188 @@ const updateReminderTool = {
     }
 }
 
+const deleteReminderTool = {
+    name: "delete_reminder",
+    description: "Deletes an existing reminder. Use this when the user wants to remove, delete, or get rid of a reminder. Requires a reminder_id from a previous search result.",
+    inputSchema: {
+        json: {
+            type: "object",
+            properties: {
+                reminder_id: {
+                    type: "string",
+                    description: "ID of the reminder to delete. This must come from a previous search result."
+                }
+            },
+            required: ["reminder_id"]
+        }
+    }
+}
+
 // ============================================================
-// MOCK TOOL HANDLERS (Phase 1 - no real database operations)
+// REAL TOOL HANDLERS (Phase 2 - database operations)
 // ============================================================
 
-function handleCreateReminder(toolInput: any) {
-    console.log('[MOCK] create_reminder called with:', JSON.stringify(toolInput, null, 2))
+async function handleCreateReminder(toolInput: any, userId: string, supabase: any) {
+    console.log('[DB] create_reminder:', JSON.stringify(toolInput, null, 2))
 
-    return {
-        success: true,
-        reminder: {
-            id: "mock-reminder-" + Date.now(),
+    // Resolve tag_name to tag_id if provided
+    let tagId = null
+    if (toolInput.tag_name) {
+        const { data: tagData } = await supabase
+            .from('tags')
+            .select('id')
+            .eq('user_id', userId)
+            .ilike('name', toolInput.tag_name)
+            .limit(1)
+            .single()
+        tagId = tagData?.id || null
+        if (!tagId) console.warn('[DB] Tag not found:', toolInput.tag_name)
+    }
+
+    // Resolve priority_name to priority_id if provided
+    let priorityId = null
+    if (toolInput.priority_name) {
+        const { data: priorityData } = await supabase
+            .from('priorities')
+            .select('id')
+            .eq('user_id', userId)
+            .ilike('name', toolInput.priority_name)
+            .limit(1)
+            .single()
+        priorityId = priorityData?.id || null
+        if (!priorityId) console.warn('[DB] Priority not found:', toolInput.priority_name)
+    }
+
+    const { data, error } = await supabase
+        .from('reminders')
+        .insert({
+            user_id: userId,
             title: toolInput.title,
             date: toolInput.date,
             time: toolInput.time || null,
-            repeat: toolInput.repeat || "none",
-            completed: false
-        },
-        message: "Mock reminder created successfully"
+            repeat: toolInput.repeat || 'none',
+            tag_id: tagId,
+            priority_id: priorityId,
+            completed: false,
+        })
+        .select()
+        .single()
+
+    if (error) {
+        console.error('[DB Error] create_reminder:', error)
+        return { success: false, error: error.message }
     }
-}
-
-function handleSearchReminders(toolInput: any) {
-    console.log('[MOCK] search_reminders called with:', JSON.stringify(toolInput, null, 2))
-
-    // Return a few fake reminders so Nova can format a response
-    return {
-        reminders: [
-            {
-                id: "mock-1",
-                title: "Buy groceries",
-                date: toolInput.target_date || "2026-02-16",
-                time: "19:00",
-                completed: false
-            },
-            {
-                id: "mock-2",
-                title: "Gym workout",
-                date: toolInput.target_date || "2026-02-16",
-                time: "06:00",
-                completed: false
-            },
-            {
-                id: "mock-3",
-                title: "Team meeting",
-                date: toolInput.target_date || "2026-02-16",
-                time: "14:00",
-                completed: false
-            }
-        ],
-        count: 3,
-        message: "Mock search completed"
-    }
-}
-
-function handleUpdateReminder(toolInput: any) {
-    console.log('[MOCK] update_reminder called with:', JSON.stringify(toolInput, null, 2))
 
     return {
         success: true,
         reminder: {
-            id: toolInput.reminder_id,
-            title: toolInput.title || "Updated reminder",
-            date: toolInput.date || "2026-02-16",
-            time: toolInput.time || null,
-            completed: toolInput.completed || false
+            id: data.id,
+            title: data.title,
+            date: data.date,
+            time: data.time,
+            repeat: data.repeat,
+            tag: toolInput.tag_name || null,
+            priority: toolInput.priority_name || null
         },
-        message: "Mock reminder updated successfully"
+        message: "Reminder created successfully"
+    }
+}
+
+async function handleSearchReminders(toolInput: any, userId: string, supabase: any) {
+    console.log('[DB] search_reminders:', JSON.stringify(toolInput, null, 2))
+
+    let queryBuilder = supabase
+        .from('reminders')
+        .select('*')
+        .eq('user_id', userId)
+        .order('date', { ascending: true })
+
+    if (toolInput.target_date) {
+        // Date-specific search: filter by date only, ignore the natural language query
+        // Nova often sends the full question as `query` (e.g. "what do I have tomorrow")
+        // which would match zero titles if used as an ilike filter
+        queryBuilder = queryBuilder.eq('date', toolInput.target_date)
+    } else if (toolInput.query) {
+        // No date specified: use keyword search on titles
+        queryBuilder = queryBuilder.ilike('title', `%${toolInput.query}%`)
+    }
+
+    queryBuilder = queryBuilder.limit(20)
+
+    const { data, error } = await queryBuilder
+
+    if (error) {
+        console.error('[DB Error] search_reminders:', error)
+        return { success: false, error: error.message }
+    }
+
+    return {
+        reminders: (data || []).map((r: any) => ({
+            id: r.id,
+            title: r.title,
+            date: r.date,
+            time: r.time,
+            completed: r.completed,
+            repeat: r.repeat
+        })),
+        count: data?.length || 0,
+        message: "Search completed"
+    }
+}
+
+async function handleUpdateReminder(toolInput: any, userId: string, supabase: any) {
+    console.log('[DB] update_reminder:', JSON.stringify(toolInput, null, 2))
+
+    const updates: any = {}
+    if (toolInput.title !== undefined) updates.title = toolInput.title
+    if (toolInput.date !== undefined) updates.date = toolInput.date
+    if (toolInput.time !== undefined) updates.time = toolInput.time
+    if (toolInput.completed !== undefined) updates.completed = toolInput.completed
+
+    const { data, error } = await supabase
+        .from('reminders')
+        .update(updates)
+        .eq('id', toolInput.reminder_id)
+        .eq('user_id', userId) // Security check
+        .select()
+        .single()
+
+    if (error) {
+        console.error('[DB Error] update_reminder:', error)
+        return { success: false, error: error.message }
+    }
+
+    return {
+        success: true,
+        reminder: {
+            id: data.id,
+            title: data.title,
+            date: data.date,
+            time: data.time,
+            completed: data.completed
+        },
+        message: "Reminder updated successfully"
+    }
+}
+
+async function handleDeleteReminder(toolInput: any, userId: string, supabase: any) {
+    console.log('[DB] delete_reminder:', JSON.stringify(toolInput, null, 2))
+
+    const { error } = await supabase
+        .from('reminders')
+        .delete()
+        .eq('id', toolInput.reminder_id)
+        .eq('user_id', userId) // Security check
+
+    if (error) {
+        console.error('[DB Error] delete_reminder:', error)
+        return { success: false, error: error.message }
+    }
+
+    return {
+        success: true,
+        reminder_id: toolInput.reminder_id,
+        message: "Reminder deleted successfully"
     }
 }
 
@@ -195,15 +319,6 @@ serve(async (req) => {
             })
         }
 
-        // Verify admin secret
-        const adminSecret = req.headers.get('x-admin-secret')
-        if (!adminSecret || adminSecret !== ADMIN_SECRET_KEY) {
-            return new Response(JSON.stringify({ error: 'Unauthorized: Invalid admin secret' }), {
-                status: 401,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            })
-        }
-
         // Parse request body
         let body;
         try {
@@ -215,7 +330,7 @@ serve(async (req) => {
             })
         }
 
-        const { query, user_id } = body
+        const { query, user_id: body_user_id } = body
 
         if (!query) {
             return new Response(JSON.stringify({ error: 'Query required' }), {
@@ -224,14 +339,68 @@ serve(async (req) => {
             })
         }
 
-        if (!user_id) {
-            return new Response(JSON.stringify({ error: 'user_id is required' }), {
-                status: 400,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        // ============================================================
+        // SUPABASE CLIENT & AUTHENTICATION
+        // ============================================================
+        const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
+        const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
+        const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
+        let userId: string
+        let supabaseClient: any
+
+        // Admin bypass pattern from ai-search
+        const adminSecret = req.headers.get('x-admin-secret')
+        if (adminSecret && adminSecret === ADMIN_SECRET_KEY && body_user_id) {
+            console.log('[Nova Agent] Admin Bypass - Using user:', body_user_id)
+            userId = body_user_id
+            supabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+        } else {
+            // Standard JWT authentication
+            const authHeader = req.headers.get('Authorization')
+            if (!authHeader) {
+                return new Response(JSON.stringify({ error: 'Unauthorized: Missing Authorization header' }), {
+                    status: 401,
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                })
+            }
+            supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+                global: { headers: { Authorization: authHeader } }
             })
+
+            const { data: { user: authUser }, error: userError } = await supabaseClient.auth.getUser()
+            if (userError || !authUser) {
+                return new Response(JSON.stringify({ error: 'Unauthorized: Invalid JWT' }), {
+                    status: 401,
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                })
+            }
+            userId = authUser.id
         }
 
-        console.log('[Nova Agent] User:', user_id, 'Query:', query)
+        console.log('[Nova Agent] User:', userId, 'Query:', query)
+
+        // ============================================================
+        // FETCH USER'S TAGS & PRIORITIES
+        // ============================================================
+
+        const [tagsRes, prioritiesRes] = await Promise.all([
+            supabaseClient.from('tags').select('id, name, color').eq('user_id', userId).order('name'),
+            supabaseClient.from('priorities').select('id, name, color, rank').eq('user_id', userId).order('rank')
+        ])
+
+        const userTags = tagsRes.data || []
+        const userPriorities = prioritiesRes.data || []
+
+        const tagsContext = userTags.length > 0
+            ? `Available tags: ${userTags.map((t: any) => t.name).join(', ')}`
+            : 'No tags configured.'
+
+        const prioritiesContext = userPriorities.length > 0
+            ? `Available priorities: ${userPriorities.map((p: any) => p.name).join(', ')}`
+            : 'No priorities configured.'
+
+        console.log('[Nova Agent] Tags:', userTags.length, 'Priorities:', userPriorities.length)
 
         // ============================================================
         // DATE CONTEXT (so Nova can resolve relative dates)
@@ -264,14 +433,19 @@ serve(async (req) => {
         const tools = [
             { toolSpec: createReminderTool },
             { toolSpec: searchRemindersTool },
-            { toolSpec: updateReminderTool }
+            { toolSpec: updateReminderTool },
+            { toolSpec: deleteReminderTool }
         ]
 
         const systemPrompt = `You are a helpful reminders assistant. Today is ${fullToday}. Tomorrow is ${tomorrowStr}.
 
-When the user asks you to create a reminder, use the create_reminder tool.
+${tagsContext}
+${prioritiesContext}
+
+When the user asks you to create a reminder, use the create_reminder tool. If the user mentions a category or tag, set the tag_name field. If they mention a priority, set the priority_name field.
 When the user asks what reminders they have or searches for reminders, use the search_reminders tool.
 When the user wants to change, reschedule, or complete a reminder, use the update_reminder tool.
+When the user wants to remove or delete a reminder, use the delete_reminder tool.
 
 RULES:
 - Always calculate actual dates from relative references (e.g., "tomorrow" = ${tomorrowStr}).
@@ -279,7 +453,8 @@ RULES:
 - Convert times to 24-hour format (e.g., "7pm" = "19:00").
 - If the user asks for multiple things, handle each one by calling the appropriate tools.
 - After performing actions, give a brief, friendly confirmation.
-- If info is missing (e.g., no date specified), ask the user to clarify.`
+- If info is missing (e.g., no date specified), ask the user to clarify.
+- When assigning tags or priorities, use the exact names from the available lists above.`
 
         // Build conversation messages
         let conversationMessages: any[] = [{
@@ -348,14 +523,16 @@ RULES:
                     console.log(`[Tool Call] ${toolName}`)
                     console.log('[Tool Input]', JSON.stringify(toolInput, null, 2))
 
-                    // Execute mock tool
+                    // Execute real tool
                     let toolResult: any
                     if (toolName === "create_reminder") {
-                        toolResult = handleCreateReminder(toolInput)
+                        toolResult = await handleCreateReminder(toolInput, userId, supabaseClient)
                     } else if (toolName === "search_reminders") {
-                        toolResult = handleSearchReminders(toolInput)
+                        toolResult = await handleSearchReminders(toolInput, userId, supabaseClient)
                     } else if (toolName === "update_reminder") {
-                        toolResult = handleUpdateReminder(toolInput)
+                        toolResult = await handleUpdateReminder(toolInput, userId, supabaseClient)
+                    } else if (toolName === "delete_reminder") {
+                        toolResult = await handleDeleteReminder(toolInput, userId, supabaseClient)
                     } else {
                         toolResult = { error: `Unknown tool: ${toolName}` }
                     }
