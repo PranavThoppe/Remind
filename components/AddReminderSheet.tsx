@@ -419,11 +419,7 @@ export function AddReminderSheet({
   if (!isOpen) return null;
   // Shared sheet content used in both default modal mode and inline liveMode.
   const sheetContent = (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={{ flex: 1 }}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-    >
+    <View style={{ flex: 1 }}>
       <View style={styles.sheetContainer}>
         <Animated.View
           style={[
@@ -480,6 +476,7 @@ export function AddReminderSheet({
                   onFocus={() => {
                     setShowDatePicker(false);
                     setShowTimePicker(false);
+                    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
                   }}
                 />
               </Animated.View>
@@ -916,7 +913,7 @@ export function AddReminderSheet({
           </ScrollView>
         </Animated.View>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 
   // In live conversational mode, render inline inside the layout (between chat and input),
