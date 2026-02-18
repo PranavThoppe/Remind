@@ -10,6 +10,37 @@ const corsHeaders = {
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Build a natural-language content string for embedding
+// "Buy groceries on Tuesday February 18 2026 at 7pm [Work]"
+function buildContentString(reminder: {
+    title: string,
+    date?: string | null,
+    time?: string | null,
+    tagName?: string | null
+}): string {
+    let content = reminder.title
+
+    if (reminder.date) {
+        const d = new Date(reminder.date + 'T12:00:00Z') // noon UTC avoids timezone shift
+        const natural = d.toLocaleDateString('en-US', {
+            weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+        })
+        content += ` on ${natural}`
+    }
+
+    if (reminder.time) {
+        const [h, m] = reminder.time.split(':').map(Number)
+        const suffix = h >= 12 ? 'pm' : 'am'
+        const hour = h % 12 || 12
+        const mins = m > 0 ? `:${String(m).padStart(2, '0')}` : ''
+        content += ` at ${hour}${mins}${suffix}`
+    }
+
+    if (reminder.tagName) content += ` [${reminder.tagName}]`
+
+    return content
+}
+
 serve(async (req) => {
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
@@ -39,11 +70,13 @@ serve(async (req) => {
             })
         }
 
-        // Build content string (same format as bulk generator)
-        let contentToEmbed = title
-        if (tag_name) contentToEmbed += ` [Tag: ${tag_name}]`
-        if (date) contentToEmbed += ` [Date: ${date}]`
-        if (time) contentToEmbed += ` [Time: ${time}]`
+        // Build natural-language content string
+        const contentToEmbed = buildContentString({
+            title,
+            date,
+            time,
+            tagName: tag_name
+        })
 
         console.log(`[Nova Embed Single] Reminder ${reminder_id}: "${contentToEmbed}"`)
 
@@ -83,6 +116,7 @@ serve(async (req) => {
                 reminder_id,
                 user_id,
                 content: contentToEmbed,
+                date: date ?? null,
                 embedding: embeddingVector,
                 updated_at: new Date().toISOString()
             }, {

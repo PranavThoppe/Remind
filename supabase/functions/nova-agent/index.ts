@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
     BedrockRuntimeClient,
     ConverseCommand,
+    InvokeModelCommand,
 } from "npm:@aws-sdk/client-bedrock-runtime@3.705.0"
 
 const corsHeaders = {
@@ -203,51 +204,66 @@ async function handleCreateReminder(toolInput: any, userId: string, supabase: an
     }
 }
 
-async function handleSearchReminders(toolInput: any, userId: string, supabase: any) {
-    console.log('[DB] search_reminders:', JSON.stringify(toolInput, null, 2))
+async function handleSearchReminders(
+    toolInput: any,
+    userId: string,
+    adminSecret: string,
+    supabaseUrl: string
+) {
+    console.log('[DB] search_reminders (delegating to nova-search):', JSON.stringify(toolInput, null, 2))
 
-    let queryBuilder = supabase
-        .from('reminders')
-        .select('*')
-        .eq('user_id', userId)
-        .order('date', { ascending: true })
+    const { query, start_date, end_date } = toolInput
 
-    // Date range filtering
-    if (toolInput.start_date && toolInput.end_date) {
-        queryBuilder = queryBuilder
-            .gte('date', toolInput.start_date)
-            .lte('date', toolInput.end_date)
-    } else if (toolInput.start_date) {
-        queryBuilder = queryBuilder.gte('date', toolInput.start_date)
-    } else if (toolInput.end_date) {
-        queryBuilder = queryBuilder.lte('date', toolInput.end_date)
-    }
+    // Construct the nova-search URL
+    const novaSearchUrl = `${supabaseUrl}/functions/v1/nova-search`
 
-    // Keyword search only when no date range is specified
-    if (!toolInput.start_date && !toolInput.end_date && toolInput.query) {
-        queryBuilder = queryBuilder.ilike('title', `%${toolInput.query}%`)
-    }
+    try {
+        const response = await fetch(novaSearchUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-secret': adminSecret
+            },
+            body: JSON.stringify({
+                query: query || "reminders",
+                dev_user_id: userId,
+                // Pass explicit date range if available
+                start_date: start_date,
+                end_date: end_date
+            })
+        })
 
-    queryBuilder = queryBuilder.limit(20)
+        if (!response.ok) {
+            const errorText = await response.text()
+            console.error('[Search Error] nova-search failed:', response.status, errorText)
+            return {
+                success: false,
+                error: `Search failed: ${response.statusText}`
+            }
+        }
 
-    const { data, error } = await queryBuilder
+        const data = await response.json()
+        const evidence = data.evidence || []
 
-    if (error) {
-        console.error('[DB Error] search_reminders:', error)
+        console.log(`[Nova Agent] Received ${evidence.length} results from nova-search`)
+
+        // Map nova-search evidence to tool output format
+        return {
+            reminders: evidence.map((r: any) => ({
+                id: r.reminder_id,
+                title: r.title,
+                date: r.date,
+                time: r.time,
+                completed: r.completed,
+                similarity: r.score
+            })),
+            count: evidence.length,
+            message: data.answer || 'Search completed'
+        }
+
+    } catch (error: any) {
+        console.error('[Search Error] Exception calling nova-search:', error)
         return { success: false, error: error.message }
-    }
-
-    return {
-        reminders: (data || []).map((r: any) => ({
-            id: r.id,
-            title: r.title,
-            date: r.date,
-            time: r.time,
-            completed: r.completed,
-            repeat: r.repeat
-        })),
-        count: data?.length || 0,
-        message: "Search completed"
     }
 }
 
@@ -552,7 +568,7 @@ RULES:
                     if (toolName === "create_reminder") {
                         toolResult = await handleCreateReminder(toolInput, userId, supabaseClient)
                     } else if (toolName === "search_reminders") {
-                        toolResult = await handleSearchReminders(toolInput, userId, supabaseClient)
+                        toolResult = await handleSearchReminders(toolInput, userId, ADMIN_SECRET_KEY, SUPABASE_URL)
                     } else if (toolName === "update_reminder") {
                         toolResult = await handleUpdateReminder(toolInput, userId, supabaseClient)
                     } else if (toolName === "delete_reminder") {

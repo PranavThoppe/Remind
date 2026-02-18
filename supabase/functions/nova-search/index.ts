@@ -44,7 +44,7 @@ serve(async (req) => {
             })
         }
 
-        const { query, dev_user_id, target_date } = body
+        const { query, dev_user_id, target_date, start_date, end_date: input_end_date } = body
         console.log('[Nova Search] Received Request. Query:', query, 'Target Date:', target_date)
 
         if (!query) {
@@ -195,7 +195,15 @@ If no date is mentioned, return startDate: null.`
         let endDate = temporalJson.endDate || temporalJson.startDate
         let isRange = temporalJson.isRange || false
 
-        if (target_date && /^\d{4}-\d{2}-\d{2}$/.test(target_date)) {
+        // Priority 1: Explicit range from caller (e.g. from nova-agent)
+        if (start_date) {
+            console.log('[Temporal Analysis] Overriding with provided range:', start_date, 'to', input_end_date)
+            startDate = start_date
+            endDate = input_end_date || start_date
+            isRange = !!input_end_date && input_end_date !== start_date
+        }
+        // Priority 2: Legacy single target_date
+        else if (target_date && /^\d{4}-\d{2}-\d{2}$/.test(target_date)) {
             console.log('[Temporal Analysis] Overriding with target_date:', target_date)
             startDate = target_date
             endDate = target_date
@@ -214,97 +222,29 @@ If no date is mentioned, return startDate: null.`
 
         console.log(`[Nova Search] Got ${queryEmbedding.length}d embedding for query`)
 
-        // STEP 3 & 4: Search Database (Vector and Keyword/Date) in Parallel
-        // Uses nova_reminder_embeddings (1024d) instead of reminder_embeddings (384d)
-        const vectorSearchPromise = supabase.rpc('match_reminders_nova', {
-            query_embedding: queryEmbedding,
-            match_threshold: 0.3,
-            match_count: 10,
-            p_user_id: user.id
-        })
+        // STEP 3: Dual Strategy
+        // A. If we have a specific date (or range), fetch ALL reminders for that period. 
+        //    Vector search often fails here because "what do I have today" has low similarity to "Buy Milk".
+        // B. Always run vector search for context or if no date is present.
 
-        const keywordSearchPromise = supabase
-            .from('reminders')
-            .select('*')
-            .eq('user_id', user.id)
-            .or(`title.ilike.%${query}%`)
-            .limit(5)
+        let remindersForTargetDate: any[] = []
+        let topResults: any[] = []
 
-        const embeddingKeywordSearchPromise = hasTargetDate
-            ? supabase
-                .from('nova_reminder_embeddings')
-                .select('reminder_id, content')
+        if (hasTargetDate) {
+            console.log(`[Nova Search] Date detected (${startDate} to ${endDate}). Fetching directly from DB.`)
+            const { data: dateReminders, error: dateError } = await supabase
+                .from('reminders')
+                .select('*')
                 .eq('user_id', user.id)
-                .ilike('content', `%${startDate}%`)
-                .limit(5)
-            : Promise.resolve({ data: [] })
+                .gte('date', startDate)
+                .lte('date', endDate)
+                .eq('completed', false) // Usually users want pending reminders for future dates
+                .order('time', { ascending: true })
 
-        const dateSearchPromise = hasTargetDate
-            ? isRange
-                ? supabase.from('reminders').select('*').eq('user_id', user.id).gte('date', startDate).lte('date', endDate)
-                : supabase.from('reminders').select('*').eq('user_id', user.id).eq('date', startDate)
-            : Promise.resolve({ data: [] })
-
-        const [vectorRes, keywordRes, dateRes, embedKeywordRes] = await Promise.all([
-            vectorSearchPromise,
-            keywordSearchPromise,
-            dateSearchPromise,
-            embeddingKeywordSearchPromise
-        ])
-
-        if (vectorRes.error) console.error('[Vector Search Error]', vectorRes.error)
-        if (keywordRes.error) console.error('[Keyword Search Error]', keywordRes.error)
-        if (dateRes.error) console.error('[Date Search Error]', dateRes.error)
-        if ((embedKeywordRes as any).error) console.error('[Embed Keyword Search Error]', (embedKeywordRes as any).error)
-
-        const vectorResults = vectorRes.data || []
-        const keywordResults = keywordRes.data || []
-        const dateResults = dateRes.data || []
-        const embedKeywordResults = (embedKeywordRes as any).data || []
-
-        // Step 5: Combine and deduplicate results
-        const allResults = new Map<string, any>()
-
-        // Add date matches with high priority
-        dateResults.forEach((r: any) => {
-            allResults.set(r.id, {
-                reminder_id: r.id,
-                title: r.title,
-                date: r.date,
-                time: r.time,
-                completed: r.completed,
-                tag_id: r.tag_id,
-                priority_id: r.priority_id,
-                source: 'date',
-                score: 1.0
-            })
-        })
-
-        // Add keyword matches from nova embeddings table
-        embedKeywordResults.forEach((r: any) => {
-            if (!allResults.has(r.reminder_id)) {
-                allResults.set(r.reminder_id, {
-                    reminder_id: r.reminder_id,
-                    title: r.content.split('[')[0].trim(),
-                    source: 'keyword_embed',
-                    score: 0.9
-                })
-            }
-        })
-
-        vectorResults.forEach((r: any) => {
-            if (!allResults.has(r.reminder_id)) {
-                allResults.set(r.reminder_id, {
-                    ...r,
-                    source: 'vector',
-                    score: r.similarity
-                })
-            }
-        })
-
-        keywordResults.forEach((r: any) => {
-            if (!allResults.has(r.id)) {
-                allResults.set(r.id, {
+            if (dateError) {
+                console.error('[Date Search Error]', dateError)
+            } else {
+                remindersForTargetDate = (dateReminders || []).map((r: any) => ({
                     reminder_id: r.id,
                     title: r.title,
                     date: r.date,
@@ -312,50 +252,38 @@ If no date is mentioned, return startDate: null.`
                     completed: r.completed,
                     tag_id: r.tag_id,
                     priority_id: r.priority_id,
-                    source: 'keyword',
-                    score: 0.7
-                })
-            }
-        })
-
-        const topResultsRaw = Array.from(allResults.values())
-            .sort((a, b) => b.score - a.score)
-            .slice(0, 10)
-
-        // Step 5.5: Hydrate results with full metadata from reminders table
-        const resultIds = topResultsRaw.map(r => r.reminder_id)
-        let topResults = topResultsRaw
-
-        if (resultIds.length > 0) {
-            const { data: fullReminders, error: hydrateError } = await supabase
-                .from('reminders')
-                .select('*')
-                .in('id', resultIds)
-
-            if (!hydrateError && fullReminders) {
-                topResults = topResultsRaw.map(raw => {
-                    const full = fullReminders.find(f => f.id === raw.reminder_id)
-                    if (!full) return raw
-                    return {
-                        ...full,
-                        reminder_id: full.id,
-                        source: raw.source,
-                        score: raw.score
-                    }
-                })
+                    score: 1.0 // Perfect match because it matches the date
+                }))
             }
         }
 
-        // Step 6: Deterministically filter reminders for target date
-        const remindersForTargetDate = hasTargetDate
-            ? topResults.filter(r => {
-                if (!r.date || r.completed) return false;
-                if (isRange) {
-                    return r.date >= startDate && r.date <= endDate;
-                }
-                return r.date === startDate;
-            })
-            : []
+        // Run vector search (always good to have for "hybrid" results or fallback)
+        // But we only rely on it if we didn't find date matches, or to mix in relevant stuff
+        const { data: searchResults, error: searchError } = await supabase.rpc('match_reminders_nova', {
+            query_embedding: queryEmbedding,
+            match_threshold: 0.2, // Low threshold
+            match_count: 15,
+            p_user_id: user.id,
+            p_start_date: null, // Don't filter by date in vector search, we handled it separately
+            p_end_date: null
+        })
+
+        if (searchError) console.error('[Search Error]', searchError)
+
+        topResults = (searchResults || []).map((r: any) => ({
+            reminder_id: r.reminder_id,
+            title: r.title,
+            date: r.date,
+            time: r.time,
+            completed: r.completed,
+            tag_id: r.tag_id,
+            priority_id: r.priority_id,
+            score: r.similarity
+        }))
+
+        // Merge results: standard vector search results are fallback if no date headers
+        // But if we have date reminders, they take precedence in the "remindersForTargetDate" bucket
+
 
         // Build structured JSON context
         const allRemindersJson = topResults.map(r => ({

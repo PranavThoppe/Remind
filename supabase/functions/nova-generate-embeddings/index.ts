@@ -10,6 +10,37 @@ const corsHeaders = {
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-admin-secret',
 }
 
+// Build a natural-language content string for embedding
+// "Buy groceries on Tuesday February 18 2026 at 7pm [Work]"
+function buildContentString(reminder: {
+    title: string,
+    date?: string | null,
+    time?: string | null,
+    tagName?: string | null
+}): string {
+    let content = reminder.title
+
+    if (reminder.date) {
+        const d = new Date(reminder.date + 'T12:00:00Z') // noon UTC avoids timezone shift
+        const natural = d.toLocaleDateString('en-US', {
+            weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+        })
+        content += ` on ${natural}`
+    }
+
+    if (reminder.time) {
+        const [h, m] = reminder.time.split(':').map(Number)
+        const suffix = h >= 12 ? 'pm' : 'am'
+        const hour = h % 12 || 12
+        const mins = m > 0 ? `:${String(m).padStart(2, '0')}` : ''
+        content += ` at ${hour}${mins}${suffix}`
+    }
+
+    if (reminder.tagName) content += ` [${reminder.tagName}]`
+
+    return content
+}
+
 serve(async (req) => {
     // Handle CORS
     if (req.method === 'OPTIONS') {
@@ -127,12 +158,14 @@ serve(async (req) => {
         // Process each reminder
         for (const reminder of reminders) {
             try {
-                // Create text to embed (include tag and date if available)
+                // Build natural-language content string for embedding
                 const tagName = (reminder as any).tags?.name
-                let contentToEmbed = reminder.title
-                if (tagName) contentToEmbed += ` [Tag: ${tagName}]`
-                if (reminder.date) contentToEmbed += ` [Date: ${reminder.date}]`
-                if (reminder.time) contentToEmbed += ` [Time: ${reminder.time}]`
+                const contentToEmbed = buildContentString({
+                    title: reminder.title,
+                    date: reminder.date,
+                    time: reminder.time,
+                    tagName
+                })
 
                 console.log(`[Processing] Reminder ${reminder.id}: "${contentToEmbed}"`)
 
@@ -165,6 +198,7 @@ serve(async (req) => {
                         reminder_id: reminder.id,
                         user_id: user_id,
                         content: contentToEmbed,
+                        date: reminder.date ?? null,
                         embedding: embeddingVector,
                         updated_at: new Date().toISOString()
                     }, {
