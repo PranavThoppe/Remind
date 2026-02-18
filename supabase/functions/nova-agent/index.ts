@@ -416,13 +416,15 @@ serve(async (req) => {
         // FETCH USER'S TAGS & PRIORITIES
         // ============================================================
 
-        const [tagsRes, prioritiesRes] = await Promise.all([
+        const [tagsRes, prioritiesRes, commonTimesRes] = await Promise.all([
             supabaseClient.from('tags').select('id, name, color').eq('user_id', userId).order('name'),
-            supabaseClient.from('priorities').select('id, name, color, rank').eq('user_id', userId).order('rank')
+            supabaseClient.from('priorities').select('id, name, color, rank').eq('user_id', userId).order('rank'),
+            supabaseClient.from('common_times').select('morning, afternoon, evening, night').eq('user_id', userId).maybeSingle()
         ])
 
         const userTags = tagsRes.data || []
         const userPriorities = prioritiesRes.data || []
+        const commonTimes = commonTimesRes.data || { morning: '09:00', afternoon: '14:00', evening: '18:00', night: '21:00' }
 
         const tagsContext = userTags.length > 0
             ? `Available tags: ${userTags.map((t: any) => t.name).join(', ')}`
@@ -432,7 +434,13 @@ serve(async (req) => {
             ? `Available priorities: ${userPriorities.map((p: any) => p.name).join(', ')}`
             : 'No priorities configured.'
 
-        console.log('[Nova Agent] Tags:', userTags.length, 'Priorities:', userPriorities.length)
+        const commonTimesContext = `Common Times:
+- Morning: ${commonTimes.morning}
+- Afternoon: ${commonTimes.afternoon}
+- Evening: ${commonTimes.evening}
+- Night: ${commonTimes.night}`
+
+        console.log('[Nova Agent] Tags:', userTags.length, 'Priorities:', userPriorities.length, 'Common Times found:', !!commonTimesRes.data)
 
         // ============================================================
         // DATE CONTEXT (so Nova can resolve relative dates)
@@ -473,6 +481,7 @@ serve(async (req) => {
 
 ${tagsContext}
 ${prioritiesContext}
+${commonTimesContext}
 
 When the user asks you to create a reminder, use the create_reminder tool. If the user mentions a category or tag, set the tag_name field. If they mention a priority, set the priority_name field.
 When the user asks what reminders they have or searches for reminders, use the search_reminders tool.
@@ -481,6 +490,11 @@ When the user wants to remove or delete a reminder, use the delete_reminder tool
 
 RULES:
 - Always calculate actual dates from relative references (e.g., "tomorrow" = ${tomorrowStr}).
+- Use the user's defined "Common Times" when they use vague terms:
+  - "morning" -> use Morning time (${commonTimes.morning})
+  - "afternoon" -> use Afternoon time (${commonTimes.afternoon})
+  - "evening" / "tonight" -> use Evening time (${commonTimes.evening})
+  - "night" -> use Night time (${commonTimes.night})
 - For date ranges, always set both start_date and end_date:
   - Single day (e.g., "tomorrow") → start_date and end_date = ${tomorrowStr}
   - "this week" → start_date = ${todayStr}, end_date = the coming Sunday
