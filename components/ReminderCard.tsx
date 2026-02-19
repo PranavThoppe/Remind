@@ -145,8 +145,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
         <TouchableOpacity
           style={[
             styles.card,
-            reminder.completed && styles.cardCompleted,
-            tag && !reminder.completed && {
+            tag && {
               backgroundColor: `${tag.color}${isDark ? '15' : '08'}`,
               borderLeftWidth: 1,
               borderLeftColor: tag.color,
@@ -204,7 +203,6 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
                 <Text
                   style={[
                     styles.title,
-                    reminder.completed && styles.titleCompleted,
                     isBirthday && !reminder.completed && styles.birthdayTitle,
                   ]}
                   numberOfLines={1}

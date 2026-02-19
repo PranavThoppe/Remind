@@ -23,8 +23,8 @@ CREATE OR REPLACE FUNCTION match_reminders_nova(
 RETURNS TABLE (
   reminder_id UUID,
   title TEXT,
-  date DATE,
-  time TEXT,
+  "date" DATE,
+  "time" TEXT,
   completed BOOLEAN,
   tag_id UUID,
   priority_id UUID,

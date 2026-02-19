@@ -238,7 +238,6 @@ If no date is mentioned, return startDate: null.`
                 .eq('user_id', user.id)
                 .gte('date', startDate)
                 .lte('date', endDate)
-                .eq('completed', false) // Usually users want pending reminders for future dates
                 .order('time', { ascending: true })
 
             if (dateError) {
@@ -304,7 +303,10 @@ If no date is mentioned, return startDate: null.`
             console.log('[Deterministic Answer] Found', remindersForTargetDate.length, 'reminders for', isRange ? `${startDate} to ${endDate}` : startDate)
 
             const list = remindersForTargetDate
-                .map(r => r.time ? `${r.title} (${r.time})` : r.title)
+                .map(r => {
+                    const status = r.completed ? ' ✅' : ''
+                    return r.time ? `${r.title} (${r.time})${status}` : `${r.title}${status}`
+                })
                 .join(', ')
 
             answer = isRange
@@ -331,6 +333,7 @@ ${JSON.stringify(allRemindersJson, null, 2)}
 INSTRUCTIONS:
 - Answer the user's query naturally using the reminders above.
 - Be direct and conversational.
+- Mention if something is completed if relevant (e.g., "You already finished X").
 - Ask ONE helpful follow-up question.
 - Do NOT explain date math or reasoning.
 
@@ -397,6 +400,7 @@ OUTPUT FORMAT (return ONLY valid JSON):
                     title: r.title,
                     date: r.date,
                     time: r.time,
+                    completed: r.completed,
                     tag_id: r.tag_id,
                     priority_id: r.priority_id,
                     score: r.score
