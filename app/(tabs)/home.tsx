@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons'; // Added import
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { startOfDay, isSameDay, isToday, addDays, startOfWeek, endOfWeek, isAfter, isBefore, addWeeks, isTomorrow, subWeeks } from 'date-fns';
 import { ReminderCard } from '../../components/ReminderCard';
@@ -27,6 +28,7 @@ import { useReminders } from '../../hooks/useReminders';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useTheme } from '../../hooks/useTheme';
 import { AnimatedViewSelector } from '../../components/AnimatedViewSelector';
+import { SearchModal } from '../../components/SearchModal'; // Added import
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -36,6 +38,7 @@ export default function HomeScreen() {
   const { reminders, loading, addReminder, toggleComplete, refreshReminders, updateReminder, deleteReminder, hasFetched } = useReminders();
   const { tags, priorities, lastViewMode: viewMode, setLastViewMode: setViewMode, lastSortMode: sortMode, setLastSortMode: setSortMode } = useSettings();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false); // Added state
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
   const [showRetry, setShowRetry] = useState(false);
   const [recentlyCompletedIds, setRecentlyCompletedIds] = useState<Set<string>>(new Set());
@@ -374,11 +377,21 @@ export default function HomeScreen() {
             <Text style={styles.greeting}>{greeting()}</Text>
           </View>
 
-          {/* View Mode Selector */}
-          <AnimatedViewSelector
-            currentView={viewMode}
-            onViewChange={setViewMode}
-          />
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+            <TouchableOpacity
+              onPress={() => setIsSearchOpen(true)}
+              style={styles.searchButton}
+            >
+              <Ionicons name="search" size={24} color={colors.primary} />
+            </TouchableOpacity>
+
+            {/* View Mode Selector */}
+            <AnimatedViewSelector
+              currentView={viewMode}
+              onViewChange={setViewMode}
+            />
+          </View>
         </View>
       </View>
 
@@ -528,6 +541,15 @@ export default function HomeScreen() {
         onSave={handleSave}
         editReminder={editingReminder}
       />
+
+      {/* Search Modal */}
+      <SearchModal
+        isVisible={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        onEditReminder={handleEdit}
+        onCompleteReminder={handleComplete}
+        onDeleteReminder={handleDelete}
+      />
     </View>
   );
 }
@@ -600,5 +622,13 @@ const createStyles = (colors: any) => StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.md,
+  },
+  searchButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: `${colors.primary}15`,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

@@ -13,6 +13,7 @@ interface RemindersContextType {
   updateReminder: (id: string, updates: Partial<Omit<Reminder, 'id' | 'user_id' | 'created_at'>>) => Promise<{ data: Reminder | null; error: any }>;
   deleteReminder: (id: string) => Promise<{ error: any }>;
   refreshReminders: () => Promise<void>;
+  searchReminders: (query: string) => Promise<{ answer?: string; follow_up?: string; evidence?: Reminder[]; error?: any }>;
   hasFetched: boolean;
 }
 
@@ -235,6 +236,44 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const searchReminders = async (query: string) => {
+    try {
+      console.log('[RemindersContext] Searching for:', query);
+      const { data, error } = await supabase.functions.invoke('nova-search', {
+        body: { query }
+      });
+
+      if (error) {
+        console.error('[RemindersContext] Search error:', error);
+        return { error };
+      }
+
+      // Map evidence to Reminder objects
+      // Note: nova-search returns 'reminder_id', we map to 'id'
+      const evidence = (data.evidence || []).map((r: any) => ({
+        id: r.reminder_id,
+        title: r.title,
+        date: r.date,
+        time: r.time,
+        completed: r.completed,
+        tag_id: r.tag_id,
+        priority_id: r.priority_id,
+        user_id: user?.id, // We assume these belong to the user
+        created_at: new Date().toISOString(), // Mock if missing
+      })) as Reminder[];
+
+      return {
+        answer: data.answer,
+        follow_up: data.follow_up,
+        evidence,
+        error: null
+      };
+    } catch (error) {
+      console.error('[RemindersContext] Unexpected search error:', error);
+      return { error };
+    }
+  };
+
   const value = {
     reminders,
     loading,
@@ -243,6 +282,7 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
     updateReminder,
     deleteReminder,
     refreshReminders: fetchReminders,
+    searchReminders,
     hasFetched,
   };
 
