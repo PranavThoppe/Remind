@@ -260,6 +260,7 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
         priority_id: r.priority_id,
         user_id: user?.id, // We assume these belong to the user
         created_at: new Date().toISOString(), // Mock if missing
+        notes: r.notes,
       })) as Reminder[];
 
       return {

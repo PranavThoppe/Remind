@@ -10,6 +10,7 @@ export interface Reminder {
   created_at: string;
   tag_id?: string | null; // Allow null for removing tags
   priority_id?: string | null; // Allow null for removing priority
+  notes?: string | null;
 }
 
 export interface Profile {

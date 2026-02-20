@@ -25,10 +25,11 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useReminders } from '../../hooks/useReminders';
 import { AiLiveReminderPanel } from '../../components/AiLiveReminderPanel';
 import { InlineReminderPanel } from '../../components/InlineReminderPanel';
+import { AddReminderSheet } from '../../components/AddReminderSheet';
 import { ChatMessage, ModalFieldUpdates, MockAIResponse } from '../../types/ai-chat';
 import { Reminder } from '../../types/reminder';
 import { scheduleReminderNotification } from '../../lib/notifications';
-import { extractReminderFields, searchReminders } from '../../lib/ai-extract';
+import { callNovaAgent } from '../../lib/nova-client';
 import { VoiceModeButton } from '../../components/voice/VoiceModeButton';
 import { PremiumLockOverlay } from '../../components/PremiumLockOverlay';
 
@@ -207,6 +208,8 @@ export default function AIChatScreen() {
   const [isThinking, setIsThinking] = useState(false);
   const [isVoiceActive, setIsVoiceActive] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [draftReminder, setDraftReminder] = useState<any>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
@@ -244,64 +247,173 @@ export default function AIChatScreen() {
     }
   };
 
-  // Process message with LLM extraction
-  const processMessage = useCallback(async (input: string, imageUri?: string): Promise<MockAIResponse> => {
-    try {
-      if (!user) return { type: 'chat', message: "Please log in to use AI features." };
+  const handleSheetSave = useCallback(async (data: any) => {
+    let result = await addReminder(data);
 
-      let base64Image = undefined;
-      if (imageUri) {
-        try {
-          // Read image as base64 using the new File API in expo-file-system v19+
-          const file = new FileSystem.File(imageUri);
-          base64Image = await file.base64();
-          console.log('[processMessage] Image converted to base64, length:', base64Image?.length);
-        } catch (imageError) {
-          console.error('[processMessage] Error reading image:', imageError);
-        }
+    if (!result.error && result.data) {
+      const successMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: "Reminder created successfully! Do you need anything else?",
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, successMessage]);
+
+      setDraftReminder(null);
+      setIsSheetOpen(false);
+    }
+    return result;
+  }, [addReminder]);
+
+  // Process message with Nova Agent
+  const processMessage = useCallback(async (input: string, imageUri?: string): Promise<void> => {
+    try {
+      if (!user) {
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: "Please log in to use AI features.",
+          timestamp: new Date()
+        }]);
+        return;
       }
 
-      const response = await extractReminderFields({
+      // Note: Image upload not yet supported by Nova Agent in this iteration
+      // We'll add that later. For now, rely on text.
+
+      // Filter out internal UI states or temporary messages if needed
+      const conversationHistory = messages.filter(m =>
+        !m.id.startsWith('temp-') &&
+        !m.content.includes("I'm sorry, I encountered an error")
+      );
+
+      const response = await callNovaAgent({
         query: input,
         user_id: user.id,
-        image: base64Image,
-        conversation: messages.filter(m =>
-          !m.content.includes('Reminder created successfully!') &&
-          !m.content.includes('Okay, let me know if you want to create another reminder!')
-        ),
-        modalContext: {
-          isOpen: false,
-          currentFields: {},
-        },
-        tags: tags,
-        priorities: priorities,
+        conversation: conversationHistory
       });
 
-      return {
-        type: response.type,
-        message: response.message,
-        fieldUpdates: response.fieldUpdates,
-      };
-    } catch (error: any) {
-      console.error('[processMessage] Error:', error);
+      // Handle the response based on tool calls
+      const lastToolCall = response.tool_calls?.[response.tool_calls.length - 1];
 
-      // Fallback response on error
-      const lower = input.toLowerCase();
-
-      // Check for cancel/nevermind
-      if (/(cancel|nevermind|never mind|close|stop)/i.test(lower)) {
-        return {
-          type: 'chat',
-          message: "Okay, I've closed the form. Let me know if you want to create another reminder!",
-        };
+      if (!lastToolCall) {
+        // No tool called (chat only)
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: response.message,
+          timestamp: new Date()
+        }]);
+        return;
       }
 
-      return {
-        type: 'chat',
-        message: "I'm having trouble processing that right now. Please try again or rephrase your request.",
-      };
+      const toolName = lastToolCall.tool;
+      const toolResult = lastToolCall.result;
+
+      if (toolName === 'draft_reminder') {
+        const draft = toolResult.draft;
+
+        // Prepare draft data for the sheet
+        const sheetDraft = {
+          title: draft.title,
+          date: draft.date,
+          time: draft.time,
+          repeat: draft.repeat || 'none',
+          tag_id: draft.tag_name ? tags.find(t => t.name.toLowerCase() === draft.tag_name.toLowerCase())?.id : undefined,
+          priority_id: draft.priority_name ? priorities.find(p => p.name.toLowerCase() === draft.priority_name.toLowerCase())?.id : undefined,
+          notes: draft.notes
+        };
+
+        setDraftReminder(sheetDraft);
+        setIsSheetOpen(true);
+
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: response.message || toolResult.message || "I've opened the reminder sheet for you to review.",
+          timestamp: new Date()
+        }]);
+        return; // Return early, don't fallback to inline panel logic
+
+      } else if (toolName === 'create_reminder') {
+        // Reminder was created immediately
+        const successMessage: ChatMessage = {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: response.message || toolResult.message || "Reminder created successfully!",
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, successMessage]);
+
+      } else if (toolName === 'search_reminders') {
+        // Handle search results
+        const reminders = toolResult.reminders || [];
+        if (reminders.length > 0) {
+          const panelMessage: ChatMessage = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: response.message || toolResult.message || `I found ${reminders.length} reminders:`,
+            timestamp: new Date(),
+            panelType: 'search',
+            panelSearchResults: reminders,
+            panelIsStatic: false
+          };
+          setMessages(prev => [...prev, panelMessage]);
+        } else {
+          setMessages(prev => [...prev, {
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: response.message || toolResult.message || "I couldn't find any reminders matching that.",
+            timestamp: new Date()
+          }]);
+        }
+
+      } else if (toolName === 'update_reminder') {
+        // Handle update
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: response.message || toolResult.message || "Reminder updated.",
+          timestamp: new Date()
+        }]);
+
+      } else if (toolName === 'delete_reminder') {
+        // Handle delete
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: response.message || toolResult.message || "Reminder deleted.",
+          timestamp: new Date()
+        }]);
+      } else {
+        // Fallback
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: response.message,
+          timestamp: new Date()
+        }]);
+      }
+
+    } catch (error: any) {
+      console.error('[processMessage] Error:', error);
+      let errorContent = "I'm sorry, I encountered an error. Please try again.";
+      if (error.code === 'PRO_REQUIRED' || error.message?.includes('Pro membership')) {
+        errorContent = "This AI feature requires a Pro membership.";
+      } else if (error.message) {
+        errorContent = error.message;
+      }
+
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: errorContent,
+        timestamp: new Date()
+      }]);
+    } finally {
+      setIsThinking(false);
     }
-  }, [messages, tags, user]);
+  }, [user]);
 
   // Handle sending messages
   const handleSend = useCallback(async () => {
@@ -327,155 +439,10 @@ export default function AIChatScreen() {
     // Show thinking state
     setIsThinking(true);
 
-    try {
-      // Process with LLM extraction
-      const response = await processMessage(userContent || (userImage ? "I uploaded an image." : ""), userImage || undefined);
+    // Call Nova Agent
+    await processMessage(userContent, userImage || undefined);
 
-      // Handle search specially - we want to show the actual search answer, not the extraction message
-      if (response.type === 'search') {
-        console.log('[handleSend] 🔍 SEARCH MODE TRIGGERED');
-        console.log('[handleSend] Search query:', userContent);
-        try {
-          // DEBUG: Log the handoff
-          const targetDate = response.fieldUpdates?.date;
-          console.log('[handleSend] Extracted date for search:', targetDate);
-
-          // User Feedback: Explicitly mention the date we are checking
-          const searchMessageContent = targetDate
-            ? `Checking your schedule for ${targetDate}...`
-            : "Searching for reminders...";
-
-          // Add a temporary "Searching..." message
-          const searchingMessageId = (Date.now() + 1).toString();
-          setMessages(prev => [...prev, {
-            id: searchingMessageId,
-            role: 'assistant',
-            content: searchMessageContent,
-            timestamp: new Date(),
-          }]);
-
-          const searchData = await searchReminders({
-            query: userContent,
-            user_id: user!.id,
-            targetDate: targetDate || undefined,
-          });
-
-          // Remove the temporary searching message
-          setMessages(prev => prev.filter(m => m.id !== searchingMessageId));
-
-          console.log('[handleSend] Search response:', JSON.stringify(searchData, null, 2));
-          console.log('[handleSend] Evidence count:', searchData.evidence?.length || 0);
-
-          if (searchData.evidence && searchData.evidence.length > 0) {
-            // Map reminder_id to id for the Reminder interface compatibility
-            const mappedResults = searchData.evidence.map((item: any) => ({
-              ...item,
-              id: item.reminder_id || item.id,
-            }));
-
-            // Create inline panel message with search results
-            const panelMessage: ChatMessage = {
-              id: (Date.now() + 1).toString(),
-              role: 'assistant',
-              content: searchData.answer || "I found these reminders:",
-              timestamp: new Date(),
-              panelType: 'search',
-              panelSearchResults: mappedResults,
-              panelIsStatic: false,
-            };
-            setMessages(prev => [...prev, panelMessage]);
-          } else {
-            // No results found
-            const noResultsMessage: ChatMessage = {
-              id: (Date.now() + 1).toString(),
-              role: 'assistant',
-              content: searchData.answer || "I couldn't find any matching reminders.",
-              timestamp: new Date(),
-            };
-            setMessages(prev => [...prev, noResultsMessage]);
-          }
-        } catch (searchError) {
-          console.error('[handleSend] ❌ Search Error:', searchError);
-          const errorMessage: ChatMessage = {
-            id: (Date.now() + 1).toString(),
-            role: 'assistant',
-            content: "I had trouble searching your reminders. Please try again.",
-            timestamp: new Date(),
-          };
-          setMessages(prev => [...prev, errorMessage]);
-        }
-      } else if (response.type === 'create') {
-        // Create inline panel message for creating a reminder
-        const panelMessage: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: response.message,
-          timestamp: new Date(),
-          panelType: 'create',
-          panelFields: {
-            repeat: 'none',
-            ...(response.fieldUpdates || {}),
-          },
-          panelIsStatic: false,
-        };
-        setMessages(prev => [...prev, panelMessage]);
-      } else if (response.type === 'update') {
-        // Find the most recent panel message and update its fields
-        setMessages(prev => {
-          const lastPanelIndex = prev.findLastIndex(m => m.panelType && !m.panelIsStatic);
-          if (lastPanelIndex !== -1 && response.fieldUpdates) {
-            const updated = [...prev];
-            updated[lastPanelIndex] = {
-              ...updated[lastPanelIndex],
-              panelFields: {
-                ...updated[lastPanelIndex].panelFields,
-                ...response.fieldUpdates,
-              },
-            };
-            return updated;
-          }
-          return prev;
-        });
-
-        // Also add an AI message acknowledging the update
-        const updateMessage: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: response.message,
-          timestamp: new Date(),
-        };
-        setMessages(prev => [...prev, updateMessage]);
-      } else {
-        // Regular chat message
-        const aiMessage: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: response.message,
-          timestamp: new Date(),
-        };
-        setMessages(prev => [...prev, aiMessage]);
-      }
-    } catch (error: any) {
-      console.error('[handleSend] Error:', error);
-      let errorContent = "I'm sorry, I encountered an error. Please try again.";
-
-      if (error.code === 'PRO_REQUIRED' || error.message?.includes('Pro membership')) {
-        errorContent = "This AI feature requires a Pro membership. Please upgrade to access AI-powered reminder extraction!";
-      } else if (error.message) {
-        errorContent = error.message;
-      }
-
-      const errorMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: errorContent,
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsThinking(false);
-    }
-  }, [inputText, selectedImage, isThinking, processMessage, user]);
+  }, [inputText, selectedImage, isThinking, processMessage]);
 
   // Handle panel field changes
   const handlePanelFieldsChange = useCallback((messageId: string, fields: ModalFieldUpdates) => {
@@ -499,6 +466,7 @@ export default function AIChatScreen() {
       time: fields.time,
       repeat: fields.repeat || 'none',
       tag_id: fields.tag_id,
+      notes: fields.notes,
     };
 
     let result;
@@ -746,6 +714,20 @@ export default function AIChatScreen() {
       </View>
 
       {!isPro && <PremiumLockOverlay onUnlock={handleUnlock} />}
+
+      {/* Add Reminder Sheet for AI Drafts */}
+      <AddReminderSheet
+        isOpen={isSheetOpen}
+        onClose={() => setIsSheetOpen(false)}
+        onSave={handleSheetSave}
+        editReminder={draftReminder ? {
+          id: 'draft', // Temporary ID
+          ...draftReminder,
+          user_id: user?.id || '',
+          completed: false,
+          created_at: new Date().toISOString()
+        } as unknown as Reminder : undefined}
+      />
     </KeyboardAvoidingView>
   );
 }

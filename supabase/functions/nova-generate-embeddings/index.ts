@@ -16,7 +16,8 @@ function buildContentString(reminder: {
     title: string,
     date?: string | null,
     time?: string | null,
-    tagName?: string | null
+    tagName?: string | null,
+    notes?: string | null
 }): string {
     let content = reminder.title
 
@@ -37,6 +38,7 @@ function buildContentString(reminder: {
     }
 
     if (reminder.tagName) content += ` [${reminder.tagName}]`
+    if (reminder.notes) content += ` Notes: ${reminder.notes}`
 
     return content
 }
@@ -119,6 +121,7 @@ serve(async (req) => {
         title,
         date,
         time,
+        notes,
         tag_id,
         tags (
           name
@@ -164,7 +167,8 @@ serve(async (req) => {
                     title: reminder.title,
                     date: reminder.date,
                     time: reminder.time,
-                    tagName
+                    tagName,
+                    notes: (reminder as any).notes
                 })
 
                 console.log(`[Processing] Reminder ${reminder.id}: "${contentToEmbed}"`)

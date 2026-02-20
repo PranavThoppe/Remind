@@ -202,6 +202,9 @@ export function InlineReminderPanel({
                     <Text style={styles.staticTitle}>{type === 'edit' ? 'Reminder Updated' : 'Reminder Created'}</Text>
                 </View>
                 <Text style={styles.staticReminderTitle}>{fields.title || 'Untitled'}</Text>
+                {fields.notes && (
+                    <Text style={styles.staticNotes} numberOfLines={2}>{fields.notes}</Text>
+                )}
                 <View style={styles.staticMeta}>
                     {fields.date && (
                         <View style={styles.staticMetaItem}>
@@ -336,6 +339,15 @@ export function InlineReminderPanel({
                 placeholderTextColor={colors.mutedForeground}
                 value={fields.title ?? ''}
                 onChangeText={(text) => onFieldsChange?.({ ...fields, title: text })}
+            />
+
+            <TextInput
+                style={styles.notesInput}
+                placeholder="Add notes..."
+                placeholderTextColor={colors.mutedForeground}
+                value={fields.notes ?? ''}
+                onChangeText={(text) => onFieldsChange?.({ ...fields, notes: text })}
+                multiline
             />
 
             {/* Date & Time */}
@@ -493,7 +505,21 @@ const createStyles = (colors: any) =>
             fontFamily: typography.fontFamily.title,
             fontSize: typography.fontSize.lg,
             color: colors.foreground,
+            marginBottom: spacing.xs,
+        },
+        notesInput: {
+            borderRadius: borderRadius.md,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.background,
+            paddingHorizontal: spacing.md,
+            paddingVertical: spacing.sm,
+            fontFamily: typography.fontFamily.regular,
+            fontSize: typography.fontSize.base,
+            color: colors.foreground,
             marginBottom: spacing.sm,
+            minHeight: 60,
+            textAlignVertical: 'top',
         },
         row: {
             flexDirection: 'row',
@@ -594,6 +620,12 @@ const createStyles = (colors: any) =>
             fontSize: typography.fontSize.xl,
             color: colors.foreground,
             marginBottom: spacing.xs,
+        },
+        staticNotes: {
+            fontFamily: typography.fontFamily.regular,
+            fontSize: typography.fontSize.sm,
+            color: colors.mutedForeground,
+            marginBottom: spacing.sm,
         },
         staticMeta: {
             flexDirection: 'row',

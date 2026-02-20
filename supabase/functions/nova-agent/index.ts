@@ -50,6 +50,52 @@ const createReminderTool = {
                 repeat_until: {
                     type: "string",
                     description: "End date for recurring reminders in YYYY-MM-DD format. Only set when user specifies a time-limited repeat (e.g., 'every Monday for 2 months'). Leave unset for indefinite repeats."
+                },
+                notes: {
+                    type: "string",
+                    description: "Contextual notes or details about the reminder."
+                }
+            },
+            required: ["title", "date"]
+        }
+    }
+}
+
+const draftReminderTool = {
+    name: "draft_reminder",
+    description: "Proposes a reminder to the user for review. Use this by DEFAULT when the user wants to create a reminder, unless they explicitly say 'create immediately' or 'book it now'. This allows the user to edit details before saving.",
+    inputSchema: {
+        json: {
+            type: "object",
+            properties: {
+                title: {
+                    type: "string",
+                    description: "Brief reminder title (max 6 words)."
+                },
+                date: {
+                    type: "string",
+                    description: "Date in YYYY-MM-DD format."
+                },
+                time: {
+                    type: "string",
+                    description: "Time in HH:mm 24-hour format."
+                },
+                repeat: {
+                    type: "string",
+                    enum: ["none", "daily", "weekly", "monthly"],
+                    description: "Recurrence pattern."
+                },
+                tag_name: {
+                    type: "string",
+                    description: "Name of the tag/category to assign."
+                },
+                priority_name: {
+                    type: "string",
+                    description: "Name of the priority level to assign."
+                },
+                notes: {
+                    type: "string",
+                    description: "Contextual notes or details about the reminder derived from the conversation."
                 }
             },
             required: ["title", "date"]
@@ -108,6 +154,10 @@ const updateReminderTool = {
                 completed: {
                     type: "boolean",
                     description: "Set to true if user wants to mark the reminder as done/complete."
+                },
+                notes: {
+                    type: "string",
+                    description: "New notes content. Only include if user wants to add or change notes."
                 }
             },
             required: ["reminder_id"]
@@ -179,6 +229,7 @@ async function handleCreateReminder(toolInput: any, userId: string, supabase: an
             tag_id: tagId,
             priority_id: priorityId,
             completed: false,
+            notes: toolInput.notes || null
         })
         .select()
         .single()
@@ -198,9 +249,23 @@ async function handleCreateReminder(toolInput: any, userId: string, supabase: an
             repeat: data.repeat,
             repeat_until: data.repeat_until || null,
             tag: toolInput.tag_name || null,
-            priority: toolInput.priority_name || null
+            priority: toolInput.priority_name || null,
+            notes: data.notes || null
         },
         message: "Reminder created successfully"
+    }
+}
+
+function handleDraftReminder(toolInput: any) {
+    console.log('[Agent] draft_reminder:', JSON.stringify(toolInput, null, 2))
+    // Just echo back the input as a "draft"
+    return {
+        success: true,
+        draft: {
+            ...toolInput,
+            is_draft: true
+        },
+        message: "I've drafted a reminder for you. Please review it above."
     }
 }
 
@@ -275,6 +340,7 @@ async function handleUpdateReminder(toolInput: any, userId: string, supabase: an
     if (toolInput.date !== undefined) updates.date = toolInput.date
     if (toolInput.time !== undefined) updates.time = toolInput.time
     if (toolInput.completed !== undefined) updates.completed = toolInput.completed
+    if (toolInput.notes !== undefined) updates.notes = toolInput.notes
 
     const { data, error } = await supabase
         .from('reminders')
@@ -471,6 +537,7 @@ serve(async (req) => {
         })
 
         const tools = [
+            { toolSpec: draftReminderTool },
             { toolSpec: createReminderTool },
             { toolSpec: searchRemindersTool },
             { toolSpec: updateReminderTool },
@@ -483,7 +550,11 @@ ${tagsContext}
 ${prioritiesContext}
 ${commonTimesContext}
 
-When the user asks you to create a reminder, use the create_reminder tool. If the user mentions a category or tag, set the tag_name field. If they mention a priority, set the priority_name field.
+When the user asks you to create a reminder, use the draft_reminder tool by default. This allows the user to review the details.
+ONLY use create_reminder if the user explicitly says "create immediately", "do it now", "confirm", or "book it" without review.
+If the user mentions a category or tag, set the tag_name field. If they mention a priority, set the priority_name field.
+Extract any relevant context or details into the 'notes' field (e.g., "call mom about the party" -> title: "Call Mom", notes: "About the party").
+
 When the user asks what reminders they have or searches for reminders, use the search_reminders tool.
 When the user wants to change, reschedule, or complete a reminder, use the update_reminder tool.
 When the user wants to remove or delete a reminder, use the delete_reminder tool.
@@ -506,6 +577,8 @@ RULES:
 - If the user asks for multiple things, handle each one by calling the appropriate tools.
 - After performing actions, give a brief, friendly confirmation.
 - If info is missing (e.g., no date specified), ask the user to clarify.
+- When presenting a draft (draft_reminder), explicitly ask if they want to add valid details to the notes (e.g., "Do you want to add any specifics about what to discuss?").
+- CRITICALLY IMPORTANT: After calling draft_reminder, you MUST STOP. Do not search, do not create, do not do anything else. Just output a final message asking the user to review.
 - When assigning tags or priorities, use the exact names from the available lists above.
 - If the user specifies a time-limited repeat (e.g., "every Monday for 2 months"), set repeat to the pattern and repeat_until to the calculated end date.
 - Never wrap your response in XML tags like <thinking> or <response>. Just respond naturally.`
@@ -579,7 +652,9 @@ RULES:
 
                     // Execute real tool
                     let toolResult: any
-                    if (toolName === "create_reminder") {
+                    if (toolName === "draft_reminder") {
+                        toolResult = handleDraftReminder(toolInput)
+                    } else if (toolName === "create_reminder") {
                         toolResult = await handleCreateReminder(toolInput, userId, supabaseClient)
                     } else if (toolName === "search_reminders") {
                         toolResult = await handleSearchReminders(toolInput, userId, ADMIN_SECRET_KEY, SUPABASE_URL)
