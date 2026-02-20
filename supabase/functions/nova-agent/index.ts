@@ -287,6 +287,7 @@ async function handleSearchReminders(
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'apikey': Deno.env.get('SUPABASE_ANON_KEY')!,
                 'x-admin-secret': adminSecret
             },
             body: JSON.stringify({

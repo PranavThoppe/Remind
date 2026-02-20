@@ -441,6 +441,8 @@ export default function AIChatScreen() {
       } else if (toolName === 'search_reminders') {
         // Handle search results
         const reminders = toolResult.reminders || [];
+        console.log('[AIChat] API Search Results Received:', JSON.stringify(reminders, null, 2));
+
         if (reminders.length > 0) {
           const panelMessage: ChatMessage = {
             id: (Date.now() + 1).toString(),

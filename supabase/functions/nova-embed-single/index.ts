@@ -61,21 +61,50 @@ serve(async (req) => {
         }
 
         const body = await req.json()
-        const { reminder_id, user_id, title, date, time, tag_name } = body
+        const { reminder_id } = body
 
-        if (!reminder_id || !user_id || !title) {
-            return new Response(JSON.stringify({ error: 'reminder_id, user_id, and title are required' }), {
+        if (!reminder_id) {
+            return new Response(JSON.stringify({ error: 'reminder_id is required' }), {
                 status: 400,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             })
         }
 
+        const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+        // Fetch reminder details including tag name
+        const { data: reminder, error: fetchError } = await supabase
+            .from('reminders')
+            .select(`
+                id,
+                user_id,
+                title,
+                date,
+                time,
+                tag_id,
+                tags (
+                    name
+                )
+            `)
+            .eq('id', reminder_id)
+            .single()
+
+        if (fetchError || !reminder) {
+            console.error('[Fetch Error]', fetchError)
+            return new Response(JSON.stringify({ error: 'Reminder not found' }), {
+                status: 404,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            })
+        }
+
+        const tagName = (reminder as any).tags?.name
+
         // Build natural-language content string
         const contentToEmbed = buildContentString({
-            title,
-            date,
-            time,
-            tagName: tag_name
+            title: reminder.title,
+            date: reminder.date,
+            time: reminder.time,
+            tagName: tagName
         })
 
         console.log(`[Nova Embed Single] Reminder ${reminder_id}: "${contentToEmbed}"`)
@@ -108,15 +137,13 @@ serve(async (req) => {
         }
 
         // Upsert into nova_reminder_embeddings
-        const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-
         const { error: upsertError } = await supabase
             .from('nova_reminder_embeddings')
             .upsert({
                 reminder_id,
-                user_id,
+                user_id: reminder.user_id,
                 content: contentToEmbed,
-                date: date ?? null,
+                date: reminder.date ?? null,
                 embedding: embeddingVector,
                 updated_at: new Date().toISOString()
             }, {

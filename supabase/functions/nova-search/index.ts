@@ -231,14 +231,13 @@ If no date is mentioned, return startDate: null.`
         let topResults: any[] = []
 
         if (hasTargetDate) {
-            console.log(`[Nova Search] Date detected (${startDate} to ${endDate}). Fetching directly from DB.`)
+            console.log(`[Nova Search] Date detected: ${startDate} to ${endDate}. Filters: user_id=${user.id}`);
             const { data: dateReminders, error: dateError } = await supabase
                 .from('reminders')
                 .select('*')
                 .eq('user_id', user.id)
                 .gte('date', startDate)
                 .lte('date', endDate)
-                .order('time', { ascending: true })
 
             if (dateError) {
                 console.error('[Date Search Error]', dateError)
