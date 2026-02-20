@@ -22,6 +22,7 @@ export interface CallNovaAgentParams {
     query: string;
     user_id: string;
     conversation?: ChatMessage[];
+    client_date?: string; // YYYY-MM-DD
 }
 
 /**
@@ -30,7 +31,7 @@ export interface CallNovaAgentParams {
 export async function callNovaAgent(
     params: CallNovaAgentParams
 ): Promise<NovaAgentResponse> {
-    const { query, user_id } = params;
+    const { query, user_id, client_date } = params;
 
     // Add timeout
     const controller = new AbortController();
@@ -51,6 +52,7 @@ export async function callNovaAgent(
             body: JSON.stringify({
                 query,
                 user_id,
+                client_date,
                 conversation: params.conversation?.map(msg => ({
                     role: msg.role,
                     content: msg.content

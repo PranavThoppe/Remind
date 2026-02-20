@@ -26,6 +26,7 @@ import { useReminders } from '../../hooks/useReminders';
 import { AiLiveReminderPanel } from '../../components/AiLiveReminderPanel';
 import { InlineReminderPanel } from '../../components/InlineReminderPanel';
 import { AddReminderSheet } from '../../components/AddReminderSheet';
+import { ReminderCard } from '../../components/ReminderCard';
 import { ChatMessage, ModalFieldUpdates, MockAIResponse } from '../../types/ai-chat';
 import { Reminder } from '../../types/reminder';
 import { scheduleReminderNotification } from '../../lib/notifications';
@@ -98,6 +99,9 @@ function MessageBubble({
   onPanelSave,
   onPanelClose,
   onSelectReminder,
+  onDraftConfirm,
+  onDraftEdit,
+  onDraftDiscard,
 }: {
   message: ChatMessage;
   colors: any;
@@ -106,15 +110,89 @@ function MessageBubble({
   onPanelSave?: (messageId: string) => void;
   onPanelClose?: (messageId: string) => void;
   onSelectReminder?: (reminder: Reminder) => void;
+  onDraftConfirm?: (messageId: string, draft: ModalFieldUpdates) => void;
+  onDraftEdit?: (messageId: string, draft: ModalFieldUpdates) => void;
+  onDraftDiscard?: (messageId: string) => void;
 }) {
   const isUser = message.role === 'user';
+
+  // Helper to create a temporary reminder object for the draft card
+  const getDraftReminder = (fields: ModalFieldUpdates): Reminder => {
+    return {
+      id: `draft-${message.id}`,
+      user_id: 'current-user', // specific id not strict for visual representation
+      title: fields.title || '',
+      date: fields.date || null,
+      time: fields.time || null,
+      repeat: fields.repeat || 'none',
+      repeat_until: fields.repeat_until || null,
+      completed: false,
+      created_at: new Date().toISOString(),
+      tag_id: fields.tag_id,
+      priority_id: fields.priority_id,
+      notes: fields.notes,
+    };
+  };
+
+  // If message is a draft, verify it renders as a ReminderCard
+  if (message.panelType === 'draft' && message.panelFields) {
+    const draftReminder = getDraftReminder(message.panelFields);
+    const isStatic = message.panelIsStatic;
+
+    return (
+      <View style={[styles.messageContainer, styles.panelMessageContainer]}>
+        <View style={{ width: '100%', maxWidth: 340 }}>
+          {/* Header for the draft card */}
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginBottom: 8,
+            marginLeft: 4
+          }}>
+            <Ionicons
+              name={isStatic ? "checkmark-circle" : "sparkles"}
+              size={16}
+              color={isStatic ? colors.success : colors.primary}
+              style={{ marginRight: 6 }}
+            />
+            <Text style={{
+              color: isStatic ? colors.success : colors.mutedForeground,
+              fontSize: 12,
+              fontFamily: typography.fontFamily.medium
+            }}>
+              {isStatic ? 'Reminder Created' : 'Proposed Reminder'}
+            </Text>
+          </View>
+
+          <ReminderCard
+            reminder={draftReminder}
+            index={0}
+            onComplete={isStatic ? () => { } : () => onDraftConfirm?.(message.id, message.panelFields!)}
+            onEdit={isStatic ? () => { } : () => onDraftEdit?.(message.id, message.panelFields!)}
+            onDelete={isStatic ? undefined : () => onDraftDiscard?.(message.id)}
+          />
+
+          {!isStatic && (
+            <Text style={{
+              textAlign: 'center',
+              marginTop: 8,
+              color: colors.mutedForeground,
+              fontSize: 11
+            }}>
+              Tap check to create • Tap card to edit • Swipe to discard
+            </Text>
+          )}
+        </View>
+      </View>
+    );
+  }
 
   // If message has panel data, render inline panel
   if (message.panelType) {
     return (
       <View style={[styles.messageContainer, styles.panelMessageContainer]}>
         <InlineReminderPanel
-          type={message.panelType}
+          type={message.panelType as 'create' | 'edit' | 'search'}
           fields={message.panelFields}
           searchResults={message.panelSearchResults}
           isStatic={message.panelIsStatic}
@@ -210,6 +288,7 @@ export default function AIChatScreen() {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [draftReminder, setDraftReminder] = useState<any>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
@@ -259,6 +338,14 @@ export default function AIChatScreen() {
       };
       setMessages(prev => [...prev, successMessage]);
 
+      // If we were editing a message from the chat, mark it as static/confirmed
+      if (editingMessageId) {
+        setMessages(prev => prev.map(msg =>
+          msg.id === editingMessageId ? { ...msg, panelIsStatic: true } : msg
+        ));
+        setEditingMessageId(null);
+      }
+
       setDraftReminder(null);
       setIsSheetOpen(false);
     }
@@ -287,10 +374,14 @@ export default function AIChatScreen() {
         !m.content.includes("I'm sorry, I encountered an error")
       );
 
+      const now = new Date();
+      const clientDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
       const response = await callNovaAgent({
         query: input,
         user_id: user.id,
-        conversation: conversationHistory
+        conversation: conversationHistory,
+        client_date: clientDate
       });
 
       // Handle the response based on tool calls
@@ -324,16 +415,18 @@ export default function AIChatScreen() {
           notes: draft.notes
         };
 
-        setDraftReminder(sheetDraft);
-        setIsSheetOpen(true);
-
-        setMessages(prev => [...prev, {
+        // Create an inline draft message instead of opening sheet immediately
+        const draftMessage: ChatMessage = {
           id: Date.now().toString(),
           role: 'assistant',
-          content: response.message || toolResult.message || "I've opened the reminder sheet for you to review.",
-          timestamp: new Date()
-        }]);
-        return; // Return early, don't fallback to inline panel logic
+          content: response.message || toolResult.message || "Here is a draft for your reminder:",
+          timestamp: new Date(),
+          panelType: 'draft',
+          panelFields: sheetDraft,
+        };
+
+        setMessages(prev => [...prev, draftMessage]);
+        return;
 
       } else if (toolName === 'create_reminder') {
         // Reminder was created immediately
@@ -630,6 +723,20 @@ export default function AIChatScreen() {
               onPanelSave={handlePanelSave}
               onPanelClose={handlePanelClose}
               onSelectReminder={handleSelectReminder}
+              onDraftConfirm={(msgId, draft) => {
+                // Confirming creates the reminder immediately
+                handlePanelSave(msgId);
+              }}
+              onDraftEdit={(msgId, draft) => {
+                // Editing opens the sheet
+                setDraftReminder(draft);
+                setEditingMessageId(msgId);
+                setIsSheetOpen(true);
+                // We keep the message in history now, and it will be updated to static once saved
+              }}
+              onDraftDiscard={(msgId) => {
+                handlePanelClose(msgId);
+              }}
             />
           )}
           contentContainerStyle={dynamicStyles.messagesList}

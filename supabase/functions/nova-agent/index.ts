@@ -428,7 +428,7 @@ serve(async (req) => {
             })
         }
 
-        const { query, user_id: body_user_id } = body
+        const { query, user_id: body_user_id, client_date } = body
 
         if (!query) {
             return new Response(JSON.stringify({ error: 'Query required' }), {
@@ -476,7 +476,7 @@ serve(async (req) => {
             userId = authUser.id
         }
 
-        console.log('[Nova Agent] User:', userId, 'Query:', query)
+        console.log('[Nova Agent] User:', userId, 'Query:', query, 'Client Date:', client_date)
 
         // ============================================================
         // FETCH USER'S TAGS & PRIORITIES
@@ -512,16 +512,37 @@ serve(async (req) => {
         // DATE CONTEXT (so Nova can resolve relative dates)
         // ============================================================
 
-        const now = new Date()
-        const todayStr = now.toISOString().split('T')[0]
-        const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' })
-        const monthName = now.toLocaleDateString('en-US', { month: 'long' })
-        const dayOfMonth = now.getDate()
+        let now: Date
+        let todayStr: string
+
+        if (client_date) {
+            // Use client provided date
+            todayStr = client_date
+            // Parse YYYY-MM-DD as UTC to avoid timezone shifts
+            now = new Date(client_date + 'T12:00:00Z')
+        } else {
+            // Fallback to server time
+            now = new Date()
+            todayStr = now.toISOString().split('T')[0]
+        }
+
+        const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' })
+        const monthName = now.toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' })
+        const dayOfMonth = now.getDate() // Returns day of month (1-31) in local time (which matches UTC if we constructed carefully or use getUTCDate) 
+        // Actually, if we use new Date('...Z'), methods like getDate() return browser/system local. 
+        // In Deno Deploy, system is UTC. So getDate() === getUTCDate().
         const year = now.getFullYear()
-        const fullToday = `${dayOfWeek}, ${monthName} ${dayOfMonth}, ${year} (${todayStr})`
+
+        // Let's use getUTC* methods to be safe since we constructed with Z
+        const utcDayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' })
+        const utcMonthName = now.toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' })
+        const utcDayOfMonth = now.getUTCDate()
+        const utcYear = now.getUTCFullYear()
+
+        const fullToday = `${utcDayOfWeek}, ${utcMonthName} ${utcDayOfMonth}, ${utcYear} (${todayStr})`
 
         const tomorrow = new Date(now)
-        tomorrow.setDate(tomorrow.getDate() + 1)
+        tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
         const tomorrowStr = tomorrow.toISOString().split('T')[0]
 
         // ============================================================
