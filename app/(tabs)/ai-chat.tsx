@@ -353,7 +353,7 @@ export default function AIChatScreen() {
   }, [addReminder]);
 
   // Process message with Nova Agent
-  const processMessage = useCallback(async (input: string, imageUri?: string): Promise<void> => {
+  const processMessage = useCallback(async (input: string, currentMessages: ChatMessage[], imageUri?: string): Promise<void> => {
     try {
       if (!user) {
         setMessages(prev => [...prev, {
@@ -368,8 +368,12 @@ export default function AIChatScreen() {
       // Note: Image upload not yet supported by Nova Agent in this iteration
       // We'll add that later. For now, rely on text.
 
-      // Filter out internal UI states or temporary messages if needed
-      const conversationHistory = messages.filter(m =>
+      // Filter out internal UI states or temporary messages
+      // Bedrock REQUIREMENT: Conversation must start with a 'user' message.
+      // We filter out the assistant's 'welcome' message.
+      // CRITICAL: Filter out the LAST message because it's already passed as the 'query' parameter
+      const conversationHistory = currentMessages.slice(0, -1).filter(m =>
+        m.id !== 'welcome' &&
         !m.id.startsWith('temp-') &&
         !m.content.includes("I'm sorry, I encountered an error")
       );
@@ -508,7 +512,7 @@ export default function AIChatScreen() {
     } finally {
       setIsThinking(false);
     }
-  }, [user]);
+  }, [user, tags, priorities, addReminder, updateReminder, getTodayDateString]);
 
   // Handle sending messages
   const handleSend = useCallback(async () => {
@@ -529,13 +533,14 @@ export default function AIChatScreen() {
       imageUri: userImage || undefined,
       timestamp: new Date(),
     };
-    setMessages(prev => [...prev, userMessage]);
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
 
     // Show thinking state
     setIsThinking(true);
 
-    // Call Nova Agent
-    await processMessage(userContent, userImage || undefined);
+    // Call Nova Agent with the current messages list to avoid stale closure
+    await processMessage(userContent, updatedMessages, userImage || undefined);
 
   }, [inputText, selectedImage, isThinking, processMessage]);
 

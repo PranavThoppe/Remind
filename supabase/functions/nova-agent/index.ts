@@ -429,7 +429,7 @@ serve(async (req) => {
             })
         }
 
-        const { query, user_id: body_user_id, client_date } = body
+        const { query, user_id: body_user_id, client_date, conversation } = body
 
         if (!query) {
             return new Response(JSON.stringify({ error: 'Query required' }), {
@@ -546,6 +546,18 @@ serve(async (req) => {
         tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
         const tomorrowStr = tomorrow.toISOString().split('T')[0]
 
+        // Generate next 7 days list for better disambiguation
+        const next7Days: string[] = []
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(now)
+            d.setUTCDate(d.getUTCDate() + i)
+            const dateStr = d.toISOString().split('T')[0]
+            const dayName = d.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' })
+            const label = i === 0 ? " (Today)" : i === 1 ? " (Tomorrow)" : ""
+            next7Days.push(`${dayName}${label}: ${dateStr}`)
+        }
+        const next7DaysContext = `Upcoming Dates (Next 7 Days):\n${next7Days.join('\n')}`
+
         // ============================================================
         // BEDROCK CONVERSE API WITH TOOLS
         // ============================================================
@@ -566,7 +578,9 @@ serve(async (req) => {
             { toolSpec: deleteReminderTool }
         ]
 
-        const systemPrompt = `You are a helpful reminders assistant. Today is ${fullToday}. Tomorrow is ${tomorrowStr}.
+        const systemPrompt = `You are a helpful reminders assistant. Today is ${fullToday}.
+ 
+${next7DaysContext}
 
 ${tagsContext}
 ${prioritiesContext}
@@ -577,7 +591,8 @@ ONLY use create_reminder if the user explicitly says "create immediately", "do i
 If the user mentions a category or tag, set the tag_name field. If they mention a priority, set the priority_name field.
 Extract any relevant context or details into the 'notes' field (e.g., "call mom about the party" -> title: "Call Mom", notes: "About the party").
 
-When the user asks what reminders they have or searches for reminders, use the search_reminders tool.
+When the user explicitly asks to find, search for, or list their reminders (e.g., "What do I have tomorrow?", "Show my gym reminders"), use the search_reminders tool.
+DO NOT use search_reminders for general statements or stories (e.g., "I went to the gym today") unless the user is asking you for info about those reminders.
 When the user wants to change, reschedule, or complete a reminder, use the update_reminder tool.
 When the user wants to remove or delete a reminder, use the delete_reminder tool.
 
@@ -596,20 +611,58 @@ RULES:
 - For keyword searches (e.g., "find my gym reminders"), use the query field instead of dates.
 - Keep reminder titles concise (max 6 words).
 - Convert times to 24-hour format (e.g., "7pm" = "19:00").
-- If the user asks for multiple things, handle each one by calling the appropriate tools.
 - After performing actions, give a brief, friendly confirmation.
 - If info is missing (e.g., no date specified), ask the user to clarify.
-- When presenting a draft (draft_reminder), explicitly ask if they want to add valid details to the notes (e.g., "Do you want to add any specifics about what to discuss?").
+- When presenting a draft (draft_reminder), explicitly ask if they want to add valid details to the notes (e.g., "Do you want to add any specifics?").
 - CRITICALLY IMPORTANT: After calling draft_reminder, you MUST STOP. Do not search, do not create, do not do anything else. Just output a final message asking the user to review.
 - When assigning tags or priorities, use the exact names from the available lists above.
 - If the user specifies a time-limited repeat (e.g., "every Monday for 2 months"), set repeat to the pattern and repeat_until to the calculated end date.
-- Never wrap your response in XML tags like <thinking> or <response>. Just respond naturally.`
+- DISAMBIGUATION RULES:
+  - When a user mentions a day (e.g., "Monday") and there is ambiguity (e.g., it's currently Sunday or Monday):
+    - "this Monday" or just "Monday" usually refers to the very next occurrence (${next7Days[1]?.split(': ')[1] || 'soon'}).
+    - "next Monday" refers to the occurrence AFTER the coming one.
+  - Always check the 'Upcoming Dates' list above to ensure you are suggesting valid dates.
+- Never wrap your response in XML tags like <thinking> or <response>. 
+- BE CONCISE: Avoid conversational filler, unnecessary pleasantries, or off-topic comments. Focus strictly on the user's reminders.`
 
-        // Build conversation messages
-        let conversationMessages: any[] = [{
+        // Build conversation messages from history
+        let conversationMessages: any[] = []
+
+        if (Array.isArray(conversation) && conversation.length > 0) {
+            // Map client ChatMessage to Bedrock Converse message format
+            conversationMessages = conversation.map((msg: any) => ({
+                role: msg.role === 'user' ? 'user' : 'assistant',
+                content: [{ text: msg.content }]
+            }))
+
+            // Bedrock REQUIREMENT: Conversation must start with a 'user' message.
+            // If the first message is from assistant, drop it and any subsequent assistant messages
+            // until we find a user message.
+            while (conversationMessages.length > 0 && conversationMessages[0].role !== 'user') {
+                console.log('[Nova Agent] Dropping leading assistant message to satisfy Bedrock requirements')
+                conversationMessages.shift()
+            }
+
+            // Bedrock REQUIREMENT: Roles must alternate.
+            // If the last message in history is 'user', and we are about to add the current 'query' (also 'user'),
+            // we should merge them or insert a placeholder assistant message (less ideal).
+            // Actually, the client should send us history where the last message is assistant.
+            // If history ends with 'user', we'll just keep it and Bedrock might fail OR we can merge.
+        }
+
+        // Add the current query as the latest user message
+        const currentQueryMessage = {
             role: "user",
             content: [{ text: query }]
-        }]
+        }
+
+        if (conversationMessages.length > 0 && conversationMessages[conversationMessages.length - 1].role === 'user') {
+            console.log('[Nova Agent] Merging consecutive user messages')
+            const lastMsg = conversationMessages[conversationMessages.length - 1]
+            lastMsg.content[0].text = `${lastMsg.content[0].text}\n\n${query}`
+        } else {
+            conversationMessages.push(currentQueryMessage)
+        }
 
         let iterationCount = 0
         const maxIterations = 5
