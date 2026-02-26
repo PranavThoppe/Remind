@@ -29,7 +29,7 @@ import { AddReminderSheet } from '../../components/AddReminderSheet';
 import { ReminderCard } from '../../components/ReminderCard';
 import { ChatMessage, ModalFieldUpdates, MockAIResponse } from '../../types/ai-chat';
 import { Reminder } from '../../types/reminder';
-import { scheduleReminderNotification } from '../../lib/notifications';
+import { scheduleReminderNotification, cancelReminderNotifications } from '../../lib/notifications';
 import { callNovaAgent } from '../../lib/nova-client';
 import { VoiceModeButton } from '../../components/voice/VoiceModeButton';
 import { PremiumLockOverlay } from '../../components/PremiumLockOverlay';
@@ -582,6 +582,11 @@ export default function AIChatScreen() {
     if (!error && savedReminder) {
       // Schedule notification
       try {
+        if (panelMessage.panelReminderId) {
+          console.log('[AIChat] Cancelling old notification for edited reminder:', panelMessage.panelReminderId);
+          await cancelReminderNotifications(panelMessage.panelReminderId);
+        }
+
         await scheduleReminderNotification(
           fields.title!,
           dateStr,

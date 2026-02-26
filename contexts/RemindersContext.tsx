@@ -4,6 +4,7 @@ import { addDays, addWeeks, addMonths, format, parseISO } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { Reminder } from '../types/reminder';
+import { cancelReminderNotifications } from '../lib/notifications';
 
 interface RemindersContextType {
   reminders: Reminder[];
@@ -65,28 +66,37 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
   }, [fetchReminders]);
 
   const getNextDate = (dateStr: string | undefined, repeat: 'daily' | 'weekly' | 'monthly' | 'yearly'): string | undefined => {
+    const now = new Date();
+    const todayStr = format(now, 'yyyy-MM-dd');
+
     // We use T00:00:00 to ensure it's parsed as local time
-    const baseDate = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
+    let baseDate = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
 
     if (isNaN(baseDate.getTime())) return undefined;
 
-    let nextDate: Date;
-    switch (repeat) {
-      case 'daily':
-        nextDate = addDays(baseDate, 1);
-        break;
-      case 'weekly':
-        nextDate = addWeeks(baseDate, 1);
-        break;
-      case 'monthly':
-        nextDate = addMonths(baseDate, 1);
-        break;
-      case 'yearly':
-        nextDate = addMonths(baseDate, 12);
-        break;
-      default:
-        return undefined;
-    }
+    let nextDate = baseDate;
+
+    // Helper to add interval
+    const addInterval = (d: Date, r: string): Date => {
+      switch (r) {
+        case 'daily':
+          return addDays(d, 1);
+        case 'weekly':
+          return addWeeks(d, 1);
+        case 'monthly':
+          return addMonths(d, 1);
+        case 'yearly':
+          return addMonths(d, 12);
+        default:
+          return d;
+      }
+    };
+
+    // Keep adding the interval until we hit a date strictly in the future relative to today
+    // If the user completes a reminder today, we want the next one to be at least tomorrow.
+    do {
+      nextDate = addInterval(nextDate, repeat);
+    } while (format(nextDate, 'yyyy-MM-dd') <= todayStr);
 
     return format(nextDate, 'yyyy-MM-dd');
   };
@@ -144,6 +154,13 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
       }
 
       console.log(`[RemindersContext] Successfully updated database for ${id}`);
+
+      // Cancel notification if marking as complete
+      if (newStatus) {
+        cancelReminderNotifications(id).catch(err =>
+          console.error('[RemindersContext] Failed to cancel notification on complete:', err)
+        );
+      }
 
       // Update local state if the reminder exists in our list
       const reminder = reminders.find((r) => r.id === id);
@@ -228,6 +245,10 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
 
       if (!error) {
         setReminders((prev) => prev.filter((r) => r.id !== id));
+        // Cancel notification on delete
+        cancelReminderNotifications(id).catch(err =>
+          console.error('[RemindersContext] Failed to cancel notification on delete:', err)
+        );
       }
       return { error };
     } catch (error) {

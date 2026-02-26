@@ -263,3 +263,24 @@ export async function cancelAllNotifications() {
     console.error('Error cancelling all notifications:', error);
   }
 }
+/**
+ * Cancel notifications for a specific reminder
+ * @param reminderId The reminder ID
+ */
+export async function cancelReminderNotifications(reminderId: string) {
+  try {
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    const toCancel = scheduled.filter(
+      (n) => n.content.data?.id === reminderId
+    );
+
+    if (toCancel.length > 0) {
+      console.log(`[Notifications] Cancelling ${toCancel.length} notification(s) for reminder: ${reminderId}`);
+      for (const notification of toCancel) {
+        await Notifications.cancelScheduledNotificationAsync(notification.identifier);
+      }
+    }
+  } catch (error) {
+    console.error('Error cancelling reminder notifications:', error);
+  }
+}
