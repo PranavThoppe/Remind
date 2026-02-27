@@ -27,6 +27,7 @@ export default function TagsScreen() {
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tagName, setTagName] = useState('');
+  const [tagDescription, setTagDescription] = useState('');
   const [selectedColor, setSelectedColor] = useState(PRESET_COLORS[0].color);
   const [showPicker, setShowPicker] = useState(false);
 
@@ -35,7 +36,7 @@ export default function TagsScreen() {
       Alert.alert('Error', 'Tag name cannot be empty');
       return;
     }
-    await addTag(tagName.trim(), selectedColor);
+    await addTag(tagName.trim(), selectedColor, tagDescription.trim() || undefined);
     resetForm();
   };
 
@@ -45,7 +46,7 @@ export default function TagsScreen() {
       return;
     }
     if (editingId) {
-      await updateTag(editingId, tagName.trim(), selectedColor);
+      await updateTag(editingId, tagName.trim(), selectedColor, tagDescription.trim() || undefined);
     }
     resetForm();
   };
@@ -64,6 +65,7 @@ export default function TagsScreen() {
   const startEdit = (tag: Tag) => {
     setEditingId(tag.id);
     setTagName(tag.name);
+    setTagDescription(tag.description || '');
     setSelectedColor(tag.color);
     setIsAdding(true);
   };
@@ -72,6 +74,7 @@ export default function TagsScreen() {
     setIsAdding(false);
     setEditingId(null);
     setTagName('');
+    setTagDescription('');
     setSelectedColor(PRESET_COLORS[0].color);
   };
 
@@ -117,6 +120,14 @@ export default function TagsScreen() {
                 onChangeText={setTagName}
                 autoFocus
               />
+              <TextInput
+                style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
+                placeholder="Description (Optional, gives AI context)"
+                placeholderTextColor={colors.mutedForeground}
+                value={tagDescription}
+                onChangeText={setTagDescription}
+                multiline
+              />
               <Text style={styles.label}>Color</Text>
               <TouchableOpacity
                 style={[styles.colorPreview, { backgroundColor: selectedColor }]}
@@ -145,7 +156,14 @@ export default function TagsScreen() {
               <View key={tag.id} style={styles.tagItem}>
                 <View style={styles.tagInfo}>
                   <View style={[styles.tagColor, { backgroundColor: tag.color }]} />
-                  <Text style={styles.tagName}>{tag.name}</Text>
+                  <View>
+                    <Text style={styles.tagName}>{tag.name}</Text>
+                    {tag.description ? (
+                      <Text style={styles.tagDescription} numberOfLines={1}>
+                        {tag.description}
+                      </Text>
+                    ) : null}
+                  </View>
                 </View>
                 <View style={styles.tagActions}>
                   <TouchableOpacity
@@ -312,6 +330,12 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.lg,
     color: colors.foreground,
+  },
+  tagDescription: {
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.sm,
+    color: colors.mutedForeground,
+    marginTop: 2,
   },
   tagActions: {
     flexDirection: 'row',

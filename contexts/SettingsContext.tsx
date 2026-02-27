@@ -18,8 +18,8 @@ interface Settings {
 
 interface SettingsContextType {
   tags: Tag[];
-  addTag: (name: string, color: string) => Promise<void>;
-  updateTag: (id: string, name: string, color: string) => Promise<void>;
+  addTag: (name: string, color: string, description?: string) => Promise<void>;
+  updateTag: (id: string, name: string, color: string, description?: string) => Promise<void>;
   deleteTag: (id: string) => Promise<void>;
   priorities: PriorityLevel[];
   addPriority: (name: string, color: string, rank: number) => Promise<void>;
@@ -269,9 +269,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const addTag = async (name: string, color: string) => {
+  const addTag = async (name: string, color: string, description?: string) => {
     if (!user) {
-      const newTags = [...tags, { id: Date.now().toString(), name, color }];
+      const newTags = [...tags, { id: Date.now().toString(), name, color, description }];
       setTags(newTags);
       return;
     }
@@ -279,7 +279,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data, error } = await supabase
         .from('tags')
-        .insert([{ name, color, user_id: user.id }])
+        .insert([{ name, color, description, user_id: user.id }])
         .select()
         .single();
 
@@ -290,9 +290,9 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const updateTag = async (id: string, name: string, color: string) => {
+  const updateTag = async (id: string, name: string, color: string, description?: string) => {
     if (!user) {
-      const newTags = tags.map((t) => (t.id === id ? { ...t, name, color } : t));
+      const newTags = tags.map((t) => (t.id === id ? { ...t, name, color, description } : t));
       setTags(newTags);
       return;
     }
@@ -300,11 +300,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     try {
       const { error } = await supabase
         .from('tags')
-        .update({ name, color })
+        .update({ name, color, description })
         .eq('id', id);
 
       if (error) throw error;
-      setTags(tags.map((t) => (t.id === id ? { ...t, name, color } : t)));
+      setTags(tags.map((t) => (t.id === id ? { ...t, name, color, description } : t)));
     } catch (error) {
       console.error('Error updating tag:', error);
     }

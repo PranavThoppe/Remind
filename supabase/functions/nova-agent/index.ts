@@ -182,6 +182,27 @@ const deleteReminderTool = {
     }
 }
 
+const saveContextTool = {
+    name: "save_context",
+    description: "Save a term, acronym, or fact about the user to their personal glossary. Use when the user explains what something means, corrects a tag assignment, or provides personal context you should remember. For tag definitions, use 'tag:<name>' as the key.",
+    inputSchema: {
+        json: {
+            type: "object",
+            properties: {
+                key: {
+                    type: "string",
+                    description: "The term, acronym, or 'tag:<name>' (e.g., 'APUSH', 'Mom', 'tag:app')."
+                },
+                value: {
+                    type: "string",
+                    description: "What it means in the user's context (e.g., 'AP US History', 'Phone 555-1234', 'Only for coding tasks')."
+                }
+            },
+            required: ["key", "value"]
+        }
+    }
+}
+
 // ============================================================
 // REAL TOOL HANDLERS (Phase 2 - database operations)
 // ============================================================
@@ -390,6 +411,33 @@ async function handleDeleteReminder(toolInput: any, userId: string, supabase: an
     }
 }
 
+async function handleSaveContext(toolInput: any, userId: string, supabase: any) {
+    console.log('[DB] save_context:', JSON.stringify(toolInput, null, 2))
+
+    const { error } = await supabase
+        .from('user_context')
+        .upsert({
+            user_id: userId,
+            key: toolInput.key,
+            value: toolInput.value,
+            last_used_at: new Date().toISOString()
+        }, {
+            onConflict: 'user_id, key'
+        })
+
+    if (error) {
+        console.error('[DB Error] save_context:', error)
+        return { success: false, error: error.message }
+    }
+
+    return {
+        success: true,
+        key: toolInput.key,
+        value: toolInput.value,
+        message: "Context saved successfully! I will remember this."
+    }
+}
+
 // ============================================================
 // MAIN SERVER
 // ============================================================
@@ -483,18 +531,20 @@ serve(async (req) => {
         // FETCH USER'S TAGS & PRIORITIES
         // ============================================================
 
-        const [tagsRes, prioritiesRes, commonTimesRes] = await Promise.all([
-            supabaseClient.from('tags').select('id, name, color').eq('user_id', userId).order('name'),
+        const [tagsRes, prioritiesRes, commonTimesRes, contextRes] = await Promise.all([
+            supabaseClient.from('tags').select('id, name, color, description').eq('user_id', userId).order('name'),
             supabaseClient.from('priorities').select('id, name, color, rank').eq('user_id', userId).order('rank'),
-            supabaseClient.from('common_times').select('morning, afternoon, evening, night').eq('user_id', userId).maybeSingle()
+            supabaseClient.from('common_times').select('morning, afternoon, evening, night').eq('user_id', userId).maybeSingle(),
+            supabaseClient.from('user_context').select('key, value').eq('user_id', userId).order('last_used_at', { ascending: false }).limit(50)
         ])
 
         const userTags = tagsRes.data || []
         const userPriorities = prioritiesRes.data || []
         const commonTimes = commonTimesRes.data || { morning: '09:00', afternoon: '14:00', evening: '18:00', night: '21:00' }
+        const userContextItems = contextRes.data || []
 
         const tagsContext = userTags.length > 0
-            ? `Available tags: ${userTags.map((t: any) => t.name).join(', ')}`
+            ? `Available tags:\n${userTags.map((t: any) => `- ${t.name}${t.description ? ` (Description: ${t.description})` : ''}`).join('\n')}`
             : 'No tags configured.'
 
         const prioritiesContext = userPriorities.length > 0
@@ -506,6 +556,10 @@ serve(async (req) => {
 - Afternoon: ${commonTimes.afternoon}
 - Evening: ${commonTimes.evening}
 - Night: ${commonTimes.night}`
+
+        const userContextSection = userContextItems.length > 0
+            ? `USER CONTEXT (things you already know about the user):\n${userContextItems.map((c: any) => `- ${c.key} = ${c.value}`).join('\n')}`
+            : ''
 
         console.log('[Nova Agent] Tags:', userTags.length, 'Priorities:', userPriorities.length, 'Common Times found:', !!commonTimesRes.data)
 
@@ -575,7 +629,8 @@ serve(async (req) => {
             { toolSpec: createReminderTool },
             { toolSpec: searchRemindersTool },
             { toolSpec: updateReminderTool },
-            { toolSpec: deleteReminderTool }
+            { toolSpec: deleteReminderTool },
+            { toolSpec: saveContextTool }
         ]
 
         const systemPrompt = `You are a helpful reminders assistant. Today is ${fullToday}.
@@ -585,6 +640,8 @@ ${next7DaysContext}
 ${tagsContext}
 ${prioritiesContext}
 ${commonTimesContext}
+
+${userContextSection}
 
 When the user asks you to create a reminder, use the draft_reminder tool by default. This allows the user to review the details.
 ONLY use create_reminder if the user explicitly says "create immediately", "do it now", "confirm", or "book it" without review.
@@ -623,6 +680,10 @@ RULES:
     - "next Monday" refers to the occurrence AFTER the coming one.
   - Always check the 'Upcoming Dates' list above to ensure you are suggesting valid dates.
 - Never wrap your response in XML tags like <thinking> or <response>. 
+- When you encounter an unfamiliar acronym or ambiguous term, ask the user what it means BEFORE creating the reminder. Use save_context to remember their answer.
+- Use the USER CONTEXT section above to understand tag meanings. Only assign a tag if the reminder genuinely matches the tag's description or learned context.
+- If a user corrects a tag assignment ("no, 'app' is only for coding"), save that correction with save_context using key "tag:<name>".
+- Do NOT ask follow-up questions for simple, clear requests (e.g., "Remind me to buy milk tomorrow").
 - BE CONCISE: Avoid conversational filler, unnecessary pleasantries, or off-topic comments. Focus strictly on the user's reminders.`
 
         // Build conversation messages from history
@@ -737,6 +798,8 @@ RULES:
                         toolResult = await handleUpdateReminder(toolInput, userId, supabaseClient)
                     } else if (toolName === "delete_reminder") {
                         toolResult = await handleDeleteReminder(toolInput, userId, supabaseClient)
+                    } else if (toolName === "save_context") {
+                        toolResult = await handleSaveContext(toolInput, userId, supabaseClient)
                     } else {
                         toolResult = { error: `Unknown tool: ${toolName}` }
                     }
