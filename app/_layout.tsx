@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+import * as SplashScreen from 'expo-splash-screen';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { supabase } from '../lib/supabase';
 import {
@@ -20,6 +21,9 @@ import { SettingsProvider } from '../contexts/SettingsContext';
 import { initializeNotifications, scheduleReminderNotification } from '../lib/notifications';
 import * as Notifications from 'expo-notifications';
 import { format, addMinutes } from 'date-fns';
+
+// Keep the splash screen visible while we fetch resources
+SplashScreen.preventAutoHideAsync();
 
 function NotificationHandler() {
   const { toggleComplete } = useRemindersContext();
@@ -126,20 +130,12 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   }, [user, loading, segments]);
 
   if (loading) {
-    return <LoadingScreen />;
+    return null;
   }
 
   return <>{children}</>;
 }
 
-function LoadingScreen() {
-  const { colors } = useTheme();
-  return (
-    <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
-      <ActivityIndicator size="large" color={colors.primary} />
-    </View>
-  );
-}
 
 function RootContent() {
   const { colors, isDark } = useTheme();
@@ -168,8 +164,14 @@ function RootContent() {
     }
   }, []);
 
+  useEffect(() => {
+    if (fontsLoaded || fontError) {
+      SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded, fontError]);
+
   if (!fontsLoaded && !fontError) {
-    return <LoadingScreen />;
+    return null;
   }
 
   return (
@@ -207,9 +209,4 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
 });
