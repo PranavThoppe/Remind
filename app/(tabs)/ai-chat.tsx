@@ -32,7 +32,6 @@ import { Reminder } from '../../types/reminder';
 import { scheduleReminderNotification, cancelReminderNotifications } from '../../lib/notifications';
 import { callNovaAgent } from '../../lib/nova-client';
 import { VoiceModeButton } from '../../components/voice/VoiceModeButton';
-import { PremiumLockOverlay } from '../../components/PremiumLockOverlay';
 
 // Typing indicator component
 function TypingIndicator({ colors }: { colors: any }) {
@@ -694,12 +693,6 @@ export default function AIChatScreen() {
 
   const dynamicStyles = createDynamicStyles(colors, insets);
 
-  const handleUnlock = () => {
-    router.push('/subscription');
-  };
-
-  const isPro = profile?.pro === true;
-
   return (
     <KeyboardAvoidingView
       style={dynamicStyles.container}
@@ -710,10 +703,10 @@ export default function AIChatScreen() {
         {/* Header */}
         <View style={[dynamicStyles.header, { paddingTop: insets.top + spacing.md }]}>
           <View style={dynamicStyles.headerContent}>
-            <Text style={[dynamicStyles.headerTitle, { color: isPro ? colors.primary : colors.gold }]}>Mind</Text>
+            <Text style={[dynamicStyles.headerTitle, { color: colors.primary }]}>Mind</Text>
             <TouchableOpacity
               onPress={handleClearChat}
-              style={[dynamicStyles.clearButton, { backgroundColor: isPro ? colors.primaryLight : colors.goldLight }]}
+              style={[dynamicStyles.clearButton, { backgroundColor: colors.primaryLight }]}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Ionicons name="add" size={24} color={colors.mutedForeground} />
@@ -756,7 +749,7 @@ export default function AIChatScreen() {
           ListFooterComponent={isThinking ? <TypingIndicator colors={colors} /> : null}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-          scrollEnabled={isPro}
+          scrollEnabled={true}
         />
       </View>
 
@@ -779,9 +772,9 @@ export default function AIChatScreen() {
         <View style={dynamicStyles.inputRow}>
           {/* Add Button (Left) */}
           <TouchableOpacity
-            style={[dynamicStyles.addButton, { backgroundColor: isPro ? colors.primary : colors.gold }]}
+            style={[dynamicStyles.addButton, { backgroundColor: colors.primary }]}
             onPress={handlePickImage}
-            disabled={isThinking || !isPro}
+            disabled={isThinking}
           >
             <Ionicons name="add" size={24} color={colors.background} />
           </TouchableOpacity>
@@ -791,7 +784,7 @@ export default function AIChatScreen() {
             <TextInput
               ref={inputRef}
               style={dynamicStyles.input}
-              placeholder={isPro ? "What's on your mind?" : "Upgrade to unlock Mind"}
+              placeholder="What's on your mind?"
               placeholderTextColor={colors.mutedForeground}
               value={inputText}
               onChangeText={setInputText}
@@ -799,23 +792,23 @@ export default function AIChatScreen() {
               maxLength={500}
               onSubmitEditing={handleSend}
               blurOnSubmit={false}
-              editable={!isThinking && isPro}
+              editable={!isThinking}
             />
 
             {/* Action Icon (Right side of pill) */}
             {inputText.trim() || selectedImage ? (
               <TouchableOpacity
                 onPress={handleSend}
-                disabled={isThinking || !isPro}
+                disabled={isThinking}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Ionicons name="arrow-up-circle" size={32} color={isPro ? colors.primary : colors.gold} />
+                <Ionicons name="arrow-up-circle" size={32} color={colors.primary} />
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
                 onPress={() => Alert.alert("Coming Soon", "Voice dictation is under development!")}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                disabled={!isPro}
+                disabled={false}
               >
                 <Ionicons name="mic" size={22} color={colors.mutedForeground} />
               </TouchableOpacity>
@@ -831,8 +824,6 @@ export default function AIChatScreen() {
           />
         </View>
       </View>
-
-      {!isPro && <PremiumLockOverlay onUnlock={handleUnlock} />}
 
       {/* Add Reminder Sheet for AI Drafts */}
       <AddReminderSheet
