@@ -130,14 +130,14 @@ export const AnimatedViewSelector: React.FC<AnimatedViewSelectorProps> = ({
                     <Animated.View
                         style={[
                             styles.mainButton,
-                            { backgroundColor: `${colors.primary}15` },
+                            { backgroundColor: colors.muted },
                             mainButtonStyle,
                         ]}
                     >
                         <Ionicons
                             name={isExpanded ? 'close' : 'apps'}
                             size={20}
-                            color={colors.primary}
+                            color={colors.foreground}
                         />
                     </Animated.View>
                 </TouchableOpacity>
@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
     mainButton: {
         width: 40,
         height: 40,
-        borderRadius: 20,
+        borderRadius: borderRadius.md,
         justifyContent: 'center',
         alignItems: 'center',
     },

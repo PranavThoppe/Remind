@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Animated,
   TouchableOpacity,
@@ -12,11 +12,13 @@ import {
   FlatList,
   Text,
   KeyboardEvent,
-  LayoutAnimation,
+  Image,
+  Alert
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import { shadows, spacing, typography, borderRadius } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import { useSettings } from '../contexts/SettingsContext';
@@ -31,13 +33,11 @@ import { AddReminderSheet } from './AddReminderSheet';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const FAB_SIZE = 56;
+const PILL_HEIGHT = 52;
 const PILL_HORIZONTAL_MARGIN = 20;
 const PILL_WIDTH = SCREEN_WIDTH - PILL_HORIZONTAL_MARGIN * 2;
-const MIN_PILL_HEIGHT = 52;
-const MAX_PILL_HEIGHT = 150;
 const FAB_RIGHT = 20;
-const TAB_BAR_HEIGHT = 40;
-const FAB_ABOVE_TAB_PADDING = 12; // Gap above tab bar
+const FAB_BOTTOM = 90;
 const ANIM_DURATION = 350;
 
 function TypingIndicator({ colors }: { colors: any }) {
@@ -145,6 +145,36 @@ function MessageBubble({
     );
   }
 
+  const renderContent = () => {
+    return (
+      <View>
+        {message.imageUri && (
+          <Image
+            source={{ uri: message.imageUri }}
+            style={{
+              width: 200,
+              height: 150,
+              borderRadius: borderRadius.md,
+              marginBottom: message.content ? spacing.sm : 0,
+            }}
+            resizeMode="cover"
+          />
+        )}
+        {message.content ? (
+          <Text
+            style={
+              isUser
+                ? [styles.messageText, { color: colors.primaryForeground }]
+                : [styles.aiMessageText, { color: colors.foreground }]
+            }
+          >
+            {message.content}
+          </Text>
+        ) : null}
+      </View>
+    );
+  };
+
   return (
     <View style={[styles.messageContainer, isUser && styles.userMessageContainer]}>
       <View
@@ -155,21 +185,17 @@ function MessageBubble({
             : [styles.aiBubble, { backgroundColor: colors.card }],
         ]}
       >
-        <Text
-          style={
-            isUser
-              ? [styles.messageText, { color: colors.primaryForeground }]
-              : [styles.aiMessageText, { color: colors.foreground }]
-          }
-        >
-          {message.content}
-        </Text>
+        {renderContent()}
       </View>
     </View>
   );
 }
 
-export function FloatingAddButton({ onExpandedChange }: { onExpandedChange?: (expanded: boolean) => void } = {}) {
+interface FloatingAddButtonProps {
+  onExpandedChange?: (expanded: boolean) => void;
+}
+
+export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) {
   const { colors, isDark } = useTheme();
   const { tags, priorities } = useSettings();
   const { user } = useAuth();
@@ -177,17 +203,13 @@ export function FloatingAddButton({ onExpandedChange }: { onExpandedChange?: (ex
   const insets = useSafeAreaInsets();
 
   const [isExpanded, setIsExpanded] = useState(false);
-  // Stays true while collapse animation plays so overlay/chat fade out gracefully
-  const [isVisible, setIsVisible] = useState(false);
   const [inputText, setInputText] = useState('');
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isThinking, setIsThinking] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
   const [draftReminder, setDraftReminder] = useState<any>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [pillHeight, setPillHeight] = useState(MIN_PILL_HEIGHT);
-
 
   const inputRef = useRef<TextInput>(null);
   const flatListRef = useRef<FlatList>(null);
@@ -195,67 +217,60 @@ export function FloatingAddButton({ onExpandedChange }: { onExpandedChange?: (ex
   const expandAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
-  const rainbowAnim = useRef(new Animated.Value(0)).current;
-  // Single animated value driving the pill's bottom position
-  const bottomAnim = useRef(new Animated.Value(0)).current;
-  // Track keyboard height in a ref so we can use it in expansion state changes
-  const keyboardHeightRef = useRef(0);
+  const sparkleRotation = useRef(new Animated.Value(0)).current;
+  const keyboardHeightAnim = useRef(new Animated.Value(0)).current;
+  const keyboardOffset = useRef(Animated.multiply(keyboardHeightAnim, expandAnim)).current;
+  const baseBottom = expandAnim.interpolate({ inputRange: [0, 1], outputRange: [FAB_BOTTOM, 16] });
+  const pillBottom = useRef(Animated.add(baseBottom, keyboardOffset)).current;
+  // Reduce absolute spacing from top of screen to prevent notch overlap
+  const listBottom = useRef(Animated.add(Animated.add(baseBottom, new Animated.Value(PILL_HEIGHT + (selectedImage ? 90 : 10))), keyboardOffset)).current;
 
-  // Calculate base bottom (above tab bar)
-  const baseFabBottom = insets.bottom + TAB_BAR_HEIGHT + FAB_ABOVE_TAB_PADDING;
+  // Image Picker Logic
+  const handlePickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
-  // Initialize bottomAnim once insets are known
-  useEffect(() => {
-    bottomAnim.setValue(baseFabBottom);
-  }, [baseFabBottom]);
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Sorry, we need camera roll permissions to make this work!');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setSelectedImage(result.assets[0].uri);
+    }
+  };
+
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
     const showSub = Keyboard.addListener(showEvent, (e: KeyboardEvent) => {
-      keyboardHeightRef.current = e.endCoordinates.height;
-      // Only lift pill if it's already expanded
-      if (isExpanded) {
-        Animated.timing(bottomAnim, {
-          toValue: e.endCoordinates.height + FAB_ABOVE_TAB_PADDING,
-          duration: e.duration || 250,
-          useNativeDriver: false,
-        }).start();
-      }
+      Animated.timing(keyboardHeightAnim, {
+        toValue: e.endCoordinates.height,
+        duration: e.duration || 250,
+        useNativeDriver: false,
+      }).start();
     });
 
     const hideSub = Keyboard.addListener(hideEvent, (e: KeyboardEvent) => {
-      keyboardHeightRef.current = 0;
-      if (isExpanded) {
-        Animated.timing(bottomAnim, {
-          toValue: baseFabBottom,
-          duration: e?.duration || 250,
-          useNativeDriver: false,
-        }).start();
-      }
+      Animated.timing(keyboardHeightAnim, {
+        toValue: 0,
+        duration: e?.duration || 250,
+        useNativeDriver: false,
+      }).start();
     });
 
     return () => {
       showSub.remove();
       hideSub.remove();
     };
-    // Re-run when expansion state changes so the correct behavior is captured
-  }, [isExpanded, baseFabBottom]);
-
-
-  // Rainbow border animation while AI is thinking
-  useEffect(() => {
-    if (isThinking) {
-      rainbowAnim.setValue(0);
-      Animated.loop(
-        Animated.timing(rainbowAnim, { toValue: 1, duration: 2000, useNativeDriver: false })
-      ).start();
-    } else {
-      rainbowAnim.stopAnimation();
-      rainbowAnim.setValue(0);
-    }
-  }, [isThinking]);
+  }, []);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -265,16 +280,10 @@ export function FloatingAddButton({ onExpandedChange }: { onExpandedChange?: (ex
 
   const expand = () => {
     setIsExpanded(true);
-    setIsVisible(true);
     onExpandedChange?.(true);
-    // If keyboard is already up (unlikely on expand, but safe), account for it
-    const targetBottom = keyboardHeightRef.current > 0
-      ? keyboardHeightRef.current + FAB_ABOVE_TAB_PADDING
-      : baseFabBottom;
     Animated.parallel([
       Animated.spring(expandAnim, { toValue: 1, friction: 8, tension: 65, useNativeDriver: false }),
       Animated.timing(overlayOpacity, { toValue: 1, duration: ANIM_DURATION, useNativeDriver: false }),
-      Animated.timing(bottomAnim, { toValue: targetBottom, duration: ANIM_DURATION, useNativeDriver: false }),
     ]).start(() => {
       inputRef.current?.focus();
     });
@@ -282,25 +291,21 @@ export function FloatingAddButton({ onExpandedChange }: { onExpandedChange?: (ex
 
   const collapse = () => {
     Keyboard.dismiss();
-    // Reset logical state immediately so FAB snaps back to Add button appearance
-    setIsExpanded(false);
-    onExpandedChange?.(false);
-    setInputText('');
-    setMessages([]);
-    setDraftReminder(null);
-    setEditingMessageId(null);
-    setPillHeight(MIN_PILL_HEIGHT);
-    // Animate collapse, then hide overlay/chat
     Animated.parallel([
       Animated.spring(expandAnim, { toValue: 0, friction: 8, tension: 65, useNativeDriver: false }),
       Animated.timing(overlayOpacity, { toValue: 0, duration: 200, useNativeDriver: false }),
-      Animated.timing(bottomAnim, { toValue: baseFabBottom, duration: 200, useNativeDriver: false }),
     ]).start(() => {
-      setIsVisible(false);
+      setIsExpanded(false);
+      onExpandedChange?.(false);
+      setInputText('');
+      setSelectedImage(null);
+      setMessages([]);
+      setDraftReminder(null);
+      setEditingMessageId(null);
     });
   };
 
-  const processMessage = useCallback(async (input: string, currentMessages: ChatMessage[]) => {
+  const processMessage = useCallback(async (input: string, currentMessages: ChatMessage[], imageUri?: string) => {
     try {
       if (!user) {
         setMessages(prev => [...prev, {
@@ -363,20 +368,22 @@ export function FloatingAddButton({ onExpandedChange }: { onExpandedChange?: (ex
       }]);
     } finally {
       setIsThinking(false);
-      setInputText(''); // Clear input after response arrives
     }
   }, [user, tags, priorities]);
 
   const handleSend = async () => {
     const trimmed = inputText.trim();
-    if (!trimmed || isThinking) return;
+    if ((!trimmed && !selectedImage) || isThinking) return;
 
-    // Keep text in input while thinking — cleared in processMessage's finally block
-    const userMessage: ChatMessage = { id: Date.now().toString(), role: 'user', content: trimmed, timestamp: new Date() };
+    setInputText('');
+    const userImage = selectedImage;
+    setSelectedImage(null);
+
+    const userMessage: ChatMessage = { id: Date.now().toString(), role: 'user', content: trimmed, imageUri: userImage || undefined, timestamp: new Date() };
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
     setIsThinking(true);
-    await processMessage(trimmed, updatedMessages);
+    await processMessage(trimmed, updatedMessages, userImage || undefined);
   };
 
   const handleDraftConfirm = async (messageId: string, fields: ModalFieldUpdates) => {
@@ -399,38 +406,18 @@ export function FloatingAddButton({ onExpandedChange }: { onExpandedChange?: (ex
   };
 
   const containerWidth = expandAnim.interpolate({ inputRange: [0, 1], outputRange: [FAB_SIZE, PILL_WIDTH] });
-  const containerHeight = expandAnim.interpolate({ inputRange: [0, 1], outputRange: [FAB_SIZE, pillHeight] });
+  const containerHeight = expandAnim.interpolate({ inputRange: [0, 1], outputRange: [FAB_SIZE, PILL_HEIGHT] });
   const containerRight = expandAnim.interpolate({ inputRange: [0, 1], outputRange: [FAB_RIGHT, PILL_HORIZONTAL_MARGIN] });
-  const containerBorderRadius = expandAnim.interpolate({ inputRange: [0, 1], outputRange: [FAB_SIZE / 2, MIN_PILL_HEIGHT / 2] });
-  const containerBorderWidth = expandAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1.5] });
+  const containerBorderRadius = expandAnim.interpolate({ inputRange: [0, 1], outputRange: [FAB_SIZE / 2, PILL_HEIGHT / 2] });
 
   const iconOpacity = expandAnim.interpolate({ inputRange: [0, 0.3], outputRange: [1, 0], extrapolate: 'clamp' });
   const inputOpacity = expandAnim.interpolate({ inputRange: [0.5, 1], outputRange: [0, 1], extrapolate: 'clamp' });
-  const rainbowColor = rainbowAnim.interpolate({
-    inputRange: [0, 0.25, 0.5, 0.75, 1],
-    outputRange: ['#3b82f6', '#7c3aed', '#ec4899', '#7c3aed', '#3b82f6'],
-  });
-  const rainbowBorderWidth = rainbowAnim.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [2, 3, 2],
-  });
 
-  // Memoize the draft reminder passed to AddReminderSheet so a new object reference
-  // isn't created on every render (which would cause the sheet's useEffect to reset
-  // the title every time the user types a character).
-  const editingDraftReminder = useMemo(() =>
-    draftReminder
-      ? { id: 'draft', ...draftReminder, user_id: user?.id || '', completed: false, created_at: new Date().toISOString() } as any
-      : undefined,
-    [draftReminder, user?.id]
-  );
 
-  // Chat list sits just above the pill
-  const chatListBottom = Animated.add(bottomAnim, new Animated.Value(pillHeight + 10));
 
   return (
     <>
-      {isVisible && (
+      {isExpanded && (
         <TouchableWithoutFeedback onPress={collapse}>
           <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]}>
             <BlurView intensity={40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
@@ -439,34 +426,32 @@ export function FloatingAddButton({ onExpandedChange }: { onExpandedChange?: (ex
         </TouchableWithoutFeedback>
       )}
 
-      {/* Close button fixed at top-right of screen */}
-      {isVisible && (
-        <Animated.View style={[styles.closeButtonContainer, { opacity: inputOpacity, top: insets.top + spacing.md }]}>
-          <TouchableOpacity
-            onPress={collapse}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={[styles.closeButton, { backgroundColor: colors.card, borderColor: colors.border }]}
-          >
-            <Ionicons name="close" size={20} color={colors.foreground} />
-          </TouchableOpacity>
-        </Animated.View>
-      )}
-
-      {isVisible && (
+      {isExpanded && (
         <Animated.View
           style={[
             styles.chatListContainer,
             {
               opacity: overlayOpacity,
-              bottom: chatListBottom,
+              bottom: listBottom,
+              top: insets.top + spacing.xl,
             }
           ]}
           pointerEvents="box-none"
         >
+          {/* Top Right Close Button */}
+          <TouchableOpacity
+            style={[styles.topRightCloseButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={collapse}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="close" size={20} color={colors.foreground} />
+          </TouchableOpacity>
+
           <FlatList
             ref={flatListRef}
-            data={messages.filter(m => m.role !== 'user')}
+            data={messages}
             keyExtractor={item => item.id}
+            style={{ flexGrow: 0 }}
             renderItem={({ item }) => (
               <MessageBubble
                 message={item}
@@ -486,12 +471,34 @@ export function FloatingAddButton({ onExpandedChange }: { onExpandedChange?: (ex
                 }}
               />
             )}
-            style={{ flex: 1 }}
-            contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end', paddingBottom: spacing.lg }}
+            contentContainerStyle={{ paddingBottom: spacing.lg }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             ListFooterComponent={isThinking ? <TypingIndicator colors={colors} /> : null}
           />
+
+          {/* Image Preview - Shows above input if selected */}
+          {selectedImage && (
+            <View style={[styles.imagePreviewContainer, {
+              paddingHorizontal: spacing.lg,
+              paddingTop: spacing.sm,
+              width: '100%',
+              flexDirection: 'row',
+              justifyContent: 'flex-start'
+            }]}>
+              <View>
+                <Image source={{ uri: selectedImage }} style={styles.imagePreview} />
+                <TouchableOpacity
+                  style={styles.removeImageButton}
+                  onPress={() => setSelectedImage(null)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons name="close" size={16} color="white" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
         </Animated.View>
       )}
 
@@ -502,24 +509,18 @@ export function FloatingAddButton({ onExpandedChange }: { onExpandedChange?: (ex
             width: containerWidth,
             height: containerHeight,
             right: containerRight,
-            bottom: bottomAnim,
+            bottom: pillBottom,
             borderRadius: containerBorderRadius,
-            backgroundColor: expandAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [colors.primary, colors.card],
-            }),
-            borderWidth: containerBorderWidth,
-            borderColor: expandAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: ['transparent', colors.border],
-            }),
+            backgroundColor: isExpanded ? colors.card : colors.primary,
+            borderWidth: isExpanded ? 1.5 : 0,
+            borderColor: isExpanded ? colors.border : 'transparent',
             transform: isExpanded ? [] : [{ scale: scaleAnim }],
             ...shadows.fab,
           },
         ]}
       >
         {/* FAB icon (fades out during expand) */}
-        <Animated.View style={[styles.fabIconContainer, { opacity: iconOpacity }]} pointerEvents={isVisible ? 'none' : 'auto'}>
+        <Animated.View style={[styles.fabIconContainer, { opacity: iconOpacity }]} pointerEvents={isExpanded ? 'none' : 'auto'}>
           <TouchableOpacity
             style={styles.touchable}
             onPress={expand}
@@ -532,13 +533,9 @@ export function FloatingAddButton({ onExpandedChange }: { onExpandedChange?: (ex
         </Animated.View>
 
         {/* Morph to pill with input */}
-        <Animated.View style={[styles.pillContent, { opacity: inputOpacity, height: containerHeight }]} pointerEvents={isVisible ? 'auto' : 'none'}>
-          <TouchableOpacity
-            onPress={() => setIsAddSheetOpen(true)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={[styles.addButton, { backgroundColor: `${colors.primary}18`, borderColor: `${colors.primary}40` }]}
-          >
-            <Ionicons name="add" size={20} color={colors.primary} />
+        <Animated.View style={[styles.pillContent, { opacity: inputOpacity }]} pointerEvents={isExpanded ? 'auto' : 'none'}>
+          <TouchableOpacity onPress={handlePickImage} disabled={isThinking} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Ionicons name="add" size={24} color={colors.primary} style={styles.addIcon} />
           </TouchableOpacity>
 
           <TextInput
@@ -548,51 +545,26 @@ export function FloatingAddButton({ onExpandedChange }: { onExpandedChange?: (ex
             placeholderTextColor={colors.mutedForeground}
             value={inputText}
             onChangeText={setInputText}
-            multiline={true}
-            onContentSizeChange={(e) => {
-              if (isExpanded) {
-                const newHeight = Math.min(MAX_PILL_HEIGHT, Math.max(MIN_PILL_HEIGHT, e.nativeEvent.contentSize.height + 14));
-                if (Math.abs(newHeight - pillHeight) > 2) {
-                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                  setPillHeight(newHeight);
-                }
-              }
-            }}
             returnKeyType="send"
             onSubmitEditing={handleSend}
             blurOnSubmit={false}
-            maxLength={500}
+            maxLength={200}
             editable={!isThinking}
           />
 
-          {inputText.trim() && (
+          {inputText.trim() || selectedImage ? (
             <TouchableOpacity onPress={handleSend} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <View style={[styles.sendButton, { backgroundColor: colors.primary }]}>
                 <Ionicons name="arrow-up" size={18} color={colors.primaryForeground} />
               </View>
             </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={() => Alert.alert("Coming Soon", "Voice dictation is under development!")} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="mic" size={22} color={colors.mutedForeground} />
+            </TouchableOpacity>
           )}
         </Animated.View>
       </Animated.View>
-
-      {/* Rainbow border overlay — sits on top of pill while AI is thinking */}
-      {isExpanded && (
-        <Animated.View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            width: containerWidth,
-            height: containerHeight,
-            right: containerRight,
-            bottom: bottomAnim,
-            borderRadius: containerBorderRadius,
-            borderWidth: rainbowBorderWidth,
-            borderColor: rainbowColor,
-            zIndex: 1001,
-            opacity: isThinking ? 1 : 0,
-          }}
-        />
-      )}
 
       <AddReminderSheet
         isOpen={isSheetOpen}
@@ -600,24 +572,13 @@ export function FloatingAddButton({ onExpandedChange }: { onExpandedChange?: (ex
         onSave={async (data: any) => {
           const result = await addReminder(data);
           if (!result.error && editingMessageId) {
-            setMessages(prev => prev.map(m => m.id === editingMessageId ? { ...m, panelIsStatic: true } : m));
+            setMessages(prev => prev.map(m => m.id === editingMessageId ? { ...m, panelIsStatic: true, panelFields: { ...m.panelFields, ...data } } : m));
             setEditingMessageId(null);
             setIsSheetOpen(false);
           }
           return result;
         }}
-        editReminder={editingDraftReminder}
-      />
-
-      {/* Quick add sheet from pill + button */}
-      <AddReminderSheet
-        isOpen={isAddSheetOpen}
-        onClose={() => setIsAddSheetOpen(false)}
-        onSave={async (data: any) => {
-          const result = await addReminder(data);
-          if (!result.error) setIsAddSheetOpen(false);
-          return result;
-        }}
+        editReminder={draftReminder ? { id: 'draft', ...draftReminder, user_id: user?.id || '', completed: false, created_at: new Date().toISOString() } as any : undefined}
       />
     </>
   );
@@ -632,9 +593,21 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    top: 0,
     zIndex: 999,
     justifyContent: 'flex-end', // stack items at the bottom
+  },
+  topRightCloseButton: {
+    position: 'absolute',
+    top: -10, // Moved down to avoid iOS status bar overlap
+    right: spacing.xl,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+    ...shadows.soft,
   },
   morphContainer: {
     position: 'absolute',
@@ -660,35 +633,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
   },
-  addButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+  addIcon: {
     marginRight: spacing.sm,
   },
   textInput: {
     flex: 1,
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.base,
-    paddingVertical: Platform.OS === 'ios' ? 0 : 8,
+    height: '100%',
+    paddingVertical: 0,
     marginRight: spacing.sm,
-    textAlignVertical: 'center',
-  },
-  closeButtonContainer: {
-    position: 'absolute',
-    right: spacing.xl,
-    zIndex: 1001,
-  },
-  closeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   sendButton: {
     width: 30,
@@ -739,4 +693,27 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
   },
+  imagePreviewContainer: {
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.sm,
+  },
+  imagePreview: {
+    width: 80,
+    height: 80,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: -6,
+    left: 70, // Offset from image edge
+    backgroundColor: 'red',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
 });
+

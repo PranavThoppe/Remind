@@ -80,16 +80,7 @@ export default function TabLayout() {
         tabBarIndicator: () => null,
         tabBarLabel: () => null,
         tabBarStyle: {
-          backgroundColor: 'transparent',
-          borderTopWidth: 0,
-          elevation: 0,
-          shadowOpacity: 0,
-          height: 40 + insets.bottom,
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 9999,
+          display: 'none',
         },
         tabBarItemStyle: {
           height: 40,

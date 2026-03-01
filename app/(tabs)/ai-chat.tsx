@@ -23,8 +23,6 @@ import { useTheme } from '../../hooks/useTheme';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useReminders } from '../../hooks/useReminders';
-import { AiLiveReminderPanel } from '../../components/AiLiveReminderPanel';
-import { InlineReminderPanel } from '../../components/InlineReminderPanel';
 import { AddReminderSheet } from '../../components/AddReminderSheet';
 import { ReminderCard } from '../../components/ReminderCard';
 import { ChatMessage, ModalFieldUpdates, MockAIResponse } from '../../types/ai-chat';
@@ -186,20 +184,24 @@ function MessageBubble({
     );
   }
 
-  // If message has panel data, render inline panel
-  if (message.panelType) {
+  // Render search results as a list of standard ReminderCards
+  if (message.panelType === 'search' && message.panelSearchResults) {
     return (
-      <View style={[styles.messageContainer, styles.panelMessageContainer]}>
-        <InlineReminderPanel
-          type={message.panelType as 'create' | 'edit' | 'search'}
-          fields={message.panelFields}
-          searchResults={message.panelSearchResults}
-          isStatic={message.panelIsStatic}
-          onFieldsChange={(fields) => onPanelFieldsChange?.(message.id, fields)}
-          onSave={() => onPanelSave?.(message.id)}
-          onClose={() => onPanelClose?.(message.id)}
-          onSelectReminder={onSelectReminder}
-        />
+      <View style={[styles.messageContainer, { flexDirection: 'column', alignItems: 'flex-start', paddingHorizontal: spacing.lg, width: '100%', maxWidth: 360 }]}>
+        <View style={{ marginBottom: 8, marginLeft: 4 }}>
+          <Text style={{ fontFamily: typography.fontFamily.medium, fontSize: 13, color: colors.primary }}>Search Results</Text>
+        </View>
+        <View style={{ gap: spacing.sm, width: '100%' }}>
+          {message.panelSearchResults.map((reminder, idx) => (
+            <ReminderCard
+              key={reminder.id}
+              reminder={reminder}
+              index={idx}
+              onComplete={onDraftConfirm ? (_) => onDraftConfirm(message.id, { ...reminder }) : () => { }}
+              onEdit={onDraftEdit ? (_) => onDraftEdit(message.id, { ...reminder, repeat: reminder.repeat || 'none' }) : () => { }}
+            />
+          ))}
+        </View>
       </View>
     );
   }
@@ -340,7 +342,7 @@ export default function AIChatScreen() {
       // If we were editing a message from the chat, mark it as static/confirmed
       if (editingMessageId) {
         setMessages(prev => prev.map(msg =>
-          msg.id === editingMessageId ? { ...msg, panelIsStatic: true } : msg
+          msg.id === editingMessageId ? { ...msg, panelIsStatic: true, panelFields: { ...msg.panelFields, ...data } } : msg
         ));
         setEditingMessageId(null);
       }
@@ -627,31 +629,12 @@ export default function AIChatScreen() {
     setMessages(prev => [...prev, closeMessage]);
   }, []);
 
-  // Handle selecting a reminder from search results (convert to edit panel)
+  // Handle selecting a reminder from search results (convert to edit panel) -> this should ideally open the AddReminderSheet
   const handleSelectReminder = useCallback((reminder: Reminder) => {
-    // Find the search panel message
-    const searchPanelIndex = messages.findLastIndex(m => m.panelType === 'search');
-    if (searchPanelIndex === -1) return;
-
-    // Replace search panel with edit panel
-    setMessages(prev => {
-      const updated = [...prev];
-      updated[searchPanelIndex] = {
-        ...updated[searchPanelIndex],
-        panelType: 'edit',
-        panelFields: {
-          title: reminder.title,
-          date: reminder.date,
-          time: reminder.time,
-          tag_id: reminder.tag_id,
-          repeat: reminder.repeat || 'none',
-        },
-        panelReminderId: reminder.id,
-        panelSearchResults: undefined,
-      };
-      return updated;
-    });
-  }, [messages]);
+    // Reusing the same flow as tapping a card directly via onDraftEdit
+    setDraftReminder(reminder);
+    setIsSheetOpen(true);
+  }, []);
 
   // Clear chat
   const handleClearChat = useCallback(() => {
