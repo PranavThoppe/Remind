@@ -13,7 +13,9 @@ import {
   Text,
   KeyboardEvent,
   Image,
-  Alert
+  Alert,
+  NativeSyntheticEvent,
+  TextInputKeyPressEventData
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
@@ -83,6 +85,7 @@ function MessageBubble({
   onDraftConfirm,
   onDraftEdit,
   onDraftDiscard,
+  onSelectSearchResult,
 }: {
   message: ChatMessage;
   colors: any;
@@ -90,6 +93,7 @@ function MessageBubble({
   onDraftConfirm?: (messageId: string, draft: ModalFieldUpdates) => void;
   onDraftEdit?: (messageId: string, draft: ModalFieldUpdates) => void;
   onDraftDiscard?: (messageId: string) => void;
+  onSelectSearchResult?: (reminder: Reminder) => void;
 }) {
   const isUser = message.role === 'user';
 
@@ -108,7 +112,7 @@ function MessageBubble({
     notes: fields.notes,
   });
 
-  if (message.panelType === 'draft' && message.panelFields) {
+  if ((message.panelType === 'draft' || (message.panelType as any) === 'draft_update') && message.panelFields) {
     const draftReminder = getDraftReminder(message.panelFields);
     const isStatic = message.panelIsStatic;
 
@@ -123,7 +127,9 @@ function MessageBubble({
               style={{ marginRight: 6 }}
             />
             <Text style={{ color: isStatic ? colors.success : colors.mutedForeground, fontSize: 12, fontFamily: typography.fontFamily.medium }}>
-              {isStatic ? 'Reminder Created' : 'Proposed Reminder'}
+              {isStatic
+                ? ((message.panelType as any) === 'draft_update' ? 'Reminder Updated' : 'Reminder Created')
+                : 'Proposed Reminder'}
             </Text>
           </View>
 
@@ -137,10 +143,78 @@ function MessageBubble({
 
           {!isStatic && (
             <Text style={{ textAlign: 'center', marginTop: 8, color: colors.mutedForeground, fontSize: 11 }}>
-              Tap check to create • Tap card to edit • Swipe to discard
+              {(message.panelType as any) === 'draft_update'
+                ? "Tap check to update • Tap card to edit • Swipe to discard"
+                : "Tap check to create • Tap card to edit • Swipe to discard"}
             </Text>
           )}
         </View>
+      </View>
+    );
+  }
+
+  // Render search results as a list of standard ReminderCards
+  if (message.panelType === 'search' && message.panelSearchResults) {
+    return (
+      <View style={[styles.messageContainer, { flexDirection: 'column', alignItems: 'flex-start', paddingHorizontal: spacing.lg, width: '100%', maxWidth: 360 }]}>
+        <View style={{ marginBottom: 8, marginLeft: 4 }}>
+          <Text style={{ fontFamily: typography.fontFamily.medium, fontSize: 13, color: colors.primary }}>Search Results</Text>
+        </View>
+        <View style={{ gap: spacing.sm, width: '100%' }}>
+          {message.panelSearchResults.map((reminder, idx) => (
+            <ReminderCard
+              key={reminder.id}
+              reminder={reminder}
+              index={idx}
+              onComplete={onDraftConfirm ? (_) => onDraftConfirm(message.id, { ...reminder }) : () => { }}
+              onEdit={onSelectSearchResult ? (_) => onSelectSearchResult(reminder) : () => { }}
+            />
+          ))}
+          <Text style={{ textAlign: 'center', marginTop: 8, color: colors.mutedForeground, fontSize: 11 }}>
+            Tap a card to pin it as context for updates.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  // Render after-action reminder list (e.g. remaining reminders after delete)
+  if (message.panelType === 'reminder_list') {
+    const hasCards = message.panelSearchResults && message.panelSearchResults.length > 0;
+    return (
+      <View style={[styles.messageContainer, { flexDirection: 'column', alignItems: 'flex-start', paddingHorizontal: spacing.lg, width: '100%', maxWidth: 360 }]}>
+        {/* AI confirmation text */}
+        {message.content ? (
+          <View style={[styles.messageBubble, styles.aiBubble, { backgroundColor: colors.card, marginBottom: hasCards ? spacing.md : 0 }]}>
+            <Text style={[styles.aiMessageText, { color: colors.foreground }]}>{message.content}</Text>
+          </View>
+        ) : null}
+        {/* Remaining reminder cards */}
+        {hasCards && (
+          <View style={{ gap: spacing.sm, width: '100%' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4, marginBottom: 2 }}>
+              <Ionicons name="list" size={13} color={colors.mutedForeground} style={{ marginRight: 5 }} />
+              <Text style={{ fontFamily: typography.fontFamily.medium, fontSize: 12, color: colors.mutedForeground }}>Today's Reminders</Text>
+            </View>
+            {message.panelSearchResults!.map((reminder, idx) => (
+              <ReminderCard
+                key={reminder.id}
+                reminder={reminder}
+                index={idx}
+                onComplete={() => { }}
+                onEdit={onSelectSearchResult ? (_) => onSelectSearchResult(reminder) : () => { }}
+              />
+            ))}
+            <Text style={{ textAlign: 'center', marginTop: 4, color: colors.mutedForeground, fontSize: 11 }}>
+              Tap a card to pin it as context.
+            </Text>
+          </View>
+        )}
+        {!hasCards && !message.content && (
+          <View style={[styles.messageBubble, styles.aiBubble, { backgroundColor: colors.card }]}>
+            <Text style={[styles.aiMessageText, { color: colors.foreground }]}>No remaining reminders for today.</Text>
+          </View>
+        )}
       </View>
     );
   }
@@ -191,6 +265,23 @@ function MessageBubble({
   );
 }
 
+// A simple pill to display the pinned reminder context
+function ContextPill({ reminder, onRemove, colors, tags }: { reminder: any, onRemove: () => void, colors: any, tags: any[] }) {
+  if (!reminder) return null;
+  const tagColor = tags?.find((t: any) => t.id === reminder.tag_id)?.color || colors.foreground;
+
+  return (
+    <View style={[styles.contextPill, { backgroundColor: colors.card, borderColor: tagColor }]}>
+      <Text style={[styles.contextPillText, { color: tagColor }]} numberOfLines={1}>
+        {reminder.title}
+      </Text>
+      <TouchableOpacity onPress={onRemove} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={styles.contextPillClose}>
+        <Ionicons name="close-circle" size={16} color={colors.mutedForeground} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 interface FloatingAddButtonProps {
   onExpandedChange?: (expanded: boolean) => void;
 }
@@ -199,7 +290,7 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
   const { colors, isDark } = useTheme();
   const { tags, priorities } = useSettings();
   const { user } = useAuth();
-  const { addReminder } = useReminders();
+  const { addReminder, reminders, deleteReminder, updateReminder } = useReminders();
   const insets = useSafeAreaInsets();
 
   const [isExpanded, setIsExpanded] = useState(false);
@@ -210,6 +301,8 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [draftReminder, setDraftReminder] = useState<any>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [pinnedReminder, setPinnedReminder] = useState<any>(null);
 
   const inputRef = useRef<TextInput>(null);
   const flatListRef = useRef<FlatList>(null);
@@ -251,6 +344,7 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
     const showSub = Keyboard.addListener(showEvent, (e: KeyboardEvent) => {
+      setIsKeyboardVisible(true);
       Animated.timing(keyboardHeightAnim, {
         toValue: e.endCoordinates.height,
         duration: e.duration || 250,
@@ -259,6 +353,7 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
     });
 
     const hideSub = Keyboard.addListener(hideEvent, (e: KeyboardEvent) => {
+      setIsKeyboardVisible(false);
       Animated.timing(keyboardHeightAnim, {
         toValue: 0,
         duration: e?.duration || 250,
@@ -302,7 +397,16 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
       setMessages([]);
       setDraftReminder(null);
       setEditingMessageId(null);
+      setPinnedReminder(null);
     });
+  };
+
+  const handleOverlayPress = () => {
+    if (isKeyboardVisible) {
+      Keyboard.dismiss();
+    } else {
+      collapse();
+    }
   };
 
   const processMessage = useCallback(async (input: string, currentMessages: ChatMessage[], imageUri?: string) => {
@@ -322,8 +426,13 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
       const now = new Date();
       const clientDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
+      let queryWithContext = input;
+      if (pinnedReminder) {
+        queryWithContext = `${input}\n\n[Active Context: Reminder ID ${pinnedReminder.id} - ${pinnedReminder.title}]`;
+      }
+
       // Call agent
-      const response = await callNovaAgent({ query: input, user_id: user.id, conversation: conversationHistory, client_date: clientDate });
+      const response = await callNovaAgent({ query: queryWithContext, user_id: user.id, conversation: conversationHistory, client_date: clientDate });
       const lastToolCall = response.tool_calls?.[response.tool_calls.length - 1];
 
       if (!lastToolCall) {
@@ -350,10 +459,72 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
           content: response.message || toolResult.message || "Here's a draft for your reminder:",
           timestamp: new Date(), panelType: 'draft', panelFields: sheetDraft,
         }]);
+      } else if (toolName === 'draft_update_reminder') {
+        const draft = toolResult.draft;
+        const existingReminder = reminders.find(r => r.id === draft.reminder_id);
+
+        const sheetDraft = {
+          title: draft.title !== undefined ? draft.title : (existingReminder?.title || ''),
+          date: draft.date !== undefined ? draft.date : (existingReminder?.date || ''),
+          time: draft.time !== undefined ? draft.time : (existingReminder?.time || null),
+          repeat: draft.repeat !== undefined ? draft.repeat : (existingReminder?.repeat || 'none'),
+          tag_id: draft.tag_name ? tags.find(t => t.name.toLowerCase() === draft.tag_name.toLowerCase())?.id : existingReminder?.tag_id,
+          priority_id: draft.priority_name ? priorities.find(p => p.name.toLowerCase() === draft.priority_name.toLowerCase())?.id : existingReminder?.priority_id,
+          notes: draft.notes !== undefined ? draft.notes : (existingReminder?.notes || null),
+        };
+        // Auto-pin context if the AI specifically references a reminder ID during a draft update 
+        // and we don't already have one pinned. This handles the proactive conflict flow.
+        if (draft.reminder_id && !pinnedReminder) {
+          setPinnedReminder({ id: draft.reminder_id, title: sheetDraft.title, tag_id: sheetDraft.tag_id });
+        }
+
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(), role: 'assistant',
+          content: response.message || toolResult.message || "Here's the proposed update:",
+          timestamp: new Date(), panelType: 'draft_update' as any, panelFields: sheetDraft,
+        }]);
       } else if (toolName === 'create_reminder') {
         setMessages(prev => [...prev, {
           id: Date.now().toString(), role: 'assistant',
           content: response.message || toolResult.message || "Reminder created!", timestamp: new Date(),
+        }]);
+      } else if (toolName === 'search_reminders') {
+        const parsedResults = Array.isArray(toolResult.reminders) ? toolResult.reminders : [];
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(), role: 'assistant',
+          content: response.message || "Here's what I found:", timestamp: new Date(),
+          panelType: 'search', panelSearchResults: parsedResults,
+        }]);
+      } else if (toolName === 'delete_reminder') {
+        const idToDelete = toolResult.reminder_id || toolResult.id;
+        if (idToDelete) {
+          await deleteReminder(idToDelete);
+          if (pinnedReminder?.id === idToDelete) {
+            setPinnedReminder(null);
+          }
+        }
+        // Show remaining today's reminders as cards (filter local state)
+        const remainingToday = reminders.filter(
+          r => r.date === clientDate && !r.completed && r.id !== idToDelete
+        );
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: response.message || toolResult.message || "Reminder deleted successfully!",
+          timestamp: new Date(),
+          panelType: 'reminder_list',
+          panelSearchResults: remainingToday,
+        }]);
+      } else if (toolName === 'update_reminder') {
+        // Show the updated reminder as a card if available in local state
+        const updatedId = toolResult.reminder_id || toolResult.id;
+        const updatedReminder = updatedId ? reminders.find(r => r.id === updatedId) : undefined;
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: response.message || toolResult.message || "Reminder updated.",
+          timestamp: new Date(),
+          ...(updatedReminder ? { panelType: 'reminder_list', panelSearchResults: [updatedReminder] } : {}),
         }]);
       } else {
         setMessages(prev => [...prev, {
@@ -369,7 +540,7 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
     } finally {
       setIsThinking(false);
     }
-  }, [user, tags, priorities]);
+  }, [user, tags, priorities, reminders, pinnedReminder]);
 
   const handleSend = async () => {
     const trimmed = inputText.trim();
@@ -384,6 +555,12 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
     setMessages(updatedMessages);
     setIsThinking(true);
     await processMessage(trimmed, updatedMessages, userImage || undefined);
+  };
+
+  const handleKeyPress = (e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+    if (e.nativeEvent.key === 'Backspace' && inputText === '' && pinnedReminder) {
+      setPinnedReminder(null);
+    }
   };
 
   const handleDraftConfirm = async (messageId: string, fields: ModalFieldUpdates) => {
@@ -405,6 +582,31 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
     }
   };
 
+  const handleDraftUpdateConfirm = async (messageId: string, fields: ModalFieldUpdates) => {
+    if (!pinnedReminder?.id) {
+      Alert.alert("Error", "No reminder selected to update.");
+      return;
+    }
+
+    // We only send the fields that were actually changed/provided
+    const updates: any = {};
+    if (fields.title) updates.title = fields.title;
+    if (fields.date) updates.date = fields.date;
+    if (fields.time) updates.time = fields.time;
+    if (fields.repeat) updates.repeat = fields.repeat;
+    if (fields.repeat_until) updates.repeat_until = fields.repeat_until;
+    if (undefined !== fields.tag_id) updates.tag_id = fields.tag_id;
+    if (undefined !== fields.priority_id) updates.priority_id = fields.priority_id;
+    if (undefined !== fields.notes) updates.notes = fields.notes;
+
+    const result = await updateReminder(pinnedReminder.id, updates);
+
+    if (!result.error) {
+      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, panelIsStatic: true } : m));
+      setPinnedReminder(null); // Clear context after successful update
+    }
+  };
+
   const containerWidth = expandAnim.interpolate({ inputRange: [0, 1], outputRange: [FAB_SIZE, PILL_WIDTH] });
   const containerHeight = expandAnim.interpolate({ inputRange: [0, 1], outputRange: [FAB_SIZE, PILL_HEIGHT] });
   const containerRight = expandAnim.interpolate({ inputRange: [0, 1], outputRange: [FAB_RIGHT, PILL_HORIZONTAL_MARGIN] });
@@ -418,7 +620,7 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
   return (
     <>
       {isExpanded && (
-        <TouchableWithoutFeedback onPress={collapse}>
+        <TouchableWithoutFeedback onPress={handleOverlayPress}>
           <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]}>
             <BlurView intensity={40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
             <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.25)' }]} />
@@ -459,7 +661,13 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
                 tags={tags}
                 onDraftConfirm={(msgId) => {
                   const draftField = messages.find(m => m.id === msgId)?.panelFields;
-                  if (draftField) handleDraftConfirm(msgId, draftField);
+                  if (draftField) {
+                    if (item.panelType === 'draft_update') {
+                      handleDraftUpdateConfirm(msgId, draftField);
+                    } else {
+                      handleDraftConfirm(msgId, draftField);
+                    }
+                  }
                 }}
                 onDraftEdit={(msgId, draft) => {
                   setDraftReminder(draft);
@@ -468,6 +676,9 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
                 }}
                 onDraftDiscard={(msgId) => {
                   setMessages(prev => prev.filter(m => m.id !== msgId));
+                }}
+                onSelectSearchResult={(r) => {
+                  setPinnedReminder({ id: r.id, title: r.title, tag_id: r.tag_id });
                 }}
               />
             )}
@@ -534,17 +745,29 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
 
         {/* Morph to pill with input */}
         <Animated.View style={[styles.pillContent, { opacity: inputOpacity }]} pointerEvents={isExpanded ? 'auto' : 'none'}>
-          <TouchableOpacity onPress={handlePickImage} disabled={isThinking} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="add" size={24} color={colors.primary} style={styles.addIcon} />
-          </TouchableOpacity>
+
+          {/* Only show Add Asset (+) button if there is NO pinned reminder */}
+          {!pinnedReminder && (
+            <TouchableOpacity onPress={handlePickImage} disabled={isThinking} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="add" size={24} color={colors.primary} style={styles.addIcon} />
+            </TouchableOpacity>
+          )}
+
+          <ContextPill
+            reminder={pinnedReminder}
+            onRemove={() => setPinnedReminder(null)}
+            colors={colors}
+            tags={tags}
+          />
 
           <TextInput
             ref={inputRef}
-            style={[styles.textInput, { color: colors.foreground }]}
-            placeholder="Add a reminder..."
+            style={[styles.textInput, { color: colors.foreground, marginLeft: pinnedReminder ? spacing.xs : 0 }]}
+            placeholder={pinnedReminder ? "Ask to update this..." : "Add a reminder..."}
             placeholderTextColor={colors.mutedForeground}
             value={inputText}
             onChangeText={setInputText}
+            onKeyPress={handleKeyPress}
             returnKeyType="send"
             onSubmitEditing={handleSend}
             blurOnSubmit={false}
@@ -715,5 +938,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 10,
   },
+  contextPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    maxWidth: 150,
+  },
+  contextPillText: {
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.sm,
+    marginRight: 4,
+    flexShrink: 1,
+  },
+  contextPillClose: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  }
 });
 

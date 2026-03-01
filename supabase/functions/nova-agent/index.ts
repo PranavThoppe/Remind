@@ -128,16 +128,16 @@ const searchRemindersTool = {
     }
 }
 
-const updateReminderTool = {
-    name: "update_reminder",
-    description: "Updates an existing reminder. Use this when the user wants to change, modify, reschedule, or mark a reminder as complete. Requires a reminder_id from a previous search result.",
+const draftUpdateReminderTool = {
+    name: "draft_update_reminder",
+    description: "Proposes an update to an existing reminder. Use this by DEFAULT when the user wants to change, modify, reschedule, or mark a reminder as complete. The frontend will ask the user to confirm. Requires a reminder_id.",
     inputSchema: {
         json: {
             type: "object",
             properties: {
                 reminder_id: {
                     type: "string",
-                    description: "ID of the reminder to update. This must come from a previous search result."
+                    description: "ID of the reminder to update. This must come from a previous search result or the pinned active context."
                 },
                 title: {
                     type: "string",
@@ -290,17 +290,75 @@ function handleDraftReminder(toolInput: any) {
     }
 }
 
+function handleDraftUpdateReminder(toolInput: any) {
+    console.log('[Agent] draft_update_reminder:', JSON.stringify(toolInput, null, 2))
+    return {
+        success: true,
+        draft: {
+            ...toolInput,
+            is_draft: true
+        },
+        message: "I've drafted the updates for your reminder. Please review and confirm."
+    }
+}
+
 async function handleSearchReminders(
     toolInput: any,
     userId: string,
     adminSecret: string,
-    supabaseUrl: string
+    supabaseUrl: string,
+    supabaseClient: any
 ) {
-    console.log('[DB] search_reminders (delegating to nova-search):', JSON.stringify(toolInput, null, 2))
-
+    console.log('[DB] search_reminders:', JSON.stringify(toolInput, null, 2))
     const { query, start_date, end_date } = toolInput
 
-    // Construct the nova-search URL
+    // 1. Strict SQL Search First
+    try {
+        let dbQuery = supabaseClient
+            .from('reminders')
+            .select('*')
+            .eq('user_id', userId)
+
+        if (start_date) {
+            dbQuery = dbQuery.gte('date', start_date)
+        }
+        if (end_date) {
+            dbQuery = dbQuery.lte('date', end_date)
+        }
+        if (query && query.trim() !== '' && query.toLowerCase() !== 'reminders') {
+            dbQuery = dbQuery.ilike('title', `%${query}%`)
+        }
+
+        // Limit results to keep context small
+        dbQuery = dbQuery.order('date', { ascending: true }).limit(5)
+
+        const { data: strictData, error: strictError } = await dbQuery
+
+        if (strictError) {
+            console.error('[Search Error] Strict query failed:', strictError)
+        } else if (strictData && strictData.length > 0) {
+            console.log(`[Nova Agent] Found ${strictData.length} results via strict SQL`)
+            return {
+                reminders: strictData.map((r: any) => ({
+                    id: r.id,
+                    title: r.title,
+                    date: r.date,
+                    time: r.time,
+                    completed: r.completed,
+                    tag_id: r.tag_id,
+                    priority_id: r.priority_id,
+                    similarity: 1.0 // Exact match
+                })),
+                count: strictData.length,
+                message: `Found ${strictData.length} reminders via exact match.`
+            }
+        }
+    } catch (e) {
+        console.error('[Search Error] Exception in strict search:', e)
+    }
+
+    // 2. Semantic Fallback (nova-search)
+    console.log('[DB] Falling back to nova-search for semantic search...')
     const novaSearchUrl = `${supabaseUrl}/functions/v1/nova-search`
 
     try {
@@ -314,7 +372,6 @@ async function handleSearchReminders(
             body: JSON.stringify({
                 query: query || "reminders",
                 dev_user_id: userId,
-                // Pass explicit date range if available
                 start_date: start_date,
                 end_date: end_date
             })
@@ -334,7 +391,6 @@ async function handleSearchReminders(
 
         console.log(`[Nova Agent] Received ${evidence.length} results from nova-search`)
 
-        // Map nova-search evidence to tool output format
         return {
             reminders: evidence.map((r: any) => ({
                 id: r.reminder_id,
@@ -342,6 +398,8 @@ async function handleSearchReminders(
                 date: r.date,
                 time: r.time,
                 completed: r.completed,
+                tag_id: r.tag_id,
+                priority_id: r.priority_id,
                 similarity: r.score
             })),
             count: evidence.length,
@@ -351,42 +409,6 @@ async function handleSearchReminders(
     } catch (error: any) {
         console.error('[Search Error] Exception calling nova-search:', error)
         return { success: false, error: error.message }
-    }
-}
-
-async function handleUpdateReminder(toolInput: any, userId: string, supabase: any) {
-    console.log('[DB] update_reminder:', JSON.stringify(toolInput, null, 2))
-
-    const updates: any = {}
-    if (toolInput.title !== undefined) updates.title = toolInput.title
-    if (toolInput.date !== undefined) updates.date = toolInput.date
-    if (toolInput.time !== undefined) updates.time = toolInput.time
-    if (toolInput.completed !== undefined) updates.completed = toolInput.completed
-    if (toolInput.notes !== undefined) updates.notes = toolInput.notes
-
-    const { data, error } = await supabase
-        .from('reminders')
-        .update(updates)
-        .eq('id', toolInput.reminder_id)
-        .eq('user_id', userId) // Security check
-        .select()
-        .single()
-
-    if (error) {
-        console.error('[DB Error] update_reminder:', error)
-        return { success: false, error: error.message }
-    }
-
-    return {
-        success: true,
-        reminder: {
-            id: data.id,
-            title: data.title,
-            date: data.date,
-            time: data.time,
-            completed: data.completed
-        },
-        message: "Reminder updated successfully"
     }
 }
 
@@ -628,7 +650,7 @@ serve(async (req) => {
             { toolSpec: draftReminderTool },
             { toolSpec: createReminderTool },
             { toolSpec: searchRemindersTool },
-            { toolSpec: updateReminderTool },
+            { toolSpec: draftUpdateReminderTool },
             { toolSpec: deleteReminderTool },
             { toolSpec: saveContextTool }
         ]
@@ -645,12 +667,14 @@ ${userContextSection}
 
 When the user asks you to create a reminder, use the draft_reminder tool by default. This allows the user to review the details.
 ONLY use create_reminder if the user explicitly says "create immediately", "do it now", "confirm", or "book it" without review.
+CONFLICT DETECTION: When the user wants to add a new reminder, you MUST first check for conflicts if a time is specified. If the user specifies a date and time, call search_reminders first with start_date and end_date matching the desired date to see if there are any existing reminders within 30 minutes of the requested time. If there is a conflict, point it out and ask the user how to handle it before calling draft_reminder.
 If the user mentions a category or tag, set the tag_name field. If they mention a priority, set the priority_name field.
 Extract any relevant context or details into the 'notes' field (e.g., "call mom about the party" -> title: "Call Mom", notes: "About the party").
 
 When the user explicitly asks to find, search for, or list their reminders (e.g., "What do I have tomorrow?", "Show my gym reminders"), use the search_reminders tool.
 DO NOT use search_reminders for general statements or stories (e.g., "I went to the gym today") unless the user is asking you for info about those reminders.
-When the user wants to change, reschedule, or complete a reminder, use the update_reminder tool.
+When the user wants to change, reschedule, or complete a reminder, use the draft_update_reminder tool. YOU MUST ALWAYS DRAFT UPDATES before applying them.
+The user may explicitly pin a reminder to the context. This will appear at the end of their message in brackets like "[Active Context: Reminder ID ...]". When this is present, you MUST assume any subsequent update commands in that message refer to THIS exact reminder.
 When the user wants to remove or delete a reminder, use the delete_reminder tool.
 
 RULES:
@@ -671,7 +695,7 @@ RULES:
 - After performing actions, give a brief, friendly confirmation.
 - If info is missing (e.g., no date specified), ask the user to clarify.
 - When presenting a draft (draft_reminder), explicitly ask if they want to add valid details to the notes (e.g., "Do you want to add any specifics?").
-- CRITICALLY IMPORTANT: After calling draft_reminder, you MUST STOP. Do not search, do not create, do not do anything else. Just output a final message asking the user to review.
+- CRITICALLY IMPORTANT: After calling draft_reminder or draft_update_reminder, you MUST STOP. Do not search, do not create, do not do anything else. Just output a final message asking the user to review.
 - When assigning tags or priorities, use the exact names from the available lists above.
 - If the user specifies a time-limited repeat (e.g., "every Monday for 2 months"), set repeat to the pattern and repeat_until to the calculated end date.
 - DISAMBIGUATION RULES:
@@ -683,7 +707,7 @@ RULES:
 - When you encounter an unfamiliar acronym or ambiguous term, ask the user what it means BEFORE creating the reminder. Use save_context to remember their answer.
 - Use the USER CONTEXT section above to understand tag meanings. Only assign a tag if the reminder genuinely matches the tag's description or learned context.
 - If a user corrects a tag assignment ("no, 'app' is only for coding"), save that correction with save_context using key "tag:<name>".
-- If the user proactively tells you that a type of reminder or activity belongs to a specific tag (e.g., "standups are for the L3 tag", "grocery runs go under Home"), ALWAYS call save_context with key "tag:<name>" and a value describing what belongs there — even if you are also calling draft_reminder or update_reminder in the same turn.
+- If the user proactively tells you that a type of reminder or activity belongs to a specific tag (e.g., "standups are for the L3 tag", "grocery runs go under Home"), ALWAYS call save_context with key "tag:<name>" and a value describing what belongs there — even if you are also calling draft_reminder or draft_update_reminder in the same turn.
 - More broadly, if the user volunteers any personal fact about their habits, categories, or preferences that you should remember for future sessions, call save_context to persist it.
 - Do NOT ask follow-up questions for simple, clear requests (e.g., "Remind me to buy milk tomorrow").
 - BE CONCISE: Avoid conversational filler, unnecessary pleasantries, or off-topic comments. Focus strictly on the user's reminders.`
@@ -795,9 +819,9 @@ RULES:
                     } else if (toolName === "create_reminder") {
                         toolResult = await handleCreateReminder(toolInput, userId, supabaseClient)
                     } else if (toolName === "search_reminders") {
-                        toolResult = await handleSearchReminders(toolInput, userId, ADMIN_SECRET_KEY, SUPABASE_URL)
-                    } else if (toolName === "update_reminder") {
-                        toolResult = await handleUpdateReminder(toolInput, userId, supabaseClient)
+                        toolResult = await handleSearchReminders(toolInput, userId, ADMIN_SECRET_KEY, SUPABASE_URL, supabaseClient)
+                    } else if (toolName === "draft_update_reminder") {
+                        toolResult = handleDraftUpdateReminder(toolInput)
                     } else if (toolName === "delete_reminder") {
                         toolResult = await handleDeleteReminder(toolInput, userId, supabaseClient)
                     } else if (toolName === "save_context") {
