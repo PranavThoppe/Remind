@@ -14,6 +14,7 @@ import {
   LayoutAnimation,
   Keyboard,
   UIManager,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons'; // Added import
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -63,6 +64,10 @@ export default function HomeScreen() {
   const [historyWeeks, setHistoryWeeks] = useState(0);
   const flatListRef = useRef<FlatList>(null);
   const [hasInitialScrolled, setHasInitialScrolled] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [isAIExpanded, setIsAIExpanded] = useState(false);
+  const headerButtonsOpacity = useRef(new Animated.Value(1)).current;
+
 
   // Show retry button if loading takes more than 5 seconds
   useEffect(() => {
@@ -437,6 +442,24 @@ export default function HomeScreen() {
     }
   }, [loading, reminders.length, viewMode, sortMode, groupedReminders, hasInitialScrolled, historyWeeks]);
 
+  // Track keyboard visibility for positioning
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setKeyboardVisible(true),
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardVisible(false),
+    );
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+
   const formatDate = () => {
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -491,18 +514,22 @@ export default function HomeScreen() {
               </View>
 
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                <TouchableOpacity
-                  onPress={toggleSearch}
-                  style={styles.searchButton}
-                >
-                  <Ionicons name="search" size={24} color={colors.primary} />
-                </TouchableOpacity>
+                <Animated.View style={{ opacity: headerButtonsOpacity }} pointerEvents={isAIExpanded ? 'none' : 'auto'}>
+                  <TouchableOpacity
+                    onPress={toggleSearch}
+                    style={styles.searchButton}
+                  >
+                    <Ionicons name="search" size={24} color={colors.primary} />
+                  </TouchableOpacity>
+                </Animated.View>
 
                 {/* View Mode Selector */}
-                <AnimatedViewSelector
-                  currentView={viewMode}
-                  onViewChange={setViewMode}
-                />
+                <Animated.View style={{ opacity: headerButtonsOpacity }} pointerEvents={isAIExpanded ? 'none' : 'auto'}>
+                  <AnimatedViewSelector
+                    currentView={viewMode}
+                    onViewChange={setViewMode}
+                  />
+                </Animated.View>
               </View>
             </>
           )}
@@ -658,7 +685,14 @@ export default function HomeScreen() {
           )}
 
           <FloatingAddButton
-            onPress={() => setIsSheetOpen(true)}
+            onExpandedChange={(expanded) => {
+              setIsAIExpanded(expanded);
+              Animated.timing(headerButtonsOpacity, {
+                toValue: expanded ? 0 : 1,
+                duration: expanded ? 200 : 350,
+                useNativeDriver: true,
+              }).start();
+            }}
           />
 
           {/* Add/Edit Sheet */}
