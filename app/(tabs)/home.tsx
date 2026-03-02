@@ -23,6 +23,8 @@ import { DaySection } from '../../components/DaySection';
 import { EmptyState } from '../../components/EmptyState';
 import { FloatingAddButton } from '../../components/FloatingAddButton';
 import { AddReminderSheet } from '../../components/AddReminderSheet';
+import { EditReminderSheet } from '../../components/EditReminderSheet';
+import { CardLayout } from '../../components/ReminderCard';
 import { WeekForecast } from '../../components/WeekForecast';
 import { SortSelector } from '../../components/SortSelector';
 import CalendarView from '../../components/CalendarView';
@@ -58,6 +60,7 @@ export default function HomeScreen() {
   const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const searchInputRef = useRef<TextInput>(null);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
+  const [editSourceLayout, setEditSourceLayout] = useState<CardLayout | null>(null);
   const [showRetry, setShowRetry] = useState(false);
   const [recentlyCompletedIds, setRecentlyCompletedIds] = useState<Set<string>>(new Set());
   const [historyWeeks, setHistoryWeeks] = useState(0);
@@ -327,9 +330,16 @@ export default function HomeScreen() {
     }
   };
 
-  const handleEdit = (reminder: Reminder) => {
-    setEditingReminder(reminder);
-    setIsSheetOpen(true);
+  const handleEdit = (reminder: Reminder, layout?: CardLayout) => {
+    if (layout) {
+      // Open the new EditReminderSheet with ghost-clone animation
+      setEditingReminder(reminder);
+      setEditSourceLayout(layout);
+    } else {
+      // Fallback: open the old AddReminderSheet
+      setEditingReminder(reminder);
+      setIsSheetOpen(true);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -350,6 +360,11 @@ export default function HomeScreen() {
   const handleCloseSheet = () => {
     setIsSheetOpen(false);
     setEditingReminder(null);
+  };
+
+  const handleCloseEditSheet = () => {
+    setEditingReminder(null);
+    setEditSourceLayout(null);
   };
 
   const greeting = () => {
@@ -579,7 +594,7 @@ export default function HomeScreen() {
               />
             </ScrollView>
           ) : viewMode === 'calendar' ? (
-            <CalendarView />
+            <CalendarView onEdit={handleEdit} />
           ) : (
             <FlatList
               ref={flatListRef}
@@ -662,12 +677,19 @@ export default function HomeScreen() {
 
           <FloatingAddButton onExpandedChange={setIsAiChatOpen} />
 
-          {/* Add/Edit Sheet */}
+          {/* Add/Edit Sheet (Add only — editing uses EditReminderSheet) */}
           <AddReminderSheet
             isOpen={isSheetOpen}
             onClose={handleCloseSheet}
             onSave={handleSave}
-            editReminder={editingReminder}
+          />
+
+          {/* Edit Sheet (ghost-clone animation) */}
+          <EditReminderSheet
+            reminder={editSourceLayout ? editingReminder : null}
+            sourceLayout={editSourceLayout}
+            onClose={handleCloseEditSheet}
+            onSave={handleSave}
           />
         </>
       )}

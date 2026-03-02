@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Animated,
   TouchableOpacity,
@@ -26,8 +26,7 @@ import { useTheme } from '../hooks/useTheme';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useReminders } from '../hooks/useReminders';
-import { scheduleReminderNotification } from '../lib/notifications';
-import { callNovaAgent } from '../lib/nova-client';
+import { useNovaChat } from '../hooks/useNovaChat';
 import { ChatMessage, ModalFieldUpdates } from '../types/ai-chat';
 import { Reminder } from '../types/reminder';
 import { ReminderCard } from './ReminderCard';
@@ -68,7 +67,7 @@ function TypingIndicator({ colors }: { colors: any }) {
   });
 
   return (
-    <View style={[styles.messageBubble, styles.aiBubble, { backgroundColor: colors.card, alignSelf: 'flex-start', marginLeft: spacing.lg }]}>
+    <View style={[styles.messageBubble, styles.aiBubble, { backgroundColor: colors.card, borderColor: colors.border, alignSelf: 'flex-start', marginLeft: spacing.lg }]}>
       <View style={styles.typingContainer}>
         <Animated.View style={[styles.typingDot, { backgroundColor: colors.mutedForeground }, dotStyle(dot1)]} />
         <Animated.View style={[styles.typingDot, { backgroundColor: colors.mutedForeground }, dotStyle(dot2)]} />
@@ -185,7 +184,7 @@ function MessageBubble({
       <View style={[styles.messageContainer, { flexDirection: 'column', alignItems: 'flex-start', paddingHorizontal: spacing.lg, width: '100%', maxWidth: 360 }]}>
         {/* AI confirmation text */}
         {message.content ? (
-          <View style={[styles.messageBubble, styles.aiBubble, { backgroundColor: colors.card, marginBottom: hasCards ? spacing.md : 0 }]}>
+          <View style={[styles.messageBubble, styles.aiBubble, { backgroundColor: colors.card, borderColor: colors.border, marginBottom: hasCards ? spacing.md : 0 }]}>
             <Text style={[styles.aiMessageText, { color: colors.foreground }]}>{message.content}</Text>
           </View>
         ) : null}
@@ -211,7 +210,7 @@ function MessageBubble({
           </View>
         )}
         {!hasCards && !message.content && (
-          <View style={[styles.messageBubble, styles.aiBubble, { backgroundColor: colors.card }]}>
+          <View style={[styles.messageBubble, styles.aiBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.aiMessageText, { color: colors.foreground }]}>No remaining reminders for today.</Text>
           </View>
         )}
@@ -256,7 +255,7 @@ function MessageBubble({
           styles.messageBubble,
           isUser
             ? [styles.userBubble, { backgroundColor: colors.primary }]
-            : [styles.aiBubble, { backgroundColor: colors.card }],
+            : [styles.aiBubble, { backgroundColor: colors.card, borderColor: colors.border }],
         ]}
       >
         {renderContent()}
@@ -288,24 +287,25 @@ interface FloatingAddButtonProps {
 
 export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) {
   const { colors, isDark } = useTheme();
-  const { tags, priorities } = useSettings();
+  const { tags } = useSettings();
   const { user } = useAuth();
-  const { addReminder, reminders, deleteReminder, updateReminder } = useReminders();
+  const { addReminder } = useReminders();
   const insets = useSafeAreaInsets();
 
+  const nova = useNovaChat();
+  const {
+    messages, setMessages, isThinking, inputText, setInputText,
+    selectedImage, setSelectedImage, pinnedReminder, setPinnedReminder,
+    flatListRef, handleSend, handleDraftConfirm, handleDraftUpdateConfirm,
+  } = nova;
+
   const [isExpanded, setIsExpanded] = useState(false);
-  const [inputText, setInputText] = useState('');
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isThinking, setIsThinking] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [draftReminder, setDraftReminder] = useState<any>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
-  const [pinnedReminder, setPinnedReminder] = useState<any>(null);
 
   const inputRef = useRef<TextInput>(null);
-  const flatListRef = useRef<FlatList>(null);
 
   const expandAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -392,12 +392,9 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
     ]).start(() => {
       setIsExpanded(false);
       onExpandedChange?.(false);
-      setInputText('');
-      setSelectedImage(null);
-      setMessages([]);
+      nova.reset();
       setDraftReminder(null);
       setEditingMessageId(null);
-      setPinnedReminder(null);
     });
   };
 
@@ -409,201 +406,9 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
     }
   };
 
-  const processMessage = useCallback(async (input: string, currentMessages: ChatMessage[], imageUri?: string) => {
-    try {
-      if (!user) {
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(), role: 'assistant',
-          content: "Please log in to use AI features.", timestamp: new Date(),
-        }]);
-        return;
-      }
-
-      const conversationHistory = currentMessages.filter(m =>
-        !m.id.startsWith('temp-') && !m.content.includes("I'm sorry, I encountered an error")
-      );
-
-      const now = new Date();
-      const clientDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-
-      let queryWithContext = input;
-      if (pinnedReminder) {
-        queryWithContext = `${input}\n\n[Active Context: Reminder ID ${pinnedReminder.id} - ${pinnedReminder.title}]`;
-      }
-
-      // Call agent
-      const response = await callNovaAgent({ query: queryWithContext, user_id: user.id, conversation: conversationHistory, client_date: clientDate });
-      const lastToolCall = response.tool_calls?.[response.tool_calls.length - 1];
-
-      if (!lastToolCall) {
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(), role: 'assistant',
-          content: response.message, timestamp: new Date(),
-        }]);
-        return;
-      }
-
-      const toolName = lastToolCall.tool;
-      const toolResult = lastToolCall.result;
-
-      if (toolName === 'draft_reminder') {
-        const draft = toolResult.draft;
-        const sheetDraft = {
-          title: draft.title, date: draft.date, time: draft.time, repeat: draft.repeat || 'none',
-          tag_id: draft.tag_name ? tags.find(t => t.name.toLowerCase() === draft.tag_name.toLowerCase())?.id : undefined,
-          priority_id: draft.priority_name ? priorities.find(p => p.name.toLowerCase() === draft.priority_name.toLowerCase())?.id : undefined,
-          notes: draft.notes,
-        };
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(), role: 'assistant',
-          content: response.message || toolResult.message || "Here's a draft for your reminder:",
-          timestamp: new Date(), panelType: 'draft', panelFields: sheetDraft,
-        }]);
-      } else if (toolName === 'draft_update_reminder') {
-        const draft = toolResult.draft;
-        const existingReminder = reminders.find(r => r.id === draft.reminder_id);
-
-        const sheetDraft = {
-          title: draft.title !== undefined ? draft.title : (existingReminder?.title || ''),
-          date: draft.date !== undefined ? draft.date : (existingReminder?.date || ''),
-          time: draft.time !== undefined ? draft.time : (existingReminder?.time || null),
-          repeat: draft.repeat !== undefined ? draft.repeat : (existingReminder?.repeat || 'none'),
-          tag_id: draft.tag_name ? tags.find(t => t.name.toLowerCase() === draft.tag_name.toLowerCase())?.id : existingReminder?.tag_id,
-          priority_id: draft.priority_name ? priorities.find(p => p.name.toLowerCase() === draft.priority_name.toLowerCase())?.id : existingReminder?.priority_id,
-          notes: draft.notes !== undefined ? draft.notes : (existingReminder?.notes || null),
-        };
-        // Auto-pin context if the AI specifically references a reminder ID during a draft update 
-        // and we don't already have one pinned. This handles the proactive conflict flow.
-        if (draft.reminder_id && !pinnedReminder) {
-          setPinnedReminder({ id: draft.reminder_id, title: sheetDraft.title, tag_id: sheetDraft.tag_id });
-        }
-
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(), role: 'assistant',
-          content: response.message || toolResult.message || "Here's the proposed update:",
-          timestamp: new Date(), panelType: 'draft_update' as any, panelFields: sheetDraft,
-        }]);
-      } else if (toolName === 'create_reminder') {
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(), role: 'assistant',
-          content: response.message || toolResult.message || "Reminder created!", timestamp: new Date(),
-        }]);
-      } else if (toolName === 'search_reminders') {
-        const parsedResults = Array.isArray(toolResult.reminders) ? toolResult.reminders : [];
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(), role: 'assistant',
-          content: response.message || "Here's what I found:", timestamp: new Date(),
-          panelType: 'search', panelSearchResults: parsedResults,
-        }]);
-      } else if (toolName === 'delete_reminder') {
-        const idToDelete = toolResult.reminder_id || toolResult.id;
-        if (idToDelete) {
-          await deleteReminder(idToDelete);
-          if (pinnedReminder?.id === idToDelete) {
-            setPinnedReminder(null);
-          }
-        }
-        // Show remaining today's reminders as cards (filter local state)
-        const remainingToday = reminders.filter(
-          r => r.date === clientDate && !r.completed && r.id !== idToDelete
-        );
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(),
-          role: 'assistant',
-          content: response.message || toolResult.message || "Reminder deleted successfully!",
-          timestamp: new Date(),
-          panelType: 'reminder_list',
-          panelSearchResults: remainingToday,
-        }]);
-      } else if (toolName === 'update_reminder') {
-        // Show the updated reminder as a card if available in local state
-        const updatedId = toolResult.reminder_id || toolResult.id;
-        const updatedReminder = updatedId ? reminders.find(r => r.id === updatedId) : undefined;
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(),
-          role: 'assistant',
-          content: response.message || toolResult.message || "Reminder updated.",
-          timestamp: new Date(),
-          ...(updatedReminder ? { panelType: 'reminder_list', panelSearchResults: [updatedReminder] } : {}),
-        }]);
-      } else {
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(), role: 'assistant',
-          content: response.message, timestamp: new Date(),
-        }]);
-      }
-    } catch (error: any) {
-      setMessages(prev => [...prev, {
-        id: (Date.now() + 1).toString(), role: 'assistant',
-        content: error.message || "An error occurred.", timestamp: new Date(),
-      }]);
-    } finally {
-      setIsThinking(false);
-    }
-  }, [user, tags, priorities, reminders, pinnedReminder]);
-
-  const handleSend = async () => {
-    const trimmed = inputText.trim();
-    if ((!trimmed && !selectedImage) || isThinking) return;
-
-    setInputText('');
-    const userImage = selectedImage;
-    setSelectedImage(null);
-
-    const userMessage: ChatMessage = { id: Date.now().toString(), role: 'user', content: trimmed, imageUri: userImage || undefined, timestamp: new Date() };
-    const updatedMessages = [...messages, userMessage];
-    setMessages(updatedMessages);
-    setIsThinking(true);
-    await processMessage(trimmed, updatedMessages, userImage || undefined);
-  };
-
   const handleKeyPress = (e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
     if (e.nativeEvent.key === 'Backspace' && inputText === '' && pinnedReminder) {
       setPinnedReminder(null);
-    }
-  };
-
-  const handleDraftConfirm = async (messageId: string, fields: ModalFieldUpdates) => {
-    if (!fields.title?.trim()) return;
-    const now = new Date();
-    const dateStr = fields.date || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-
-    const result = await addReminder({
-      title: fields.title, date: dateStr, time: fields.time, repeat: fields.repeat || 'none',
-      tag_id: fields.tag_id, priority_id: fields.priority_id, notes: fields.notes,
-    });
-
-    if (!result.error && result.data) {
-      try {
-        await scheduleReminderNotification(fields.title, dateStr, fields.time || undefined, fields.repeat || 'none', (result.data as Reminder).id);
-      } catch (err) { }
-      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, panelIsStatic: true } : m));
-      // Not adding the "Anything else?" message to keep UI minimalistic
-    }
-  };
-
-  const handleDraftUpdateConfirm = async (messageId: string, fields: ModalFieldUpdates) => {
-    if (!pinnedReminder?.id) {
-      Alert.alert("Error", "No reminder selected to update.");
-      return;
-    }
-
-    // We only send the fields that were actually changed/provided
-    const updates: any = {};
-    if (fields.title) updates.title = fields.title;
-    if (fields.date) updates.date = fields.date;
-    if (fields.time) updates.time = fields.time;
-    if (fields.repeat) updates.repeat = fields.repeat;
-    if (fields.repeat_until) updates.repeat_until = fields.repeat_until;
-    if (undefined !== fields.tag_id) updates.tag_id = fields.tag_id;
-    if (undefined !== fields.priority_id) updates.priority_id = fields.priority_id;
-    if (undefined !== fields.notes) updates.notes = fields.notes;
-
-    const result = await updateReminder(pinnedReminder.id, updates);
-
-    if (!result.error) {
-      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, panelIsStatic: true } : m));
-      setPinnedReminder(null); // Clear context after successful update
     }
   };
 
@@ -886,6 +691,7 @@ const styles = StyleSheet.create({
   },
   aiBubble: {
     borderBottomLeftRadius: 4,
+    borderWidth: 1.5,
   },
   messageContainer: {
     flexDirection: 'row',

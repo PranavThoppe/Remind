@@ -25,6 +25,23 @@ export interface CallNovaAgentParams {
     client_date?: string; // YYYY-MM-DD
 }
 
+export interface CallNovaUpdateAgentParams {
+    query: string;
+    user_id: string;
+    /** The full reminder object for the pinned reminder being edited */
+    reminder: {
+        id: string;
+        title?: string;
+        date?: string;
+        time?: string | null;
+        repeat?: string;
+        repeat_until?: string | null;
+        notes?: string | null;
+    };
+    conversation?: ChatMessage[];
+    client_date?: string; // YYYY-MM-DD
+}
+
 /**
  * Calls the nova-agent edge function
  */
@@ -80,6 +97,67 @@ export async function callNovaAgent(
             throw new Error('Request timed out. Please try again.');
         }
         console.error('[Nova Client] Error:', error);
+        throw error;
+    }
+}
+
+/**
+ * Calls the nova-update-agent edge function.
+ * Requires a `reminder` object — the pinned reminder being edited.
+ * The agent's system prompt is pre-loaded with the reminder details,
+ * so it never needs to search for what to update.
+ */
+export async function callNovaUpdateAgent(
+    params: CallNovaUpdateAgentParams
+): Promise<NovaAgentResponse> {
+    const { query, user_id, client_date, reminder } = params;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+    try {
+        console.log(`[Nova Client] Sending request to: ${SUPABASE_URL}/functions/v1/nova-update-agent`);
+
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/nova-update-agent`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': ANON_KEY,
+                'Authorization': `Bearer ${ANON_KEY}`,
+                'x-admin-secret': ADMIN_SECRET_KEY,
+            },
+            body: JSON.stringify({
+                query,
+                user_id,
+                client_date,
+                reminder,
+                conversation: params.conversation?.map(msg => ({
+                    role: msg.role,
+                    content: msg.content,
+                })),
+            }),
+            signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('[Nova Client] HTTP Error:', response.status, errorText);
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+
+        const data = await response.json();
+        console.log('[Nova Client] Update agent response:', JSON.stringify(data, null, 2));
+
+        return data;
+    } catch (error: any) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+            console.error('[Nova Client] Update agent request timed out');
+            throw new Error('Request timed out. Please try again.');
+        }
+        console.error('[Nova Client] Update agent error:', error);
         throw error;
     }
 }

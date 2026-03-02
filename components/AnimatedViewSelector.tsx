@@ -245,7 +245,6 @@ export const AnimatedViewSelector: React.FC<AnimatedViewSelectorProps> = ({
 const styles = StyleSheet.create({
     container: {
         position: 'relative',
-        zIndex: 1000,
     },
     mainButton: {
         width: 40,

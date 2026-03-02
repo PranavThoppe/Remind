@@ -16,10 +16,17 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useTheme } from '../hooks/useTheme';
 import { BirthdayArt } from './BirthdayArt';
 
+export interface CardLayout {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 interface ReminderCardProps {
   reminder: Reminder;
   onComplete: (id: string) => void;
-  onEdit: (reminder: Reminder) => void;
+  onEdit: (reminder: Reminder, layout?: CardLayout) => void;
   onDelete?: (id: string) => void;
   index: number;
 }
@@ -32,6 +39,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
   const slideAnim = useRef(new Animated.Value(8)).current;
   const checkScaleAnim = useRef(new Animated.Value(1)).current;
   const swipeableRef = useRef<Swipeable>(null);
+  const cardRef = useRef<View>(null);
   const { tags, priorities } = useSettings();
 
   const isBirthday = reminder.title.toLowerCase().includes('birthday');
@@ -134,6 +142,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
       }}
     >
       <Animated.View
+        ref={cardRef}
         style={[
           styles.container,
           {
@@ -159,7 +168,11 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
             },
             isBirthday && !reminder.completed && styles.birthdayCard
           ]}
-          onPress={() => onEdit(reminder)}
+          onPress={() => {
+            cardRef.current?.measureInWindow((x, y, width, height) => {
+              onEdit(reminder, { x, y, width, height });
+            });
+          }}
           activeOpacity={0.9}
         >
           {priority && (

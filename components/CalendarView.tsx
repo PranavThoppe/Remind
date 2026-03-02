@@ -14,10 +14,8 @@ import {
     subMonths,
 } from 'date-fns';
 import { useRemindersContext } from '../contexts/RemindersContext';
-import { useSettings } from '../contexts/SettingsContext';
 import { useTheme } from '../hooks/useTheme';
-import { ReminderCard } from './ReminderCard';
-import { AddReminderSheet } from './AddReminderSheet';
+import { ReminderCard, CardLayout } from './ReminderCard';
 import { typography, spacing, borderRadius } from '../constants/theme';
 import Animated, {
     FadeInDown,
@@ -30,15 +28,16 @@ const { width } = Dimensions.get('window');
 const DAY_SIZE = (width - 72) / 7;
 const ROW_HEIGHT = DAY_SIZE + 8; // cell height + marginVertical * 2
 
-const CalendarView: React.FC = () => {
-    const { reminders, toggleComplete, deleteReminder, updateReminder, addReminder } = useRemindersContext();
-    const { priorities, tags } = useSettings();
+interface CalendarViewProps {
+    onEdit?: (reminder: any, layout?: CardLayout) => void;
+}
+
+const CalendarView: React.FC<CalendarViewProps> = ({ onEdit }) => {
+    const { reminders, toggleComplete, deleteReminder, updateReminder } = useRemindersContext();
     const { colors, isDark } = useTheme();
 
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState(new Date());
-    const [isSheetOpen, setIsSheetOpen] = useState(false);
-    const [editingReminder, setEditingReminder] = useState<any>(null);
 
     // Group reminders by date
     const eventsByDate = useMemo(() => {
@@ -91,25 +90,8 @@ const CalendarView: React.FC = () => {
         }
     };
 
-    const handleEdit = (reminder: any) => {
-        setEditingReminder(reminder);
-        setIsSheetOpen(true);
-    };
-
-    const handleCloseSheet = () => {
-        setIsSheetOpen(false);
-        setEditingReminder(null);
-    };
-
-    const handleSave = async (data: any) => {
-        let result;
-        if (editingReminder) {
-            result = await updateReminder(editingReminder.id, data);
-        } else {
-            result = await addReminder(data);
-        }
-        setEditingReminder(null);
-        return result;
+    const handleEdit = (reminder: any, layout?: CardLayout) => {
+        onEdit?.(reminder, layout);
     };
 
     return (
@@ -212,13 +194,7 @@ const CalendarView: React.FC = () => {
                 )}
             </View>
 
-            {/* Add/Edit Sheet */}
-            <AddReminderSheet
-                isOpen={isSheetOpen}
-                onClose={handleCloseSheet}
-                onSave={handleSave}
-                editReminder={editingReminder}
-            />
+
 
             <View style={{ height: 100 }} />
         </ScrollView>
