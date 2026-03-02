@@ -675,7 +675,10 @@ export default function HomeScreen() {
             />
           )}
 
-          <FloatingAddButton onExpandedChange={setIsAiChatOpen} />
+          <FloatingAddButton
+            onExpandedChange={setIsAiChatOpen}
+            isBlurred={!!editSourceLayout}
+          />
 
           {/* Add/Edit Sheet (Add only — editing uses EditReminderSheet) */}
           <AddReminderSheet

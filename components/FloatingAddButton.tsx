@@ -283,9 +283,10 @@ function ContextPill({ reminder, onRemove, colors, tags }: { reminder: any, onRe
 
 interface FloatingAddButtonProps {
   onExpandedChange?: (expanded: boolean) => void;
+  isBlurred?: boolean;
 }
 
-export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) {
+export function FloatingAddButton({ onExpandedChange, isBlurred }: FloatingAddButtonProps) {
   const { colors, isDark } = useTheme();
   const { tags } = useSettings();
   const { user } = useAuth();
@@ -312,6 +313,15 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const sparkleRotation = useRef(new Animated.Value(0)).current;
   const keyboardHeightAnim = useRef(new Animated.Value(0)).current;
+  const blurOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(blurOpacity, {
+      toValue: isBlurred ? 1 : 0,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  }, [isBlurred]);
   const keyboardOffset = useRef(Animated.multiply(keyboardHeightAnim, expandAnim)).current;
   const baseBottom = expandAnim.interpolate({ inputRange: [0, 1], outputRange: [FAB_BOTTOM, 16] });
   const pillBottom = useRef(Animated.add(baseBottom, keyboardOffset)).current;
@@ -531,6 +541,8 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
             borderWidth: isExpanded ? 1.5 : 0,
             borderColor: isExpanded ? colors.border : 'transparent',
             transform: isExpanded ? [] : [{ scale: scaleAnim }],
+            opacity: blurOpacity.interpolate({ inputRange: [0, 1], outputRange: [1, 0.4] }),
+            zIndex: isBlurred ? 900 : 1000,
             ...shadows.fab,
           },
         ]}
