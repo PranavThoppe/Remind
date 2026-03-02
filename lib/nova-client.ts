@@ -23,6 +23,7 @@ export interface CallNovaAgentParams {
     user_id: string;
     conversation?: ChatMessage[];
     client_date?: string; // YYYY-MM-DD
+    time_format?: '12h' | '24h';
 }
 
 export interface CallNovaUpdateAgentParams {
@@ -40,6 +41,7 @@ export interface CallNovaUpdateAgentParams {
     };
     conversation?: ChatMessage[];
     client_date?: string; // YYYY-MM-DD
+    time_format?: '12h' | '24h';
 }
 
 /**

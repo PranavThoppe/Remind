@@ -39,6 +39,7 @@ const PILL_HORIZONTAL_MARGIN = 20;
 const PILL_WIDTH = SCREEN_WIDTH - PILL_HORIZONTAL_MARGIN * 2;
 const FAB_RIGHT = 20;
 const FAB_BOTTOM = 90;
+const EXPANDED_PILL_BOTTOM = 32; // Tweak this value to move the pill higher/lower
 const ANIM_DURATION = 350;
 
 function TypingIndicator({ colors }: { colors: any }) {
@@ -283,10 +284,9 @@ function ContextPill({ reminder, onRemove, colors, tags }: { reminder: any, onRe
 
 interface FloatingAddButtonProps {
   onExpandedChange?: (expanded: boolean) => void;
-  isBlurred?: boolean;
 }
 
-export function FloatingAddButton({ onExpandedChange, isBlurred }: FloatingAddButtonProps) {
+export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) {
   const { colors, isDark } = useTheme();
   const { tags } = useSettings();
   const { user } = useAuth();
@@ -311,22 +311,13 @@ export function FloatingAddButton({ onExpandedChange, isBlurred }: FloatingAddBu
   const expandAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
-  const sparkleRotation = useRef(new Animated.Value(0)).current;
   const keyboardHeightAnim = useRef(new Animated.Value(0)).current;
-  const blurOpacity = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    Animated.timing(blurOpacity, {
-      toValue: isBlurred ? 1 : 0,
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
-  }, [isBlurred]);
   const keyboardOffset = useRef(Animated.multiply(keyboardHeightAnim, expandAnim)).current;
-  const baseBottom = expandAnim.interpolate({ inputRange: [0, 1], outputRange: [FAB_BOTTOM, 16] });
-  const pillBottom = useRef(Animated.add(baseBottom, keyboardOffset)).current;
+  const baseBottom = expandAnim.interpolate({ inputRange: [0, 1], outputRange: [FAB_BOTTOM, EXPANDED_PILL_BOTTOM] });
+  const pillBottom = Animated.add(baseBottom, keyboardOffset);
   // Reduce absolute spacing from top of screen to prevent notch overlap
-  const listBottom = useRef(Animated.add(Animated.add(baseBottom, new Animated.Value(PILL_HEIGHT + (selectedImage ? 90 : 10))), keyboardOffset)).current;
+  const listBottom = Animated.add(Animated.add(baseBottom, new Animated.Value(PILL_HEIGHT + (selectedImage ? 90 : 10))), keyboardOffset);
 
   // Image Picker Logic
   const handlePickImage = async () => {
@@ -541,8 +532,7 @@ export function FloatingAddButton({ onExpandedChange, isBlurred }: FloatingAddBu
             borderWidth: isExpanded ? 1.5 : 0,
             borderColor: isExpanded ? colors.border : 'transparent',
             transform: isExpanded ? [] : [{ scale: scaleAnim }],
-            opacity: blurOpacity.interpolate({ inputRange: [0, 1], outputRange: [1, 0.4] }),
-            zIndex: isBlurred ? 900 : 1000,
+            zIndex: 1000,
             ...shadows.fab,
           },
         ]}

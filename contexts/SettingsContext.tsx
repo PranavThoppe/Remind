@@ -429,6 +429,22 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const setTimeFormat = async (format: '12h' | '24h') => {
     setTimeFormatState(format);
     await AsyncStorage.setItem(STORAGE_KEYS.TIME_FORMAT, JSON.stringify(format));
+    if (user) {
+      try {
+        await supabase
+          .from('user_context')
+          .upsert({
+            user_id: user.id,
+            key: 'time_format',
+            value: format,
+            last_used_at: new Date().toISOString(),
+          }, {
+            onConflict: 'user_id, key'
+          });
+      } catch (error) {
+        console.error('Error updating time_format in user_context:', error);
+      }
+    }
   };
 
   const setWeekStart = async (day: 'Sunday' | 'Monday') => {

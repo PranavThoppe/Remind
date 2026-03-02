@@ -1,8 +1,8 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Alert } from 'react-native';
 import { ChatMessage, ModalFieldUpdates } from '../types/ai-chat';
 import { Reminder } from '../types/reminder';
-import { callNovaAgent } from '../lib/nova-client';
+import { callNovaAgent, callNovaUpdateAgent } from '../lib/nova-client';
 import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useReminders } from './useReminders';
@@ -10,7 +10,7 @@ import { scheduleReminderNotification } from '../lib/notifications';
 
 export interface UseNovaChatOptions {
     /** Pre-pin a reminder as context on mount (used by EditReminderSheet) */
-    initialPinnedReminder?: { id: string; title: string; tag_id?: string | null } | null;
+    initialPinnedReminder?: Reminder | null;
 }
 
 export function useNovaChat(options?: UseNovaChatOptions) {
@@ -27,6 +27,13 @@ export function useNovaChat(options?: UseNovaChatOptions) {
     );
 
     const flatListRef = useRef<any>(null);
+
+    // Sync from props if it changes after mount (like when EditReminderSheet opens)
+    useEffect(() => {
+        if (options?.initialPinnedReminder !== undefined) {
+            setPinnedReminder(options.initialPinnedReminder);
+        }
+    }, [options?.initialPinnedReminder]);
 
     // ───────────────────────── processMessage ─────────────────────────
 
@@ -51,17 +58,21 @@ export function useNovaChat(options?: UseNovaChatOptions) {
             const now = new Date();
             const clientDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-            let queryWithContext = input;
-            if (pinnedReminder) {
-                queryWithContext = `${input}\n\n[Active Context: Reminder ID ${pinnedReminder.id} - ${pinnedReminder.title}]`;
-            }
-
-            const response = await callNovaAgent({
-                query: queryWithContext,
-                user_id: user.id,
-                conversation: conversationHistory,
-                client_date: clientDate,
-            });
+            const response = await (pinnedReminder
+                ? callNovaUpdateAgent({
+                    query: input,
+                    user_id: user.id,
+                    reminder: pinnedReminder,
+                    conversation: conversationHistory,
+                    client_date: clientDate,
+                })
+                : callNovaAgent({
+                    query: input + (pinnedReminder ? `\n\n[Active Context: Reminder ID ${pinnedReminder.id} - ${pinnedReminder.title}]` : ''),
+                    user_id: user.id,
+                    conversation: conversationHistory,
+                    client_date: clientDate,
+                })
+            );
 
             const lastToolCall = response.tool_calls?.[response.tool_calls.length - 1];
 
@@ -104,7 +115,8 @@ export function useNovaChat(options?: UseNovaChatOptions) {
                 };
 
                 if (draft.reminder_id && !pinnedReminder) {
-                    setPinnedReminder({ id: draft.reminder_id, title: sheetDraft.title, tag_id: sheetDraft.tag_id });
+                    const fullReminder = reminders.find(r => r.id === draft.reminder_id);
+                    setPinnedReminder(fullReminder || { id: draft.reminder_id, title: sheetDraft.title, tag_id: sheetDraft.tag_id });
                 }
 
                 setMessages(prev => [...prev, {
@@ -144,7 +156,7 @@ export function useNovaChat(options?: UseNovaChatOptions) {
                     panelSearchResults: remainingToday,
                 }]);
             } else if (toolName === 'update_reminder') {
-                const updatedId = toolResult.reminder_id || toolResult.id;
+                const updatedId = toolResult.reminder_id || toolResult.id || toolResult.reminder?.id;
                 const updatedReminder = updatedId ? reminders.find(r => r.id === updatedId) : undefined;
                 setMessages(prev => [...prev, {
                     id: Date.now().toString(),

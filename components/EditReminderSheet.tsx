@@ -32,6 +32,7 @@ import { ModalFieldUpdates, ChatMessage } from '../types/ai-chat';
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const PILL_HEIGHT = 52;
 const PILL_HORIZONTAL_MARGIN = 20;
+const EXPANDED_PILL_BOTTOM = 32; // Tweak this value to move the pill higher/lower
 const ANIM_DURATION = 350;
 
 // ─────────────── Reusable sub-components from FloatingAddButton ───────────────
@@ -205,9 +206,8 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
 
     const [isVisible, setIsVisible] = useState(false);
 
-    // AI Chat via shared hook
     const nova = useNovaChat({
-        initialPinnedReminder: reminder ? { id: reminder.id, title: reminder.title, tag_id: reminder.tag_id } : null,
+        initialPinnedReminder: reminder,
     });
     const {
         messages, isThinking, inputText, setInputText,
@@ -417,7 +417,7 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
     };
 
     const pillBottom = Animated.add(
-        new Animated.Value(16),
+        new Animated.Value(EXPANDED_PILL_BOTTOM),
         keyboardHeightAnim,
     );
 
@@ -473,7 +473,7 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
                     {
                         opacity: contentOpacity,
                         top: Animated.add(new Animated.Value(targetY + 90), chatOffset) as any,
-                        bottom: Animated.add(new Animated.Value(PILL_HEIGHT + 30), keyboardHeightAnim) as any,
+                        bottom: Animated.add(new Animated.Value(PILL_HEIGHT + EXPANDED_PILL_BOTTOM + 14), keyboardHeightAnim) as any,
                         left: 0,
                         right: 0,
                     },
