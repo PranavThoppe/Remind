@@ -163,3 +163,60 @@ export async function callNovaUpdateAgent(
         throw error;
     }
 }
+
+/**
+ * Calls the nova-suggest edge function to get 4 contextual suggestions for a reminder.
+ */
+export async function callNovaSuggest(
+    reminder: {
+        id: string;
+        title?: string;
+        date?: string;
+        time?: string | null;
+        repeat?: string;
+        notes?: string | null;
+    },
+    client_date?: string
+): Promise<string[]> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+    try {
+        console.log(`[Nova Client] Sending request to: ${SUPABASE_URL}/functions/v1/nova-suggest`);
+
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/nova-suggest`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': ANON_KEY,
+                'Authorization': `Bearer ${ANON_KEY}`,
+            },
+            body: JSON.stringify({
+                reminder,
+                client_date,
+            }),
+            signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('[Nova Client] HTTP Error:', response.status, errorText);
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+
+        const data = await response.json();
+        console.log('[Nova Client] Suggest agent response:', data.suggestions);
+
+        return data.suggestions || [];
+    } catch (error: any) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+            console.error('[Nova Client] Suggest agent request timed out');
+            return []; // Fail silently and return empty
+        }
+        console.error('[Nova Client] Suggest agent error:', error);
+        return []; // Fail silently and return empty
+    }
+}

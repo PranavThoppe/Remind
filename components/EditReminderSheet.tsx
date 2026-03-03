@@ -24,9 +24,10 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { shadows, spacing, typography, borderRadius } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import { useSettings } from '../contexts/SettingsContext';
-import { useNovaChat } from '../hooks/useNovaChat';
+import { useNovaUpdateChat } from '../hooks/useNovaUpdateChat';
 import { Reminder } from '../types/reminder';
-import { CardLayout, ReminderCard } from './ReminderCard';
+import { ReminderCard, CardLayout } from './ReminderCard';
+import { SuggestionChips } from './SuggestionChips';
 import { ModalFieldUpdates, ChatMessage } from '../types/ai-chat';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -206,12 +207,13 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
 
     const [isVisible, setIsVisible] = useState(false);
 
-    const nova = useNovaChat({
+    const nova = useNovaUpdateChat({
         initialPinnedReminder: reminder,
     });
     const {
         messages, isThinking, inputText, setInputText,
         pinnedReminder, setPinnedReminder,
+        suggestions, isGeneratingSuggestions,
         flatListRef, handleSend, handleDraftUpdateConfirm,
     } = nova;
 
@@ -473,7 +475,7 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
                     {
                         opacity: contentOpacity,
                         top: Animated.add(new Animated.Value(targetY + 90), chatOffset) as any,
-                        bottom: Animated.add(new Animated.Value(PILL_HEIGHT + EXPANDED_PILL_BOTTOM + 14), keyboardHeightAnim) as any,
+                        bottom: Animated.add(new Animated.Value(PILL_HEIGHT + EXPANDED_PILL_BOTTOM + 4), keyboardHeightAnim) as any,
                         left: 0,
                         right: 0,
                     },
@@ -621,32 +623,50 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
                 )}
 
                 {/* Chat Messages */}
-                <FlatList
-                    ref={flatListRef}
-                    data={messages}
-                    keyExtractor={item => item.id}
-                    style={{ flexGrow: 0 }}
-                    renderItem={({ item }) => (
-                        <MessageBubble
-                            message={item}
+                {messages.length > 0 || isThinking ? (
+                    <FlatList
+                        ref={flatListRef}
+                        data={messages}
+                        keyExtractor={item => item.id}
+                        style={{ flexGrow: 1 }}
+                        renderItem={({ item }) => (
+                            <MessageBubble
+                                message={item}
+                                colors={colors}
+                                tags={tags}
+                                onDraftConfirm={(msgId) => {
+                                    const draftField = messages.find(m => m.id === msgId)?.panelFields;
+                                    if (draftField) {
+                                        handleDraftUpdateConfirm(msgId, draftField);
+                                    }
+                                }}
+                                onDraftDiscard={(msgId) => {
+                                    nova.setMessages(prev => prev.filter(m => m.id !== msgId));
+                                }}
+                            />
+                        )}
+                        contentContainerStyle={{ paddingBottom: spacing.lg + 50 }}
+                        showsVerticalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
+                        ListFooterComponent={isThinking ? <TypingIndicator colors={colors} /> : null}
+                    />
+                ) : (
+                    <TouchableWithoutFeedback onPress={handleOverlayPress}>
+                        <View style={{ flex: 1 }} />
+                    </TouchableWithoutFeedback>
+                )}
+
+                {/* Suggestion Chips */}
+                {!isKeyboardVisible && (
+                    <View style={{ position: 'absolute', bottom: 0, left: -spacing.lg, right: -spacing.lg }}>
+                        <SuggestionChips
+                            suggestions={suggestions}
+                            isGenerating={isGeneratingSuggestions}
+                            onSelectSuggestion={(suggestion) => handleSend(suggestion)}
                             colors={colors}
-                            tags={tags}
-                            onDraftConfirm={(msgId) => {
-                                const draftField = messages.find(m => m.id === msgId)?.panelFields;
-                                if (draftField) {
-                                    handleDraftUpdateConfirm(msgId, draftField);
-                                }
-                            }}
-                            onDraftDiscard={(msgId) => {
-                                nova.setMessages(prev => prev.filter(m => m.id !== msgId));
-                            }}
                         />
-                    )}
-                    contentContainerStyle={{ paddingBottom: spacing.lg }}
-                    showsVerticalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
-                    ListFooterComponent={isThinking ? <TypingIndicator colors={colors} /> : null}
-                />
+                    </View>
+                )}
             </Animated.View>
 
             {/* Input Pill */}
@@ -682,14 +702,14 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
                     onChangeText={setInputText}
                     onKeyPress={handleKeyPress}
                     returnKeyType="send"
-                    onSubmitEditing={handleSend}
+                    onSubmitEditing={() => handleSend()}
                     blurOnSubmit={false}
                     maxLength={200}
                     editable={!isThinking}
                 />
 
                 {inputText.trim() ? (
-                    <TouchableOpacity onPress={handleSend} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <TouchableOpacity onPress={() => handleSend()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                         <View style={[localStyles.sendButton, { backgroundColor: colors.primary }]}>
                             <Ionicons name="arrow-up" size={18} color={colors.primaryForeground} />
                         </View>

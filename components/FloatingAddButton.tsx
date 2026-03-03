@@ -26,7 +26,7 @@ import { useTheme } from '../hooks/useTheme';
 import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useReminders } from '../hooks/useReminders';
-import { useNovaChat } from '../hooks/useNovaChat';
+import { useNovaAddChat } from '../hooks/useNovaAddChat';
 import { ChatMessage, ModalFieldUpdates } from '../types/ai-chat';
 import { Reminder } from '../types/reminder';
 import { ReminderCard } from './ReminderCard';
@@ -265,23 +265,6 @@ function MessageBubble({
   );
 }
 
-// A simple pill to display the pinned reminder context
-function ContextPill({ reminder, onRemove, colors, tags }: { reminder: any, onRemove: () => void, colors: any, tags: any[] }) {
-  if (!reminder) return null;
-  const tagColor = tags?.find((t: any) => t.id === reminder.tag_id)?.color || colors.foreground;
-
-  return (
-    <View style={[styles.contextPill, { backgroundColor: colors.card, borderColor: tagColor }]}>
-      <Text style={[styles.contextPillText, { color: tagColor }]} numberOfLines={1}>
-        {reminder.title}
-      </Text>
-      <TouchableOpacity onPress={onRemove} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={styles.contextPillClose}>
-        <Ionicons name="close-circle" size={16} color={colors.mutedForeground} />
-      </TouchableOpacity>
-    </View>
-  );
-}
-
 interface FloatingAddButtonProps {
   onExpandedChange?: (expanded: boolean) => void;
 }
@@ -293,11 +276,11 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
   const { addReminder } = useReminders();
   const insets = useSafeAreaInsets();
 
-  const nova = useNovaChat();
+  const nova = useNovaAddChat();
   const {
     messages, setMessages, isThinking, inputText, setInputText,
-    selectedImage, setSelectedImage, pinnedReminder, setPinnedReminder,
-    flatListRef, handleSend, handleDraftConfirm, handleDraftUpdateConfirm,
+    selectedImage, setSelectedImage,
+    flatListRef, handleSend, handleDraftConfirm,
   } = nova;
 
   const [isExpanded, setIsExpanded] = useState(false);
@@ -317,7 +300,7 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
   const baseBottom = expandAnim.interpolate({ inputRange: [0, 1], outputRange: [FAB_BOTTOM, EXPANDED_PILL_BOTTOM] });
   const pillBottom = Animated.add(baseBottom, keyboardOffset);
   // Reduce absolute spacing from top of screen to prevent notch overlap
-  const listBottom = Animated.add(Animated.add(baseBottom, new Animated.Value(PILL_HEIGHT + (selectedImage ? 90 : 10))), keyboardOffset);
+  const listBottom = Animated.add(Animated.add(baseBottom, new Animated.Value(PILL_HEIGHT + (selectedImage ? 90 : 4))), keyboardOffset);
 
   // Image Picker Logic
   const handlePickImage = async () => {
@@ -408,9 +391,7 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
   };
 
   const handleKeyPress = (e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
-    if (e.nativeEvent.key === 'Backspace' && inputText === '' && pinnedReminder) {
-      setPinnedReminder(null);
-    }
+    // Logic for deleting chips later if needed
   };
 
   const containerWidth = expandAnim.interpolate({ inputRange: [0, 1], outputRange: [FAB_SIZE, PILL_WIDTH] });
@@ -468,11 +449,7 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
                 onDraftConfirm={(msgId) => {
                   const draftField = messages.find(m => m.id === msgId)?.panelFields;
                   if (draftField) {
-                    if (item.panelType === 'draft_update') {
-                      handleDraftUpdateConfirm(msgId, draftField);
-                    } else {
-                      handleDraftConfirm(msgId, draftField);
-                    }
+                    handleDraftConfirm(msgId, draftField);
                   }
                 }}
                 onDraftEdit={(msgId, draft) => {
@@ -484,7 +461,9 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
                   setMessages(prev => prev.filter(m => m.id !== msgId));
                 }}
                 onSelectSearchResult={(r) => {
-                  setPinnedReminder({ id: r.id, title: r.title, tag_id: r.tag_id });
+                  // When we split completely, tapping a search result in the Add flow could open the EditReminderSheet 
+                  // instead of handling it inline. For now, we do nothing or could alert.
+                  Alert.alert("Edit", "Tap the card in the list to edit.");
                 }}
               />
             )}
@@ -553,37 +532,27 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
         {/* Morph to pill with input */}
         <Animated.View style={[styles.pillContent, { opacity: inputOpacity }]} pointerEvents={isExpanded ? 'auto' : 'none'}>
 
-          {/* Only show Add Asset (+) button if there is NO pinned reminder */}
-          {!pinnedReminder && (
-            <TouchableOpacity onPress={handlePickImage} disabled={isThinking} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="add" size={24} color={colors.primary} style={styles.addIcon} />
-            </TouchableOpacity>
-          )}
-
-          <ContextPill
-            reminder={pinnedReminder}
-            onRemove={() => setPinnedReminder(null)}
-            colors={colors}
-            tags={tags}
-          />
+          <TouchableOpacity onPress={handlePickImage} disabled={isThinking} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Ionicons name="add" size={24} color={colors.primary} style={styles.addIcon} />
+          </TouchableOpacity>
 
           <TextInput
             ref={inputRef}
-            style={[styles.textInput, { color: colors.foreground, marginLeft: pinnedReminder ? spacing.xs : 0 }]}
-            placeholder={pinnedReminder ? "Ask to update this..." : "Add a reminder..."}
+            style={[styles.textInput, { color: colors.foreground }]}
+            placeholder="Add a reminder..."
             placeholderTextColor={colors.mutedForeground}
             value={inputText}
             onChangeText={setInputText}
             onKeyPress={handleKeyPress}
             returnKeyType="send"
-            onSubmitEditing={handleSend}
+            onSubmitEditing={() => handleSend()}
             blurOnSubmit={false}
             maxLength={200}
             editable={!isThinking}
           />
 
           {inputText.trim() || selectedImage ? (
-            <TouchableOpacity onPress={handleSend} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <TouchableOpacity onPress={() => handleSend()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <View style={[styles.sendButton, { backgroundColor: colors.primary }]}>
                 <Ionicons name="arrow-up" size={18} color={colors.primaryForeground} />
               </View>
