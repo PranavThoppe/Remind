@@ -10,7 +10,12 @@ import {
   RefreshControl,
   TouchableOpacity,
   ScrollView,
+  TextInput,
+  LayoutAnimation,
+  Keyboard,
+  UIManager,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons'; // Added import
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { startOfDay, isSameDay, isToday, addDays, startOfWeek, endOfWeek, isAfter, isBefore, addWeeks, isTomorrow, subWeeks } from 'date-fns';
 import { ReminderCard } from '../../components/ReminderCard';
@@ -18,6 +23,8 @@ import { DaySection } from '../../components/DaySection';
 import { EmptyState } from '../../components/EmptyState';
 import { FloatingAddButton } from '../../components/FloatingAddButton';
 import { AddReminderSheet } from '../../components/AddReminderSheet';
+import { EditReminderSheet } from '../../components/EditReminderSheet';
+import { CardLayout } from '../../components/ReminderCard';
 import { WeekForecast } from '../../components/WeekForecast';
 import { SortSelector } from '../../components/SortSelector';
 import CalendarView from '../../components/CalendarView';
@@ -28,20 +35,38 @@ import { useSettings } from '../../contexts/SettingsContext';
 import { useTheme } from '../../hooks/useTheme';
 import { AnimatedViewSelector } from '../../components/AnimatedViewSelector';
 
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android') {
+  if (UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
+}
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const styles = createStyles(colors);
 
-  const { reminders, loading, addReminder, toggleComplete, refreshReminders, updateReminder, deleteReminder, hasFetched } = useReminders();
+  const { reminders, loading, addReminder, toggleComplete, refreshReminders, updateReminder, deleteReminder, hasFetched, searchReminders } = useReminders();
   const { tags, priorities, lastViewMode: viewMode, setLastViewMode: setViewMode, lastSortMode: sortMode, setLastSortMode: setSortMode } = useSettings();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  // Search State
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Reminder[]>([]);
+  const [searchAnswer, setSearchAnswer] = useState<string | null>(null);
+  const [isSearchLoading, setIsSearchLoading] = useState(false);
+  const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const searchInputRef = useRef<TextInput>(null);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
+  const [editSourceLayout, setEditSourceLayout] = useState<CardLayout | null>(null);
   const [showRetry, setShowRetry] = useState(false);
   const [recentlyCompletedIds, setRecentlyCompletedIds] = useState<Set<string>>(new Set());
   const [historyWeeks, setHistoryWeeks] = useState(0);
   const flatListRef = useRef<FlatList>(null);
   const [hasInitialScrolled, setHasInitialScrolled] = useState(false);
+  const [isAiChatOpen, setIsAiChatOpen] = useState(false);
 
   // Show retry button if loading takes more than 5 seconds
   useEffect(() => {
@@ -63,6 +88,11 @@ export default function HomeScreen() {
 
   // Show active reminders + recently completed ones + past history
   const activeReminders = useMemo(() => {
+    // If searching and we have a query, use search results ONLY
+    if (isSearching && searchQuery.trim().length > 0) {
+      return searchResults;
+    }
+
     return reminders.filter(r => {
       // Always show incomplete reminders
       if (!r.completed) {
@@ -97,7 +127,7 @@ export default function HomeScreen() {
 
       return false;
     });
-  }, [reminders, recentlyCompletedIds, historyWeeks]);
+  }, [reminders, recentlyCompletedIds, historyWeeks, isSearching, searchQuery, searchResults]);
 
   // Group active reminders by day or tag
   const groupedReminders = useMemo(() => {
@@ -107,6 +137,15 @@ export default function HomeScreen() {
       headerColor?: string;
       date?: Date;
       reminders: Reminder[];
+    }
+
+    if (isSearching && searchQuery.trim().length > 0) {
+      return [{
+        id: 'results',
+        title: 'RESULTS',
+        headerColor: colors.primary,
+        reminders: activeReminders
+      }];
     }
 
     if (sortMode === 'tag') {
@@ -277,7 +316,7 @@ export default function HomeScreen() {
     }
 
     return groups;
-  }, [activeReminders, sortMode, tags, colors.mutedForeground]);
+  }, [activeReminders, sortMode, tags, colors.mutedForeground, isSearching, searchQuery]);
 
   const handleComplete = (id: string) => {
     const reminder = reminders.find(r => r.id === id);
@@ -291,9 +330,16 @@ export default function HomeScreen() {
     }
   };
 
-  const handleEdit = (reminder: Reminder) => {
-    setEditingReminder(reminder);
-    setIsSheetOpen(true);
+  const handleEdit = (reminder: Reminder, layout?: CardLayout) => {
+    if (layout) {
+      // Open the new EditReminderSheet with ghost-clone animation
+      setEditingReminder(reminder);
+      setEditSourceLayout(layout);
+    } else {
+      // Fallback: open the old AddReminderSheet
+      setEditingReminder(reminder);
+      setIsSheetOpen(true);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -316,11 +362,61 @@ export default function HomeScreen() {
     setEditingReminder(null);
   };
 
+  const handleCloseEditSheet = () => {
+    setEditingReminder(null);
+    setEditSourceLayout(null);
+  };
+
   const greeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good morning';
     if (hour < 17) return 'Good afternoon';
     return 'Good evening';
+  };
+
+  const toggleSearch = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    if (isSearching) {
+      // Close search
+      setIsSearching(false);
+      setSearchQuery('');
+      setSearchResults([]);
+      setSearchAnswer(null);
+      Keyboard.dismiss();
+    } else {
+      // Open search
+      setIsSearching(true);
+      setTimeout(() => searchInputRef.current?.focus(), 100);
+    }
+  };
+
+  const handleSearchTextChange = (text: string) => {
+    setSearchQuery(text);
+
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+
+    if (!text.trim()) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setSearchResults([]);
+      setSearchAnswer(null);
+      return;
+    }
+
+    setIsSearchLoading(true);
+    searchDebounceRef.current = setTimeout(async () => {
+      const response = await searchReminders(text);
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+
+      if (response.error) {
+        console.error(response.error);
+      } else {
+        setSearchResults(response.evidence || []);
+        setSearchAnswer(response.answer || null);
+      }
+      setIsSearchLoading(false);
+    }, 600);
   };
 
   // Initial scroll to Today (only if we have history loaded)
@@ -364,21 +460,70 @@ export default function HomeScreen() {
     return `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}`;
   };
 
+  const renderAnswer = () => {
+    if (!isSearching || !searchAnswer) return null;
+    return (
+      <View style={styles.answerContainer}>
+        <View style={styles.answerHeader}>
+          <Ionicons name="sparkles" size={16} color={colors.primary} />
+          <Text style={styles.answerTitle}>AI Answer</Text>
+        </View>
+        <Text style={styles.answerText}>{searchAnswer}</Text>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       {/* Header */}
+      {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
         <View style={styles.headerTop}>
-          <View>
-            <Text style={styles.dateText}>{formatDate()}</Text>
-            <Text style={styles.greeting}>{greeting()}</Text>
-          </View>
+          {isSearching ? (
+            <View style={styles.searchBarContainer}>
+              <Ionicons name="search" size={20} color={colors.mutedForeground} style={styles.searchIcon} />
+              <TextInput
+                ref={searchInputRef}
+                style={styles.searchInput}
+                placeholder="Ask or search reminders..."
+                placeholderTextColor={colors.mutedForeground}
+                value={searchQuery}
+                onChangeText={handleSearchTextChange}
+                returnKeyType="search"
+              />
+              {isSearchLoading ? (
+                <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: spacing.sm }} />
+              ) : (
+                <TouchableOpacity onPress={toggleSearch} style={styles.closeSearchButton}>
+                  <Text style={styles.closeSearchText}>Cancel</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : (
+            <>
+              <View>
+                <Text style={styles.dateText}>{formatDate()}</Text>
+                <Text style={styles.greeting}>{greeting()}</Text>
+              </View>
 
-          {/* View Mode Selector */}
-          <AnimatedViewSelector
-            currentView={viewMode}
-            onViewChange={setViewMode}
-          />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                <TouchableOpacity
+                  onPress={toggleSearch}
+                  style={styles.searchButton}
+                >
+                  <Ionicons name="search" size={24} color={colors.primary} />
+                </TouchableOpacity>
+
+                {/* View Mode Selector */}
+                {!isAiChatOpen && (
+                  <AnimatedViewSelector
+                    currentView={viewMode}
+                    onViewChange={setViewMode}
+                  />
+                )}
+              </View>
+            </>
+          )}
         </View>
       </View>
 
@@ -395,140 +540,169 @@ export default function HomeScreen() {
             </TouchableOpacity>
           )}
         </View>
-      ) : activeReminders.length === 0 ? (
-        <View style={{ flex: 1 }}>
-          <EmptyState type="active" />
-          <FlatList
-            data={[]}
-            renderItem={null}
-            refreshControl={
-              <RefreshControl
-                refreshing={loading}
-                onRefresh={async () => {
-                  await refreshReminders();
-                  setHistoryWeeks(prev => prev + 1);
-                }}
-                colors={[colors.primary]}
-              />
-            }
-          />
-        </View>
-      ) : viewMode === 'week' ? (
-        <ScrollView
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={loading}
-              onRefresh={async () => {
-                await refreshReminders();
-                setHistoryWeeks(prev => prev + 1);
-              }}
-              colors={[colors.primary]}
-            />
-          }
-        >
-          <WeekForecast
-            reminders={activeReminders}
-            onReminderClick={handleEdit}
-            onComplete={handleComplete}
-            onDelete={handleDelete}
-          />
-        </ScrollView>
-      ) : viewMode === 'calendar' ? (
-        <CalendarView />
       ) : (
-        <FlatList
-          ref={flatListRef}
-          data={groupedReminders}
-          keyExtractor={(item) => item.id}
-          maintainVisibleContentPosition={{
-            minIndexForVisible: 0,
-            autoscrollToTopThreshold: 10,
-          }}
-          onScrollToIndexFailed={(info) => {
-            flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
-          }}
-          renderItem={({ item, index: groupIndex }) => {
-            const startIndex = groupedReminders
-              .slice(0, groupIndex)
-              .reduce((acc, g) => acc + g.reminders.length, 0);
-
-            const isAnytime = item.id === 'anytime';
-
-            if (isAnytime && sortMode === 'time') {
-              return (
-                <View style={styles.anytimeSection}>
-                  {groupIndex === 0 && (
-                    <View style={styles.headerRow}>
-                      <SortSelector
-                        currentSort={sortMode}
-                        onSortChange={setSortMode}
-                      />
-                    </View>
-                  )}
-                  <View style={styles.remindersList}>
-                    {item.reminders.map((reminder: Reminder, index: number) => (
-                      <ReminderCard
-                        key={reminder.id}
-                        reminder={reminder}
-                        onComplete={handleComplete}
-                        onEdit={handleEdit}
-                        onDelete={handleDelete}
-                        index={startIndex + index}
-                      />
-                    ))}
+        <>
+          {activeReminders.length === 0 ? (
+            <View style={{ flex: 1 }}>
+              {isSearching ? (
+                <ScrollView contentContainerStyle={styles.emptySearchContainer}>
+                  {renderAnswer()}
+                  <View style={{ alignItems: 'center', marginTop: spacing.xl }}>
+                    <Ionicons name="search-outline" size={48} color={colors.mutedForeground} />
+                    <Text style={styles.emptyText}>No results found</Text>
+                    <Text style={styles.emptySubtext}>Try searching for something else</Text>
                   </View>
-                </View>
-              );
-            }
-
-            return (
-              <DaySection
-                date={(item as any).date}
-                title={(item as any).title}
-                headerColor={(item as any).headerColor}
-                reminders={item.reminders}
-                onComplete={handleComplete}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-                startIndex={startIndex}
-                onSortChange={setSortMode as any}
-                currentSort={sortMode}
-                showSort={
-                  groupIndex === 0
+                </ScrollView>
+              ) : (
+                <EmptyState type="active" />
+              )}
+              <FlatList
+                data={[]} // Keep this for refresh control
+                renderItem={null}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={loading}
+                    onRefresh={async () => {
+                      await refreshReminders();
+                      setHistoryWeeks(prev => prev + 1);
+                    }}
+                    colors={[colors.primary]}
+                  />
                 }
               />
-            );
-          }}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={loading}
-              onRefresh={async () => {
-                await refreshReminders();
-                setHistoryWeeks(prev => prev + 1);
+            </View>
+          ) : viewMode === 'week' ? (
+            <ScrollView
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={loading}
+                  onRefresh={async () => {
+                    await refreshReminders();
+                    setHistoryWeeks(prev => prev + 1);
+                  }}
+                  colors={[colors.primary]}
+                />
+              }
+            >
+              <WeekForecast
+                reminders={activeReminders}
+                onReminderClick={handleEdit}
+                onComplete={handleComplete}
+                onDelete={handleDelete}
+              />
+            </ScrollView>
+          ) : viewMode === 'calendar' ? (
+            <CalendarView onEdit={handleEdit} />
+          ) : (
+            <FlatList
+              ref={flatListRef}
+              ListHeaderComponent={renderAnswer()}
+              data={groupedReminders}
+              keyExtractor={(item) => item.id}
+              maintainVisibleContentPosition={{
+                minIndexForVisible: 0,
+                autoscrollToTopThreshold: 10,
               }}
-              colors={[colors.primary]}
+              onScrollToIndexFailed={(info) => {
+                flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+              }}
+              renderItem={({ item, index: groupIndex }) => {
+                const startIndex = groupedReminders
+                  .slice(0, groupIndex)
+                  .reduce((acc, g) => acc + g.reminders.length, 0);
+
+                const isAnytime = item.id === 'anytime';
+
+                if (isAnytime && sortMode === 'time') {
+                  return (
+                    <View style={styles.anytimeSection}>
+                      {groupIndex === 0 && (
+                        <View style={styles.headerRow}>
+                          <SortSelector
+                            currentSort={sortMode}
+                            onSortChange={setSortMode}
+                          />
+                        </View>
+                      )}
+                      <View style={styles.remindersList}>
+                        {item.reminders.map((reminder: Reminder, index: number) => (
+                          <ReminderCard
+                            key={reminder.id}
+                            reminder={reminder}
+                            onComplete={handleComplete}
+                            onEdit={handleEdit}
+                            onDelete={handleDelete}
+                            index={startIndex + index}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  );
+                }
+
+                return (
+                  <DaySection
+                    date={(item as any).date}
+                    title={(item as any).title}
+                    headerColor={(item as any).headerColor}
+                    reminders={item.reminders}
+                    onComplete={handleComplete}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                    startIndex={startIndex}
+                    onSortChange={setSortMode as any}
+                    currentSort={sortMode}
+                    showSort={
+                      groupIndex === 0
+                    }
+                  />
+                );
+              }}
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={loading}
+                  onRefresh={async () => {
+                    await refreshReminders();
+                    setHistoryWeeks(prev => prev + 1);
+                  }}
+                  colors={[colors.primary]}
+                />
+              }
             />
-          }
-        />
+          )}
+
+          {/* Only show FloatingAddButton if NOT editing a reminder (EditReminderSheet takes over the bottom) */}
+          {!editSourceLayout && !editingReminder && (
+            <FloatingAddButton
+              onExpandedChange={setIsAiChatOpen}
+            />
+          )}
+
+          {/* Add/Edit Sheet (Add only — editing uses EditReminderSheet) */}
+          <AddReminderSheet
+            isOpen={isSheetOpen}
+            onClose={handleCloseSheet}
+            onSave={handleSave}
+          />
+
+          {/* Edit Sheet (ghost-clone animation) */}
+          <EditReminderSheet
+            reminder={editSourceLayout ? editingReminder : null}
+            sourceLayout={editSourceLayout}
+            onClose={handleCloseEditSheet}
+            onSave={handleSave}
+          />
+        </>
       )}
 
-      {/* Floating Add Button */}
-      <FloatingAddButton
-        onPress={() => setIsSheetOpen(true)}
-      />
 
-      {/* Add/Edit Sheet */}
-      <AddReminderSheet
-        isOpen={isSheetOpen}
-        onClose={handleCloseSheet}
-        onSave={handleSave}
-        editReminder={editingReminder}
-      />
-    </View>
+
+      {/* We removed SearchModal usage */}
+    </View >
   );
 }
 
@@ -545,7 +719,7 @@ const createStyles = (colors: any) => StyleSheet.create({
   headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
   },
   dateText: {
     fontFamily: typography.fontFamily.regular,
@@ -601,4 +775,92 @@ const createStyles = (colors: any) => StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.md,
   },
+  searchButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: `${colors.primary}15`,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  searchBarContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: borderRadius.full,
+    paddingHorizontal: spacing.md,
+    height: 44,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    marginTop: spacing.xs,
+  },
+  searchIcon: {
+    marginRight: spacing.xs,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.base,
+    color: colors.foreground,
+    height: '100%',
+  },
+  closeSearchButton: {
+    paddingHorizontal: spacing.sm,
+  },
+  closeSearchText: {
+    fontFamily: typography.fontFamily.medium,
+    color: colors.primary,
+    fontSize: typography.fontSize.sm,
+  },
+
+  answerContainer: {
+    backgroundColor: `${colors.primary}15`,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    marginHorizontal: spacing.md, // Add margin for ListHeaderComponent
+    marginTop: spacing.sm,
+    borderWidth: 1,
+    borderColor: `${colors.primary}30`,
+  },
+  answerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+    gap: spacing.xs,
+  },
+  answerTitle: {
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    color: colors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  answerText: {
+    fontFamily: typography.fontFamily.title,
+    fontSize: typography.fontSize.lg,
+    color: colors.foreground,
+    lineHeight: 20,
+  },
+  emptySearchContainer: {
+    padding: spacing.xl,
+    alignItems: 'stretch',
+  },
+  emptyText: {
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.lg,
+    color: colors.foreground,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.base,
+    color: colors.mutedForeground,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
 });
+

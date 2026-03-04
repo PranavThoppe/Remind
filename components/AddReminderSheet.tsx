@@ -19,7 +19,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { spacing, borderRadius, typography, shadows } from '../constants/theme';
 import { Reminder } from '../types/reminder';
 import { ModalFieldUpdates } from '../types/ai-chat';
-import { scheduleReminderNotification } from '../lib/notifications';
+import { scheduleReminderNotification, cancelReminderNotifications } from '../lib/notifications';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTheme } from '../hooks/useTheme';
 import { ColorPicker } from './ColorPicker';
@@ -354,6 +354,13 @@ export function AddReminderSheet({
 
     // Schedule notification
     if (!error && savedReminder && dateString) {
+      if (editReminder) {
+        console.log('[AddReminderSheet] Cancelling old notification for edited reminder:', editReminder.id);
+        cancelReminderNotifications(editReminder.id).catch(err =>
+          console.error('[AddReminderSheet] Failed to cancel old notification:', err)
+        );
+      }
+
       console.log('[AddReminderSheet] Scheduling notification for saved reminder:', savedReminder.id);
       scheduleReminderNotification(
         title.trim(),
@@ -419,11 +426,7 @@ export function AddReminderSheet({
   if (!isOpen) return null;
   // Shared sheet content used in both default modal mode and inline liveMode.
   const sheetContent = (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={{ flex: 1 }}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-    >
+    <View style={{ flex: 1 }}>
       <View style={styles.sheetContainer}>
         <Animated.View
           style={[
@@ -480,6 +483,7 @@ export function AddReminderSheet({
                   onFocus={() => {
                     setShowDatePicker(false);
                     setShowTimePicker(false);
+                    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
                   }}
                 />
               </Animated.View>
@@ -916,7 +920,7 @@ export function AddReminderSheet({
           </ScrollView>
         </Animated.View>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 
   // In live conversational mode, render inline inside the layout (between chat and input),

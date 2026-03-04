@@ -5,12 +5,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { spacing, typography, borderRadius, shadows } from '../constants/theme';
 import { Reminder } from '../types/reminder';
+import { CardLayout } from './ReminderCard';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTheme } from '../hooks/useTheme';
 
 interface WeekForecastProps {
   reminders: Reminder[];
-  onReminderClick?: (reminder: Reminder) => void;
+  onReminderClick?: (reminder: Reminder, layout?: CardLayout) => void;
   onComplete?: (id: string) => void;
   onDelete?: (id: string) => void;
 }
@@ -121,6 +122,7 @@ export const WeekForecast = ({ reminders, onReminderClick, onComplete, onDelete 
                 {dayReminders.map((reminder) => {
                   const tag = tags.find(t => t.id === reminder.tag_id);
                   const priority = priorities.find(p => p.id === reminder.priority_id);
+                  const itemRef = React.createRef<View>();
                   return (
                     <Swipeable
                       key={reminder.id}
@@ -132,12 +134,17 @@ export const WeekForecast = ({ reminders, onReminderClick, onComplete, onDelete 
                       rightThreshold={30}
                     >
                       <TouchableOpacity
-                        onPress={() => onReminderClick?.(reminder)}
+                        onPress={() => {
+                          itemRef.current?.measureInWindow((x, y, width, height) => {
+                            onReminderClick?.(reminder, { x, y, width, height });
+                          });
+                        }}
                         style={[
                           styles.reminderItem,
                           tag && !reminder.completed && { backgroundColor: `${tag.color}15` }
                         ]}
                         activeOpacity={0.7}
+                        ref={itemRef as any}
                       >
                         {/* Checkbox */}
                         <TouchableOpacity

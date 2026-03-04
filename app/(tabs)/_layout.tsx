@@ -80,16 +80,7 @@ export default function TabLayout() {
         tabBarIndicator: () => null,
         tabBarLabel: () => null,
         tabBarStyle: {
-          backgroundColor: 'transparent',
-          borderTopWidth: 0,
-          elevation: 0,
-          shadowOpacity: 0,
-          height: 40 + insets.bottom,
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 9999,
+          display: 'none',
         },
         tabBarItemStyle: {
           height: 40,
@@ -106,22 +97,6 @@ export default function TabLayout() {
         animationEnabled: true,
       }}
     >
-      <MaterialTopTabs.Screen
-        name="ai-chat"
-        options={{
-          title: 'AI',
-          tabBarIcon: ({ focused }) => {
-            const { profile } = useAuth();
-            const isPro = profile?.pro === true;
-            return (
-              <View style={{ alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 18, backgroundColor: isPro ? colors.primary : colors.gold, ...shadows.soft }}>
-                <Ionicons name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'} size={22} color={isPro ? colors.primaryForeground : colors.goldForeground} />
-              </View>
-            )
-          },
-          tabBarLabel: () => null,
-        }}
-      />
       <MaterialTopTabs.Screen
         name="home"
         options={{

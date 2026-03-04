@@ -15,7 +15,6 @@ import {
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import Purchases from 'react-native-purchases';
 import { supabase } from '../../lib/supabase';
 import { shadows, spacing, borderRadius, typography } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
@@ -73,9 +72,6 @@ const Section = ({ title, children, colors }: { title: string; children: React.R
   );
 };
 
-// Must match the entitlement identifier in the RevenueCat dashboard exactly
-const PRO_ENTITLEMENT_ID = 'AI Reminders';
-
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
@@ -86,8 +82,6 @@ export default function SettingsScreen() {
   const { user, profile, signOut, refreshProfile } = useAuth();
   const { notificationsEnabled, setNotificationsEnabled, theme, setTheme } = useSettings();
   const [showThemeSelector, setShowThemeSelector] = useState(false);
-
-  const isPro = profile?.pro === true;
 
   useEffect(() => {
     Animated.parallel([
@@ -181,17 +175,6 @@ export default function SettingsScreen() {
             />
           </Section>
 
-          {/* Membership Section */}
-          <Section title="Membership" colors={colors}>
-            <SettingItem
-              icon="diamond-outline"
-              label="Pro Subscription"
-              value={isPro ? 'Active' : 'Get Pro'}
-              onPress={() => router.push('/subscription')}
-              isLast
-              colors={colors}
-            />
-          </Section>
 
           {/* App Settings Section */}
           <Section title="App Settings" colors={colors}>
