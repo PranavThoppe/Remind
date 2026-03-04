@@ -98,29 +98,39 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
   const tag = tags.find(t => t.id === reminder.tag_id);
   const priority = priorities.find(p => p.id === reminder.priority_id);
 
-  // Render red background with animated trash icon
-  // Icon opacity increases as user swipes further, indicating deletion on full swipe
+  // Render continuous red background (iOS Classic style)
+  // Ensures the red background fills the space behind the card when sliding
   const renderRightActions = (
     progress: Animated.AnimatedInterpolation<number>,
     dragX: Animated.AnimatedInterpolation<number>
   ) => {
-    // Icon fades in as user swipes (more visible = closer to deletion)
-    const iconOpacity = dragX.interpolate({
-      inputRange: [-100, -50, 0],
-      outputRange: [1, 0.5, 0],
-      extrapolate: 'clamp',
-    });
-
+    // The scale of the icon as we drag
     const iconScale = dragX.interpolate({
       inputRange: [-100, -50, 0],
-      outputRange: [1.2, 0.8, 0.5],
+      outputRange: [1, 0.8, 0.5],
       extrapolate: 'clamp',
     });
 
     return (
-      <View style={styles.deleteBackground}>
-        <Animated.View style={{ opacity: iconOpacity, transform: [{ scale: iconScale }] }}>
-          <Ionicons name="trash-outline" size={28} color="#FFFFFF" />
+      <View
+        style={{
+          width: 100,
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFillObject,
+            {
+              backgroundColor: colors.destructive,
+              left: -500, // Extend background far to the left to handle over-swiping
+              borderRadius: borderRadius.lg, // Match the card's border radius
+            },
+          ]}
+        />
+        <Animated.View style={{ zIndex: 1, transform: [{ scale: iconScale }] }}>
+          <Ionicons name="trash" size={24} color="#FFFFFF" />
         </Animated.View>
       </View>
     );
@@ -131,7 +141,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
       ref={swipeableRef}
       renderRightActions={renderRightActions}
       friction={2}
-      rightThreshold={100}
+      rightThreshold={80} // Threshold matched to container width
       overshootFriction={8}
       onSwipeableWillOpen={(direction) => {
         // Fires when about to fully open - requires deliberate full swipe
@@ -148,6 +158,8 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
           {
             opacity: fadeAnim,
             transform: [{ translateY: slideAnim }],
+            backgroundColor: colors.card, // Ensure container is not see-through
+            borderRadius: borderRadius.lg, // Match the card's border radius
           },
         ]}
       >
@@ -155,7 +167,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
           style={[
             styles.card,
             tag && {
-              backgroundColor: `${tag.color}${isDark ? '15' : '08'}`,
+              backgroundColor: `${tag.color}${isDark ? '15' : '08'}`, // Subtle tint, parent is opaque so it won't bleed
               borderLeftWidth: 1,
               borderLeftColor: tag.color,
               borderRightWidth: 1,
