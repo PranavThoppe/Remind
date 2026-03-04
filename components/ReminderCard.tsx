@@ -28,10 +28,11 @@ interface ReminderCardProps {
   onComplete: (id: string) => void;
   onEdit: (reminder: Reminder, layout?: CardLayout) => void;
   onDelete?: (id: string) => void;
+  onNotificationTap?: (reminder: Reminder) => void;
   index: number;
 }
 
-export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: ReminderCardProps) {
+export function ReminderCard({ reminder, onComplete, onEdit, onDelete, onNotificationTap, index }: ReminderCardProps) {
   const { colors, isDark } = useTheme();
   const styles = createStyles(colors);
 
@@ -248,6 +249,18 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, index }: 
                       {reminder.time ? formatTime(reminder.time) : 'Anytime'}
                     </Text>
                   </View>
+                ) : null}
+                {reminder.notification_offsets && reminder.notification_offsets.length > 0 ? (
+                  <TouchableOpacity
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      onNotificationTap?.(reminder);
+                    }}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    style={styles.metaItem}
+                  >
+                    <Ionicons name="notifications" size={14} color={colors.primary} />
+                  </TouchableOpacity>
                 ) : null}
                 {reminder.date && !isToday(new Date(reminder.date + 'T00:00:00')) && !isTomorrow(new Date(reminder.date + 'T00:00:00')) ? (
                   <View style={styles.metaItem}>

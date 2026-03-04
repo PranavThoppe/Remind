@@ -8,7 +8,7 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   // Inline panel support
-  panelType?: 'create' | 'edit' | 'search' | 'draft' | 'draft_update' | 'reminder_list';
+  panelType?: 'create' | 'edit' | 'search' | 'draft' | 'draft_update' | 'reminder_list' | 'notification_settings';
   panelFields?: ModalFieldUpdates;
   panelSearchResults?: Reminder[];
   panelReminderId?: string; // For editing
@@ -27,6 +27,7 @@ export interface ModalFieldUpdates {
   repeat?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
   repeat_until?: string | null;
   notes?: string | null;
+  notification_offsets?: number[];
 }
 
 export interface MockAIResponse {

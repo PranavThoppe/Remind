@@ -8,10 +8,11 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useReminders } from './useReminders';
 
 export interface UseNovaUpdateChatOptions {
-    initialPinnedReminder: Reminder | null;
+    initialPinnedReminder?: Reminder | null;
 }
 
-export function useNovaUpdateChat({ initialPinnedReminder }: UseNovaUpdateChatOptions) {
+export function useNovaUpdateChat(options: UseNovaUpdateChatOptions = {}) {
+    const { initialPinnedReminder } = options;
     const { user } = useAuth();
     const { tags, priorities } = useSettings();
     const { updateReminder, deleteReminder } = useReminders();
@@ -19,7 +20,7 @@ export function useNovaUpdateChat({ initialPinnedReminder }: UseNovaUpdateChatOp
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isThinking, setIsThinking] = useState(false);
     const [inputText, setInputText] = useState('');
-    const [pinnedReminder, setPinnedReminder] = useState<Reminder | null>(initialPinnedReminder);
+    const [pinnedReminder, setPinnedReminder] = useState<Reminder | null>(initialPinnedReminder || null);
 
     // Explicit suggestion states
     const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -131,6 +132,25 @@ export function useNovaUpdateChat({ initialPinnedReminder }: UseNovaUpdateChatOp
                     content: response.message || toolResult.message || "Reminder deleted successfully!",
                     timestamp: new Date(),
                 }]);
+            } else if (toolName === 'update_notification_offsets') {
+                const offsets = toolResult.offsets || [];
+                const sheetDraft = {
+                    notification_offsets: offsets,
+                    title: pinnedReminder.title,
+                    date: pinnedReminder.date,
+                    time: pinnedReminder.time,
+                    repeat: pinnedReminder.repeat,
+                    repeat_until: pinnedReminder.repeat_until,
+                    tag_id: pinnedReminder.tag_id,
+                    priority_id: pinnedReminder.priority_id,
+                    notes: pinnedReminder.notes,
+                };
+
+                setMessages(prev => [...prev, {
+                    id: Date.now().toString(), role: 'assistant',
+                    content: response.message || toolResult.message || "I've drafted the notification update.",
+                    timestamp: new Date(), panelType: 'notification_settings', panelFields: sheetDraft,
+                }]);
             } else {
                 setMessages(prev => [...prev, {
                     id: Date.now().toString(), role: 'assistant',
@@ -173,7 +193,8 @@ export function useNovaUpdateChat({ initialPinnedReminder }: UseNovaUpdateChatOp
         if (fields.repeat_until) updates.repeat_until = fields.repeat_until;
         if (undefined !== fields.tag_id) updates.tag_id = fields.tag_id;
         if (undefined !== fields.priority_id) updates.priority_id = fields.priority_id;
-        if (undefined !== fields.notes) updates.notes = fields.notes;
+        if (fields.notes !== undefined) updates.notes = fields.notes;
+        if (fields.notification_offsets !== undefined) updates.notification_offsets = fields.notification_offsets;
 
         const result = await updateReminder(pinnedReminder.id, updates);
 
@@ -183,12 +204,48 @@ export function useNovaUpdateChat({ initialPinnedReminder }: UseNovaUpdateChatOp
         }
     }, [pinnedReminder, updateReminder]);
 
+    const handleDraftDiscard = useCallback((messageId: string) => {
+        // Find the message being discarded
+        const discardedMsg = messages.find(m => m.id === messageId);
+        const isNotification = discardedMsg?.panelType === 'notification_settings';
+
+        setMessages(prev => prev.filter(m => m.id !== messageId));
+
+        // If it was a notification setting that got discarded, push fallback response with delay
+        if (isNotification) {
+            setIsThinking(true);
+            setTimeout(() => {
+                setMessages(prev => [...prev, {
+                    id: Date.now().toString(),
+                    role: 'assistant',
+                    content: "Anything else?",
+                    timestamp: new Date(),
+                }]);
+                setSuggestions(["Update title", "Change time", "Done"]);
+                setIsThinking(false);
+            }, 1000);
+        }
+    }, [messages]);
+
     const reset = useCallback(() => {
         setInputText('');
         setMessages([]);
         setSuggestions([]);
         setIsGeneratingSuggestions(false);
     }, []);
+
+    const pushNotificationSettings = useCallback(() => {
+        if (!pinnedReminder) return;
+        // Overwrite standard chat so the modal appears directly at the top under the card
+        setMessages([{
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: "Please select a time:",
+            timestamp: new Date(),
+            panelType: 'notification_settings',
+            panelFields: { notification_offsets: pinnedReminder.notification_offsets || [] }
+        }]);
+    }, [pinnedReminder]);
 
     return {
         messages, setMessages,
@@ -199,6 +256,8 @@ export function useNovaUpdateChat({ initialPinnedReminder }: UseNovaUpdateChatOp
         flatListRef,
         handleSend,
         handleDraftUpdateConfirm,
+        handleDraftDiscard,
+        pushNotificationSettings,
         reset,
     };
 }

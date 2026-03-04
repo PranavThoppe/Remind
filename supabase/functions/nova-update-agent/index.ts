@@ -91,6 +91,25 @@ const updateReminderTool = {
     }
 }
 
+const updateNotificationOffsetsTool = {
+    name: "update_notification_offsets",
+    description: "Sets custom notification alerts for a reminder. Use this when the user asks to be reminded before the core reminder time.",
+    inputSchema: {
+        json: {
+            type: "object",
+            properties: {
+                reminder_id: { type: "string" },
+                offsets: {
+                    type: "array",
+                    items: { type: "number" },
+                    description: "Array of minutes before the reminder time to trigger a notification (e.g., [10] for 10 mins before, [60] for 1 hour before, [1440] for 1 day before). Pass empty array [] to clear notifications."
+                }
+            },
+            required: ["reminder_id", "offsets"]
+        }
+    }
+}
+
 const searchRemindersTool = {
     name: "search_reminders",
     description: "Search existing reminders, mainly for conflict detection when rescheduling. E.g. check if another reminder already exists at the new time.",
@@ -467,6 +486,7 @@ serve(async (req) => {
         const tools = [
             { toolSpec: draftUpdateReminderTool },
             { toolSpec: updateReminderTool },
+            { toolSpec: updateNotificationOffsetsTool },
             { toolSpec: searchRemindersTool },
             { toolSpec: saveContextTool }
         ]
@@ -569,6 +589,12 @@ BEHAVIOUR:
                         toolResult = handleDraftUpdateReminder(toolInput, pinnedReminder, userTags, userPriorities)
                     } else if (toolName === "update_reminder") {
                         toolResult = await handleUpdateReminder(toolInput, userId, supabaseClient, pinnedReminder, userTags, userPriorities)
+                    } else if (toolName === "update_notification_offsets") {
+                        toolResult = {
+                            success: true,
+                            offsets: toolInput.offsets,
+                            message: "I've drafted the notification change. You can review it above."
+                        }
                     } else if (toolName === "search_reminders") {
                         toolResult = await handleSearchReminders(toolInput, userId, ADMIN_SECRET_KEY, SUPABASE_URL, supabaseClient)
                     } else if (toolName === "save_context") {

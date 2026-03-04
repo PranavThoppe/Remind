@@ -29,6 +29,7 @@ import { useVoiceDictation } from '../hooks/useVoiceDictation';
 import { Reminder } from '../types/reminder';
 import { ReminderCard, CardLayout } from './ReminderCard';
 import { SuggestionChips } from './SuggestionChips';
+import { InlineNotificationPicker } from './InlineNotificationPicker';
 import { ModalFieldUpdates, ChatMessage } from '../types/ai-chat';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -79,12 +80,14 @@ function MessageBubble({
     message,
     colors,
     tags,
+    reminder,
     onDraftConfirm,
     onDraftDiscard,
 }: {
     message: ChatMessage;
     colors: any;
     tags: any[];
+    reminder?: Reminder | null;
     onDraftConfirm?: (messageId: string, draft: ModalFieldUpdates) => void;
     onDraftDiscard?: (messageId: string) => void;
 }) {
@@ -132,6 +135,7 @@ function MessageBubble({
                         onComplete={isStatic ? () => { } : () => onDraftConfirm?.(message.id, message.panelFields!)}
                         onEdit={isStatic ? () => { } : () => { }}
                         onDelete={isStatic ? undefined : () => onDraftDiscard?.(message.id)}
+                    /* We don't allow opening notification sheet from a drafted message bubble for now, they use the ghost card */
                     />
 
                     {!isStatic && (
@@ -139,6 +143,33 @@ function MessageBubble({
                             Tap check to update • Swipe to discard
                         </Text>
                     )}
+                </View>
+            </View>
+        );
+    }
+
+    if (message.panelType === 'notification_settings') {
+        const isStatic = message.panelIsStatic;
+        return (
+            <View style={[localStyles.messageContainer]}>
+                <View style={{ width: '100%', maxWidth: 340 }}>
+                    <InlineNotificationPicker
+                        initialOffsets={message.panelFields?.notification_offsets || []}
+                        baseTime={reminder?.time}
+                        onConfirm={(offsets) => {
+                            if (!isStatic) {
+                                // Instantly auto-save so the ghost card updates and shows the bell icon
+                                onDraftConfirm?.(message.id, { notification_offsets: offsets });
+                            }
+                        }}
+                        onCancel={() => {
+                            if (!isStatic) {
+                                // If they explicitly close the tool, clear the notifications
+                                onDraftConfirm?.(message.id, { notification_offsets: [] });
+                                onDraftDiscard?.(message.id);
+                            }
+                        }}
+                    />
                 </View>
             </View>
         );
@@ -375,6 +406,9 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
     const handleOverlayPress = () => {
         if (isKeyboardVisible) {
             Keyboard.dismiss();
+        } else if (messages.some(m => m.panelType === 'notification_settings')) {
+            // If the user tapped the overlay while notification setting is open, close and save the sheet
+            handleClose();
         } else if (messages.length > 0) {
             // Clear chat and move card back to middle — don't close the sheet
             nova.reset();
@@ -471,6 +505,9 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
                     index={0}
                     onComplete={() => { }}
                     onEdit={() => { }}
+                    onNotificationTap={() => {
+                        nova.pushNotificationSettings();
+                    }}
                 />
             </Animated.View>
 
@@ -542,9 +579,11 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
                             onLongPress={() => setEditTagId(null)}
                         >
                             <Ionicons name="pricetag-outline" size={14} color={tag ? tag.color : colors.mutedForeground} />
-                            <Text style={[localStyles.chipText, { color: tag ? tag.color : colors.mutedForeground }]}>
-                                {tag ? tag.name : 'No tag'}
-                            </Text>
+                            {tag && (
+                                <Text style={[localStyles.chipText, { color: tag.color }]}>
+                                    {tag.name}
+                                </Text>
+                            )}
                         </TouchableOpacity>
 
                         {/* Priority Chip */}
@@ -567,9 +606,37 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
                             onLongPress={() => setEditPriorityId(null)}
                         >
                             <Ionicons name="flag-outline" size={14} color={priority ? priority.color : colors.mutedForeground} />
-                            <Text style={[localStyles.chipText, { color: priority ? priority.color : colors.mutedForeground }]}>
-                                {priority ? priority.name : 'No priority'}
-                            </Text>
+                            {priority && (
+                                <Text style={[localStyles.chipText, { color: priority.color }]}>
+                                    {priority.name}
+                                </Text>
+                            )}
+                        </TouchableOpacity>
+
+
+                        <TouchableOpacity
+                            style={[
+                                localStyles.chip,
+                                {
+                                    backgroundColor: (reminder?.notification_offsets && reminder.notification_offsets.length > 0) ? `${colors.primary}20` : colors.card,
+                                    borderColor: (reminder?.notification_offsets && reminder.notification_offsets.length > 0) ? colors.primary : colors.border,
+                                },
+                            ]}
+                            onPress={() => {
+                                Keyboard.dismiss();
+                                nova.pushNotificationSettings();
+                            }}
+                        >
+                            <Ionicons
+                                name={(reminder?.notification_offsets && reminder.notification_offsets.length > 0) ? "notifications" : "notifications-outline"}
+                                size={14}
+                                color={(reminder?.notification_offsets && reminder.notification_offsets.length > 0) ? colors.primary : colors.mutedForeground}
+                            />
+                            {(reminder?.notification_offsets && reminder.notification_offsets.length > 0) && (
+                                <Text style={[localStyles.chipText, { color: colors.primary }]}>
+                                    Notification
+                                </Text>
+                            )}
                         </TouchableOpacity>
 
                         {/* Save Button */}
@@ -634,20 +701,23 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
                         ref={flatListRef}
                         data={messages}
                         keyExtractor={item => item.id}
-                        style={{ flexGrow: 1 }}
+                        style={{ flexShrink: 1, flexGrow: 0 }}
                         renderItem={({ item }) => (
                             <MessageBubble
                                 message={item}
                                 colors={colors}
                                 tags={tags}
-                                onDraftConfirm={(msgId) => {
-                                    const draftField = messages.find(m => m.id === msgId)?.panelFields;
-                                    if (draftField) {
-                                        handleDraftUpdateConfirm(msgId, draftField);
+                                reminder={reminder}
+                                onDraftConfirm={(msgId, draftFields) => {
+                                    // Make sure we pass the fields through properly (handleDraftConfirm expects msgId, fields)
+                                    // Since we updated the signature of onDraftConfirm, we should use the new draftFields if provided.
+                                    const fieldsToUse = draftFields || messages.find(m => m.id === msgId)?.panelFields;
+                                    if (fieldsToUse) {
+                                        nova.handleDraftUpdateConfirm(msgId, fieldsToUse);
                                     }
                                 }}
                                 onDraftDiscard={(msgId) => {
-                                    nova.setMessages(prev => prev.filter(m => m.id !== msgId));
+                                    nova.handleDraftDiscard(msgId);
                                 }}
                             />
                         )}

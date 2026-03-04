@@ -11,6 +11,7 @@ export interface Reminder {
   tag_id?: string | null; // Allow null for removing tags
   priority_id?: string | null; // Allow null for removing priority
   notes?: string | null;
+  notification_offsets?: number[];
 }
 
 export interface Profile {
