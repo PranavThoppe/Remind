@@ -13,6 +13,15 @@ export function useVoiceDictation(onTranscriptReceived: (text: string) => void) 
         return () => {
             if (recordingRef.current) {
                 recordingRef.current.stopAndUnloadAsync().catch(() => { });
+                Audio.setAudioModeAsync({
+                    allowsRecordingIOS: false,
+                    playsInSilentModeIOS: false,
+                    staysActiveInBackground: false,
+                    interruptionModeIOS: 0, // InterruptionModeIOS.MixWithOthers
+                    shouldDuckAndroid: false,
+                    playThroughEarpieceAndroid: false,
+                    interruptionModeAndroid: 1, // InterruptionModeAndroid.DoNotMix
+                }).catch(() => { });
             }
         };
     }, []);
@@ -60,6 +69,17 @@ export function useVoiceDictation(onTranscriptReceived: (text: string) => void) 
 
         try {
             await recordingRef.current.stopAndUnloadAsync();
+
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: false,
+                playsInSilentModeIOS: false,
+                staysActiveInBackground: false,
+                interruptionModeIOS: 0, // InterruptionModeIOS.MixWithOthers
+                shouldDuckAndroid: false,
+                playThroughEarpieceAndroid: false,
+                interruptionModeAndroid: 1, // InterruptionModeAndroid.DoNotMix
+            });
+
             const uri = recordingRef.current.getURI();
             recordingRef.current = null;
 
