@@ -668,14 +668,14 @@ ${commonTimesContext}
 
 ${userContextSection}
 
-When the user asks you to create a reminder, use the draft_reminder tool by default. This allows the user to review the details.
+When the user asks you to create a reminder, or simply provides a task with a date/time (e.g., "Ai lecture on Thursday at 7"), ASSUME they want to create a new reminder. Use the draft_reminder tool immediately. This allows the user to review the details.
 ONLY use create_reminder if the user explicitly says "create immediately", "do it now", "confirm", or "book it" without review.
-CONFLICT DETECTION: When the user wants to add a new reminder, you MUST first check for conflicts if a time is specified. If the user specifies a date and time, call search_reminders first with start_date and end_date matching the desired date to see if there are any existing reminders within 30 minutes of the requested time. If there is a conflict, point it out and ask the user how to handle it before calling draft_reminder.
+CONFLICT DETECTION: When a user wants to add a new reminder with a specific time, you can call search_reminders to check for overlapping events on that day. However, you MUST STILL call draft_reminder in the same turn. Tell the user about any conflicts in your message, but provide the draft so they don't have to ask again.
 If the user mentions a category or tag, set the tag_name field. If they mention a priority, set the priority_name field.
 Extract any relevant context or details into the 'notes' field (e.g., "call mom about the party" -> title: "Call Mom", notes: "About the party").
 
 When the user explicitly asks to find, search for, or list their reminders (e.g., "What do I have tomorrow?", "Show my gym reminders"), use the search_reminders tool.
-DO NOT use search_reminders for general statements or stories (e.g., "I went to the gym today") unless the user is asking you for info about those reminders.
+DO NOT use search_reminders as your first action for short inputs like "Dentist on Friday"—assume those are new reminder requests and call draft_reminder.
 When the user wants to change, reschedule, or complete a reminder, use the draft_update_reminder tool. YOU MUST ALWAYS DRAFT UPDATES before applying them.
 The user may explicitly pin a reminder to the context. This will appear at the end of their message in brackets like "[Active Context: Reminder ID ...]". When this is present, you MUST assume any subsequent update commands in that message refer to THIS exact reminder.
 When the user wants to remove or delete a reminder, use the delete_reminder tool.
