@@ -220,3 +220,45 @@ export async function callNovaSuggest(
         return []; // Fail silently and return empty
     }
 }
+
+/**
+ * Calls the nova-transcribe edge function to get speech-to-text.
+ */
+export async function callNovaTranscribe(audioUri: string): Promise<string> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+    try {
+        console.log(`[Nova Client] Sending request to: ${SUPABASE_URL}/functions/v1/nova-transcribe`);
+        const formData = new FormData();
+        formData.append('file', {
+            uri: audioUri,
+            name: 'audio.m4a',
+            type: 'audio/m4a',
+        } as any);
+
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/nova-transcribe`, {
+            method: 'POST',
+            headers: {
+                'apikey': ANON_KEY,
+                'Authorization': `Bearer ${ANON_KEY}`,
+            },
+            body: formData,
+            signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+
+        const data = await response.json();
+        return data.text || '';
+    } catch (error: any) {
+        clearTimeout(timeoutId);
+        console.error('[Nova Client] Transcribe error:', error);
+        throw error;
+    }
+}

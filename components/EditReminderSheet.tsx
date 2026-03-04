@@ -25,6 +25,7 @@ import { shadows, spacing, typography, borderRadius } from '../constants/theme';
 import { useTheme } from '../hooks/useTheme';
 import { useSettings } from '../contexts/SettingsContext';
 import { useNovaUpdateChat } from '../hooks/useNovaUpdateChat';
+import { useVoiceDictation } from '../hooks/useVoiceDictation';
 import { Reminder } from '../types/reminder';
 import { ReminderCard, CardLayout } from './ReminderCard';
 import { SuggestionChips } from './SuggestionChips';
@@ -216,6 +217,11 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
         suggestions, isGeneratingSuggestions,
         flatListRef, handleSend, handleDraftUpdateConfirm,
     } = nova;
+
+    const handleTranscript = (text: string) => {
+        setInputText(prev => (prev ? prev + ' ' + text : text));
+    };
+    const { isRecording, isTranscribing, toggleDictation } = useVoiceDictation(handleTranscript);
 
     const inputRef = useRef<TextInput>(null);
 
@@ -708,15 +714,17 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
                     editable={!isThinking}
                 />
 
-                {inputText.trim() ? (
+                {isTranscribing ? (
+                    <Ionicons name="ellipsis-horizontal" size={22} color={colors.mutedForeground} />
+                ) : inputText.trim() ? (
                     <TouchableOpacity onPress={() => handleSend()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                         <View style={[localStyles.sendButton, { backgroundColor: colors.primary }]}>
                             <Ionicons name="arrow-up" size={18} color={colors.primaryForeground} />
                         </View>
                     </TouchableOpacity>
                 ) : (
-                    <TouchableOpacity onPress={() => Alert.alert("Coming Soon", "Voice dictation is under development!")} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                        <Ionicons name="mic" size={22} color={colors.mutedForeground} />
+                    <TouchableOpacity onPress={toggleDictation} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                        <Ionicons name={isRecording ? "stop-circle" : "mic"} size={24} color={isRecording ? 'red' : colors.mutedForeground} />
                     </TouchableOpacity>
                 )}
             </Animated.View>

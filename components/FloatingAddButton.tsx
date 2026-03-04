@@ -27,6 +27,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useReminders } from '../hooks/useReminders';
 import { useNovaAddChat } from '../hooks/useNovaAddChat';
+import { useVoiceDictation } from '../hooks/useVoiceDictation';
 import { ChatMessage, ModalFieldUpdates } from '../types/ai-chat';
 import { Reminder } from '../types/reminder';
 import { ReminderCard } from './ReminderCard';
@@ -282,6 +283,11 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
     selectedImage, setSelectedImage,
     flatListRef, handleSend, handleDraftConfirm,
   } = nova;
+
+  const handleTranscript = (text: string) => {
+    setInputText(prev => (prev ? prev + ' ' + text : text));
+  };
+  const { isRecording, isTranscribing, toggleDictation } = useVoiceDictation(handleTranscript);
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -551,15 +557,17 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
             editable={!isThinking}
           />
 
-          {inputText.trim() || selectedImage ? (
+          {isTranscribing ? (
+            <Ionicons name="ellipsis-horizontal" size={22} color={colors.mutedForeground} />
+          ) : inputText.trim() || selectedImage ? (
             <TouchableOpacity onPress={() => handleSend()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <View style={[styles.sendButton, { backgroundColor: colors.primary }]}>
                 <Ionicons name="arrow-up" size={18} color={colors.primaryForeground} />
               </View>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity onPress={() => Alert.alert("Coming Soon", "Voice dictation is under development!")} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="mic" size={22} color={colors.mutedForeground} />
+            <TouchableOpacity onPress={toggleDictation} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name={isRecording ? "stop-circle" : "mic"} size={24} color={isRecording ? 'red' : colors.mutedForeground} />
             </TouchableOpacity>
           )}
         </Animated.View>
