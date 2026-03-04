@@ -110,8 +110,8 @@ export function useNovaUpdateChat({ initialPinnedReminder }: UseNovaUpdateChatOp
                     date: draft.date !== undefined ? draft.date : pinnedReminder.date,
                     time: draft.time !== undefined ? draft.time : (pinnedReminder.time || null),
                     repeat: draft.repeat !== undefined ? draft.repeat : (pinnedReminder.repeat || 'none'),
-                    tag_id: draft.tag_name ? tags.find(t => t.name.toLowerCase() === draft.tag_name.toLowerCase())?.id : pinnedReminder.tag_id,
-                    priority_id: draft.priority_name ? priorities.find(p => p.name.toLowerCase() === draft.priority_name.toLowerCase())?.id : pinnedReminder.priority_id,
+                    tag_id: draft.tag_name !== undefined ? (draft.tag_name === "" ? null : tags.find(t => t.name.toLowerCase() === draft.tag_name.toLowerCase())?.id || pinnedReminder.tag_id) : pinnedReminder.tag_id,
+                    priority_id: draft.priority_name !== undefined ? (draft.priority_name === "" ? null : priorities.find(p => p.name.toLowerCase() === draft.priority_name.toLowerCase())?.id || pinnedReminder.priority_id) : pinnedReminder.priority_id,
                     notes: draft.notes !== undefined ? draft.notes : (pinnedReminder.notes || null),
                 };
 

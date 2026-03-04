@@ -56,11 +56,11 @@ const draftUpdateReminderTool = {
                 },
                 tag_name: {
                     type: "string",
-                    description: "New tag name. Must match one of the user's available tags."
+                    description: "New tag name. Must match one of the user's available tags. Pass empty string to remove the tag."
                 },
                 priority_name: {
                     type: "string",
-                    description: "New priority name. Must match one of the user's available priorities."
+                    description: "New priority name. Must match one of the user's available priorities. Pass empty string to remove."
                 }
             },
             required: ["reminder_id"]
@@ -126,8 +126,42 @@ const saveContextTool = {
 // TOOL HANDLERS
 // ============================================================
 
-function handleDraftUpdateReminder(toolInput: any) {
-    console.log('[Nova Update Agent] draft_update_reminder:', JSON.stringify(toolInput, null, 2))
+function handleDraftUpdateReminder(toolInput: any, pinnedReminder: any, userTags: any[], userPriorities: any[]) {
+    const currentTagName = pinnedReminder.tag_id
+        ? userTags.find((t: any) => t.id === pinnedReminder.tag_id)?.name
+        : null;
+    const currentPriorityName = pinnedReminder.priority_id
+        ? userPriorities.find((p: any) => p.id === pinnedReminder.priority_id)?.name
+        : null;
+
+    const originalReminder = {
+        ...pinnedReminder,
+        tag_name: currentTagName,
+        priority_name: currentPriorityName
+    };
+
+    const proposedDraft = {
+        title: toolInput.title !== undefined ? toolInput.title : pinnedReminder.title,
+        date: toolInput.date !== undefined ? toolInput.date : pinnedReminder.date,
+        time: toolInput.time !== undefined ? toolInput.time : pinnedReminder.time,
+        repeat: toolInput.repeat !== undefined ? toolInput.repeat : pinnedReminder.repeat,
+        repeat_until: toolInput.repeat_until !== undefined ? toolInput.repeat_until : pinnedReminder.repeat_until,
+        completed: toolInput.completed !== undefined ? toolInput.completed : pinnedReminder.completed,
+        notes: toolInput.notes !== undefined ? toolInput.notes : pinnedReminder.notes,
+        tag_name: toolInput.tag_name !== undefined ? (toolInput.tag_name === "" ? null : toolInput.tag_name) : currentTagName,
+        priority_name: toolInput.priority_name !== undefined ? (toolInput.priority_name === "" ? null : toolInput.priority_name) : currentPriorityName
+    };
+
+    console.log('\n=========================================');
+    console.log('[Nova Update Agent] draft_update_reminder');
+    console.log('--- BEFORE (Original State) ---');
+    console.log(JSON.stringify(originalReminder, null, 2));
+    console.log('--- APPLIED DIFF ---');
+    console.log(JSON.stringify(toolInput, null, 2));
+    console.log('--- AFTER (Proposed Draft) ---');
+    console.log(JSON.stringify(proposedDraft, null, 2));
+    console.log('=========================================\n');
+
     return {
         success: true,
         draft: { ...toolInput, is_draft: true },
@@ -135,24 +169,71 @@ function handleDraftUpdateReminder(toolInput: any) {
     }
 }
 
-async function handleUpdateReminder(toolInput: any, userId: string, supabase: any) {
-    console.log('[Nova Update Agent DB] update_reminder:', JSON.stringify(toolInput, null, 2))
+async function handleUpdateReminder(toolInput: any, userId: string, supabase: any, pinnedReminder: any, userTags: any[], userPriorities: any[]) {
+    const currentTagName = pinnedReminder.tag_id
+        ? userTags.find((t: any) => t.id === pinnedReminder.tag_id)?.name
+        : null;
+    const currentPriorityName = pinnedReminder.priority_id
+        ? userPriorities.find((p: any) => p.id === pinnedReminder.priority_id)?.name
+        : null;
 
-    let tagId: string | null = null
-    if (toolInput.tag_name) {
-        const { data: tagData } = await supabase
-            .from('tags').select('id').eq('user_id', userId)
-            .ilike('name', toolInput.tag_name).limit(1).single()
-        tagId = tagData?.id || null
+    const originalReminder = {
+        ...pinnedReminder,
+        tag_name: currentTagName,
+        priority_name: currentPriorityName
+    };
+
+    let tagId: string | null | undefined = undefined
+    let newTagName: string | null = currentTagName;
+    if (toolInput.tag_name !== undefined) {
+        if (toolInput.tag_name === "") {
+            tagId = null
+            newTagName = null;
+        } else {
+            const { data: tagData } = await supabase
+                .from('tags').select('id').eq('user_id', userId)
+                .ilike('name', toolInput.tag_name).limit(1).single()
+            tagId = tagData?.id || null
+            newTagName = toolInput.tag_name;
+        }
     }
 
-    let priorityId: string | null = null
-    if (toolInput.priority_name) {
-        const { data: priorityData } = await supabase
-            .from('priorities').select('id').eq('user_id', userId)
-            .ilike('name', toolInput.priority_name).limit(1).single()
-        priorityId = priorityData?.id || null
+    let priorityId: string | null | undefined = undefined
+    let newPriorityName: string | null = currentPriorityName;
+    if (toolInput.priority_name !== undefined) {
+        if (toolInput.priority_name === "") {
+            priorityId = null
+            newPriorityName = null;
+        } else {
+            const { data: priorityData } = await supabase
+                .from('priorities').select('id').eq('user_id', userId)
+                .ilike('name', toolInput.priority_name).limit(1).single()
+            priorityId = priorityData?.id || null
+            newPriorityName = toolInput.priority_name;
+        }
     }
+
+    const proposedDraft = {
+        title: toolInput.title !== undefined ? toolInput.title : pinnedReminder.title,
+        date: toolInput.date !== undefined ? toolInput.date : pinnedReminder.date,
+        time: toolInput.time !== undefined ? toolInput.time : pinnedReminder.time,
+        repeat: toolInput.repeat !== undefined ? toolInput.repeat : pinnedReminder.repeat,
+        repeat_until: toolInput.repeat_until !== undefined ? toolInput.repeat_until : pinnedReminder.repeat_until,
+        completed: toolInput.completed !== undefined ? toolInput.completed : pinnedReminder.completed,
+        notes: toolInput.notes !== undefined ? toolInput.notes : pinnedReminder.notes,
+        tag_name: newTagName,
+        priority_name: newPriorityName
+    };
+
+    console.log('\n=========================================');
+    console.log('[Nova Update Agent DB] update_reminder (IMMEDIATE)');
+    console.log('--- BEFORE (Original State) ---');
+    console.log(JSON.stringify(originalReminder, null, 2));
+    console.log('--- APPLIED DIFF ---');
+    console.log(JSON.stringify(toolInput, null, 2));
+    console.log('--- AFTER (Saved State) ---');
+    console.log(JSON.stringify(proposedDraft, null, 2));
+    console.log('=========================================\n');
 
     const updates: any = {}
     if (toolInput.title !== undefined) updates.title = toolInput.title
@@ -162,8 +243,8 @@ async function handleUpdateReminder(toolInput: any, userId: string, supabase: an
     if (toolInput.repeat_until !== undefined) updates.repeat_until = toolInput.repeat_until
     if (toolInput.completed !== undefined) updates.completed = toolInput.completed
     if (toolInput.notes !== undefined) updates.notes = toolInput.notes
-    if (tagId !== null) updates.tag_id = tagId
-    if (priorityId !== null) updates.priority_id = priorityId
+    if (tagId !== undefined) updates.tag_id = tagId
+    if (priorityId !== undefined) updates.priority_id = priorityId
 
     const { data, error } = await supabase
         .from('reminders')
@@ -485,9 +566,9 @@ BEHAVIOUR:
 
                     let toolResult: any
                     if (toolName === "draft_update_reminder") {
-                        toolResult = handleDraftUpdateReminder(toolInput)
+                        toolResult = handleDraftUpdateReminder(toolInput, pinnedReminder, userTags, userPriorities)
                     } else if (toolName === "update_reminder") {
-                        toolResult = await handleUpdateReminder(toolInput, userId, supabaseClient)
+                        toolResult = await handleUpdateReminder(toolInput, userId, supabaseClient, pinnedReminder, userTags, userPriorities)
                     } else if (toolName === "search_reminders") {
                         toolResult = await handleSearchReminders(toolInput, userId, ADMIN_SECRET_KEY, SUPABASE_URL, supabaseClient)
                     } else if (toolName === "save_context") {
