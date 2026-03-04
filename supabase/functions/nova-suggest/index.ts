@@ -69,6 +69,56 @@ serve(async (req) => {
             credentials: { accessKeyId: AWS_ACCESS_KEY_ID, secretAccessKey: AWS_SECRET_ACCESS_KEY }
         })
 
+        // ── Constraint Satisfaction (Forward Checking) ──────────────────────
+        const allCapabilities = [
+            {
+                id: "time",
+                condition: (r: any) => !r.time, // Only suggest time if none exists
+                text: "- Setting a specific time (e.g., \"Set time for 5 PM\", \"Remind me tomorrow morning\")"
+            },
+            {
+                id: "date",
+                condition: (r: any) => !r.date, // Only suggest date if none exists
+                text: "- Adding a specific date or deadline (e.g., \"Schedule for next Friday\")"
+            },
+            {
+                id: "repeat",
+                condition: (r: any) => !r.repeat || r.repeat === 'none', // Only if not already repeating
+                text: "- Setting complex repeating schedules (e.g., \"Make this repeat on the 1st of every month\", \"Repeat every other Friday\")"
+            },
+            {
+                id: "priority",
+                condition: (r: any) => r.priority !== 'high', // Only if not high priority
+                text: "- Marking as high priority (e.g., \"Mark as high priority\")"
+            },
+            {
+                id: "checklist",
+                condition: () => true, // Always available
+                text: "- Creating checklists or subtasks (e.g., \"Create a grocery list\", \"Draft a party checklist\", \"Break down into daily goals\"). STRONGLY consider suggesting this for any task that could even remotely have multiple steps or require planning."
+            },
+            {
+                id: "notifications",
+                condition: () => true, // Always available
+                text: "- Setting notifications for relative times (MUST use the word \"notify\", e.g., \"Notify me 10 mins before\", \"Notify me when I arrive at the store\")"
+            },
+            {
+                id: "location",
+                condition: () => true, // Always available
+                text: "- Adding locations (e.g., \"Add location: City Hospital\")"
+            },
+            {
+                id: "link",
+                condition: () => true, // Always available
+                text: "- Linking URLs or Notes (e.g., \"Add a link to the payment portal\")"
+            }
+        ];
+
+        // Forward Checking: Filter capabilities based on reminder state
+        const validCapabilities = allCapabilities
+            .filter(cap => cap.condition(reminder))
+            .map(cap => cap.text)
+            .join('\n');
+
         const systemPrompt = `You are an AI assistant module for a reminder app. Your sole purpose is to generate exactly 4 highly contextual, actionable suggestions based on a specific reminder. 
 
 Today is ${fullToday}.
@@ -77,18 +127,13 @@ REMINDER CONTEXT:
 ${reminderSummary}
 
 CAPABILITIES YOU CAN SUGGEST:
-- Creating checklists or subtasks (e.g., "Create a grocery list", "Draft a party checklist", "Break down into daily goals"). ONLY suggest this for complex tasks that actually require steps. Do NOT suggest this for mundane, atomic tasks like "Take out trash", "Feed dog", or "Take pills".
-- Setting notifications for relative times (MUST use the word "notify", e.g., "Notify me 10 mins before", "Notify me when I arrive at the store")
-- Setting complex repeating schedules (e.g., "Make this repeat on the 1st of every month", "Repeat every other Friday")
-- Adding locations (e.g., "Add location: City Hospital")
-- Marking as high priority (e.g., "Mark as high priority")
-- Linking URLs or Notes (e.g., "Add a link to the payment portal")
+${validCapabilities}
 
 RULES:
 1. Provide EXACTLY 4 suggestions. No more, no less.
 2. The suggestions should be short, punchy, and sound natural. Aim for 3-7 words.
 3. Keep them highly contextual to the reminder's title. If the reminder is "Pay utility bill", suggest "Add payment link" or "Repeat monthly".
-4. Evaluate the complexity of the task! If it is a simple, mundane task (like "Take out trash"), stick to simple suggestions like "Notify me 10 mins before" or "Make this repeating". Do NOT suggest creating a list or breaking it down into steps for simple tasks.
+4. Evaluate the complexity of the task! When in doubt, lean towards suggesting creating a checklist or breaking the task into steps, as we have a powerful UI for subtasks.
 5. When referring to alerts or alarms, always use the word "notify" (e.g. "Notify me...", not "Remind me...").
 6. OUTPUT FORMAT: You MUST return ONLY a raw JSON array of 4 strings. DO NOT wrap the output in markdown code blocks like \`\`\`json. DO NOT add any conversational text.
 
@@ -134,21 +179,42 @@ EXAMPLE OUTPUT:
             }
         } catch (e) {
             console.error("[Nova Suggest Error] Failed to parse JSON:", rawText)
-            // Fallback suggestions if generation fails
-            suggestions = [
-                "Mark as high priority",
-                "Break into steps",
-                "Make this repeating",
-                "Add a reminder time"
-            ]
         }
 
         // Ensure exactly 4
-        if (suggestions.length < 4) {
-            const defaults = ["Mark as high priority", "Break into steps", "Make this repeating", "Add a reminder time"];
-            suggestions = [...suggestions, ...defaults].slice(0, 4);
-        } else if (suggestions.length > 4) {
-            suggestions = suggestions.slice(0, 4);
+        if (suggestions.length !== 4) {
+            // Setup dynamic fallback map based on our IDs
+            const fallbackMap: Record<string, string> = {
+                "time": "Add a reminder time",
+                "date": "Add a date",
+                "repeat": "Make this repeating",
+                "priority": "Mark as high priority",
+                "checklist": "Break into steps",
+                "notifications": "Add a notification",
+                "location": "Add location",
+                "link": "Add a note"
+            };
+
+            // Derive valid defaults using the same constraints from earlier
+            const validIds = allCapabilities.filter(c => c.condition(reminder)).map(c => c.id);
+            const defaultSuggestions = validIds.map(id => fallbackMap[id]).filter(Boolean);
+
+            if (suggestions.length < 4) {
+                // If we ran out of LLM suggestions, pad with safe defaults
+                // Avoid duplicates between LLM output and our defaults
+                const remainingDefaults = defaultSuggestions.filter(d => !suggestions.includes(d as string));
+                suggestions = [...suggestions, ...(remainingDefaults as string[])].slice(0, 4);
+            } else if (suggestions.length > 4) {
+                // Too many suggestions, slice down to 4
+                suggestions = suggestions.slice(0, 4);
+            }
+
+            // Extreme fallback if filtering somehow left us with < 4 suggestions
+            if (suggestions.length < 4) {
+                const extremeDefaults = ["Edit reminder", "Add details", "Change tag", "Add subtask"];
+                const padding = extremeDefaults.filter(d => !suggestions.includes(d));
+                suggestions = [...suggestions, ...padding].slice(0, 4);
+            }
         }
 
         return new Response(JSON.stringify({ suggestions }), {
