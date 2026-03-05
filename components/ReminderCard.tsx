@@ -202,8 +202,8 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, onNotific
           <View style={[styles.content, !reminder.time && { alignItems: 'center' }, { backgroundColor: 'transparent' }]}>
             {/* Checkbox */}
             <TouchableOpacity
-              onPress={handleComplete}
-              activeOpacity={0.7}
+              onPress={reminder.isGhost ? undefined : handleComplete}
+              activeOpacity={reminder.isGhost ? 1 : 0.7}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               style={{ backgroundColor: 'transparent' }}
             >
@@ -214,6 +214,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, onNotific
                   tag && !reminder.completed && { borderColor: tag.color },
                   !reminder.time && { marginTop: 0 },
                   isBirthday && !reminder.completed && styles.birthdayCheckbox,
+                  reminder.isGhost && { opacity: 0.3, borderStyle: 'dashed' },
                   { transform: [{ scale: checkScaleAnim }] },
                 ]}
               >
@@ -230,6 +231,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, onNotific
                   style={[
                     styles.title,
                     isBirthday && !reminder.completed && styles.birthdayTitle,
+                    reminder.isGhost && { opacity: 0.6 }
                   ]}
                   numberOfLines={1}
                 >
@@ -248,6 +250,11 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, onNotific
                     <Text style={[styles.metaText, isBirthday && !reminder.completed && styles.birthdayMetaText]}>
                       {reminder.time ? formatTime(reminder.time) : 'Anytime'}
                     </Text>
+                  </View>
+                ) : null}
+                {reminder.repeat && reminder.repeat !== 'none' ? (
+                  <View style={styles.metaItem}>
+                    <Ionicons name="repeat" size={14} color={colors.primary} />
                   </View>
                 ) : null}
                 {reminder.notification_offsets && reminder.notification_offsets.length > 0 ? (

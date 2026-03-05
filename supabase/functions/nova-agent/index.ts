@@ -36,8 +36,7 @@ const createReminderTool = {
                 },
                 repeat: {
                     type: "string",
-                    enum: ["none", "daily", "weekly", "monthly"],
-                    description: "Recurrence pattern. Default is 'none' unless user says 'every day', 'weekly', 'each month', etc."
+                    description: "Recurrence pattern using RFC 5545 RRULE (e.g., 'FREQ=DAILY', 'FREQ=WEEKLY;BYDAY=MO,WE'). Default is 'none'."
                 },
                 tag_name: {
                     type: "string",
@@ -82,8 +81,7 @@ const draftReminderTool = {
                 },
                 repeat: {
                     type: "string",
-                    enum: ["none", "daily", "weekly", "monthly"],
-                    description: "Recurrence pattern."
+                    description: "Recurrence pattern using RFC 5545 RRULE or 'none'."
                 },
                 tag_name: {
                     type: "string",
@@ -146,6 +144,10 @@ const draftUpdateReminderTool = {
                 date: {
                     type: "string",
                     description: "New date in YYYY-MM-DD format. Only include if user wants to reschedule."
+                },
+                repeat: {
+                    type: "string",
+                    description: "New recurrence pattern using RFC 5545 RRULE or 'none'. Only include if changing it."
                 },
                 time: {
                     type: "string",

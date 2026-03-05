@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 import { Reminder } from '../types/reminder';
 import { cancelReminderNotifications } from '../lib/notifications';
+import { rrulestr } from 'rrule';
 
 interface RemindersContextType {
   reminders: Reminder[];
@@ -65,15 +66,50 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
     fetchReminders();
   }, [fetchReminders]);
 
-  const getNextDate = (dateStr: string | undefined, repeat: 'daily' | 'weekly' | 'monthly' | 'yearly'): string | undefined => {
+  const getNextDate = (dateStr: string | undefined, repeatStr: string | undefined): string | undefined => {
     const now = new Date();
     const todayStr = format(now, 'yyyy-MM-dd');
 
-    // We use T00:00:00 to ensure it's parsed as local time
+    // Default baseDate to today if not provided
     let baseDate = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
 
     if (isNaN(baseDate.getTime())) return undefined;
 
+    if (!repeatStr || repeatStr === 'none') return undefined;
+
+    let repeat = 'none';
+    if (repeatStr) {
+      if (repeatStr.includes('FREQ=DAILY') || repeatStr === 'daily') repeat = 'daily';
+      else if (repeatStr.includes('FREQ=WEEKLY') || repeatStr === 'weekly') repeat = 'weekly';
+      else if (repeatStr.includes('FREQ=MONTHLY') || repeatStr === 'monthly') repeat = 'monthly';
+      else if (repeatStr.includes('FREQ=YEARLY') || repeatStr === 'yearly') repeat = 'yearly';
+    }
+
+    try {
+      // Check if it's a basic string, convert to rrule string representation
+      let ruleString = repeatStr;
+      if (repeatStr === 'daily') ruleString = 'FREQ=DAILY';
+      else if (repeatStr === 'weekly') ruleString = 'FREQ=WEEKLY';
+      else if (repeatStr === 'monthly') ruleString = 'FREQ=MONTHLY';
+      else if (repeatStr === 'yearly') ruleString = 'FREQ=YEARLY';
+
+      const dtstart = new Date(Date.UTC(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate()));
+      const rule = rrulestr(ruleString, { dtstart });
+
+      // We want the next occurrence that is strictly AFTER today
+      const endOfTodayUTC = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999));
+      const nextOccurrenceUTC = rule.after(endOfTodayUTC);
+
+      if (nextOccurrenceUTC) {
+        const nextLocal = new Date(nextOccurrenceUTC.getUTCFullYear(), nextOccurrenceUTC.getUTCMonth(), nextOccurrenceUTC.getUTCDate());
+        return format(nextLocal, 'yyyy-MM-dd');
+      }
+      return undefined;
+    } catch (e) {
+      console.error('[RemindersContext] Error parsing rrule:', e);
+    }
+
+    // Fallback logic for basic repeats
     let nextDate = baseDate;
 
     // Helper to add interval
@@ -93,7 +129,6 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
     };
 
     // Keep adding the interval until we hit a date strictly in the future relative to today
-    // If the user completes a reminder today, we want the next one to be at least tomorrow.
     do {
       nextDate = addInterval(nextDate, repeat);
     } while (format(nextDate, 'yyyy-MM-dd') <= todayStr);

@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons'; // Added import
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { startOfDay, isSameDay, isToday, addDays, startOfWeek, endOfWeek, isAfter, isBefore, addWeeks, isTomorrow, subWeeks } from 'date-fns';
+import { startOfDay, isSameDay, isToday, addDays, startOfWeek, endOfWeek, isAfter, isBefore, addWeeks, isTomorrow, subWeeks, format } from 'date-fns';
 import { ReminderCard } from '../../components/ReminderCard';
 import { DaySection } from '../../components/DaySection';
 import { EmptyState } from '../../components/EmptyState';
@@ -342,8 +342,19 @@ export default function HomeScreen() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    await deleteReminder(id);
+  const handleDelete = async (eventOrId: string | Reminder) => {
+    if (typeof eventOrId === 'string') {
+      await deleteReminder(eventOrId);
+    } else {
+      const event = eventOrId;
+      if (event.isGhost && event.date) {
+        const ghostDate = new Date(event.date + 'T00:00:00');
+        const dayBefore = new Date(ghostDate.getTime() - 24 * 60 * 60 * 1000);
+        await updateReminder(event.id, { repeat_until: format(dayBefore, 'yyyy-MM-dd') });
+      } else {
+        await deleteReminder(event.id);
+      }
+    }
   };
 
   const handleSave = async (data: Omit<Reminder, 'id' | 'user_id' | 'created_at' | 'completed'>) => {

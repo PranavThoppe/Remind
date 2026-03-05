@@ -39,8 +39,7 @@ const draftUpdateReminderTool = {
                 },
                 repeat: {
                     type: "string",
-                    enum: ["none", "daily", "weekly", "monthly"],
-                    description: "New recurrence pattern. Only include if changing it."
+                    description: "New recurrence pattern using RFC 5545 RRULE format. Examples: 'FREQ=DAILY', 'FREQ=WEEKLY;BYDAY=TU,TH', 'FREQ=MONTHLY;BYMONTHDAY=1' or 'none'. Only include if changing it."
                 },
                 repeat_until: {
                     type: "string",
@@ -79,7 +78,7 @@ const updateReminderTool = {
                 title: { type: "string" },
                 date: { type: "string", description: "YYYY-MM-DD format." },
                 time: { type: "string", description: "HH:mm 24-hour format." },
-                repeat: { type: "string", enum: ["none", "daily", "weekly", "monthly"] },
+                repeat: { type: "string", description: "RFC 5545 RRULE or 'none'" },
                 repeat_until: { type: "string" },
                 completed: { type: "boolean" },
                 notes: { type: "string" },

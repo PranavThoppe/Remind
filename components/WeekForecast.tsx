@@ -25,21 +25,80 @@ export const WeekForecast = ({ reminders, onReminderClick, onComplete, onDelete 
   const swipeableRefs = useRef<{ [key: string]: Swipeable | null }>({});
   const { tags, priorities } = useSettings();
 
-  const getRemindersForDay = (date: Date) => {
-    return reminders
-      .filter(r => {
-        if (!r.date) return false;
+  const eventsByDate = React.useMemo(() => {
+    const map: Record<string, Reminder[]> = {};
+    const windowStartUtc = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+    const windowEnd = addDays(today, 6);
+    const windowEndUtc = new Date(Date.UTC(windowEnd.getFullYear(), windowEnd.getMonth(), windowEnd.getDate(), 23, 59, 59));
+
+    reminders.forEach(reminder => {
+      // 1. Literal real reminders
+      if (reminder.date) {
+        if (!map[reminder.date]) map[reminder.date] = [];
+        map[reminder.date].push(reminder);
+      }
+
+      // 2. Ghost Reminders
+      if (reminder.date && !reminder.completed && reminder.repeat && reminder.repeat !== 'none') {
         try {
-          // Parse YYYY-MM-DD as local time by adding T00:00:00
-          return isSameDay(new Date(r.date + 'T00:00:00'), date);
+          const [year, month, day] = reminder.date.split('-').map(Number);
+          let hour = 0, minute = 0;
+          if (reminder.time) {
+            const [h, m] = reminder.time.split(':').map(Number);
+            hour = h;
+            minute = m;
+          }
+
+          const dtstart = new Date(Date.UTC(year, month - 1, day, hour, minute));
+
+          let ruleString = reminder.repeat;
+          if (ruleString === 'daily') ruleString = 'FREQ=DAILY';
+          else if (ruleString === 'weekly') ruleString = 'FREQ=WEEKLY';
+          else if (ruleString === 'monthly') ruleString = 'FREQ=MONTHLY';
+          else if (ruleString === 'yearly') ruleString = 'FREQ=YEARLY';
+
+          if (reminder.repeat_until && !ruleString.includes('UNTIL=')) {
+            const [uYear, uMonth, uDay] = reminder.repeat_until.split('-').map(Number);
+            const untilUtc = new Date(Date.UTC(uYear, uMonth - 1, uDay, 23, 59, 59));
+            const untilString = untilUtc.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+            ruleString += `;UNTIL=${untilString}`;
+          }
+
+          // Import `rrulestr` from rrule inline to avoid import mess if missing
+          const { rrulestr } = require('rrule');
+          const rule = rrulestr(ruleString, { dtstart });
+          const occurrences = rule.between(windowStartUtc, windowEndUtc, true);
+
+          occurrences.forEach((occUtc: Date) => {
+            const occLocal = new Date(occUtc.getUTCFullYear(), occUtc.getUTCMonth(), occUtc.getUTCDate());
+            const occDateString = format(occLocal, 'yyyy-MM-dd');
+
+            if (occDateString > reminder.date!) {
+              if (!map[occDateString]) map[occDateString] = [];
+              if (!map[occDateString].some(r => r.id === reminder.id)) {
+                map[occDateString].push({
+                  ...reminder,
+                  date: occDateString,
+                  isGhost: true
+                });
+              }
+            }
+          });
         } catch (e) {
-          return false;
+          console.error('[WeekForecast] Failed to parse rrule:', e);
         }
-      })
-      .sort((a, b) => {
-        if (a.time && b.time) return a.time.localeCompare(b.time);
-        return 0;
-      });
+      }
+    });
+    return map;
+  }, [reminders, today.getTime()]);
+
+  const getRemindersForDay = (date: Date) => {
+    const dateKey = format(date, 'yyyy-MM-dd');
+    const dayReminders = eventsByDate[dateKey] || [];
+    return dayReminders.sort((a, b) => {
+      if (a.time && b.time) return a.time.localeCompare(b.time);
+      return 0;
+    });
   };
 
   const getDayLabel = (date: Date, index: number) => {
@@ -148,11 +207,13 @@ export const WeekForecast = ({ reminders, onReminderClick, onComplete, onDelete 
                       >
                         {/* Checkbox */}
                         <TouchableOpacity
-                          onPress={() => onComplete?.(reminder.id)}
+                          onPress={reminder.isGhost ? undefined : () => onComplete?.(reminder.id)}
+                          activeOpacity={reminder.isGhost ? 1 : 0.7}
                           style={[
                             styles.checkbox,
                             reminder.completed && styles.checkboxCompleted,
-                            tag && !reminder.completed && { borderColor: tag.color }
+                            tag && !reminder.completed && { borderColor: tag.color },
+                            reminder.isGhost && { opacity: 0.3, borderStyle: 'dashed' }
                           ]}
                           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                         >
@@ -166,7 +227,8 @@ export const WeekForecast = ({ reminders, onReminderClick, onComplete, onDelete 
                             style={[
                               styles.reminderTitle,
                               reminder.completed && styles.completedText,
-                              tag && !reminder.completed && { color: tag.color }
+                              tag && !reminder.completed && { color: tag.color },
+                              reminder.isGhost && { opacity: 0.6 }
                             ]}
                             numberOfLines={1}
                           >

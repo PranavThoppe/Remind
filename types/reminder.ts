@@ -4,7 +4,7 @@ export interface Reminder {
   title: string;
   date?: string | null;
   time?: string | null; // Allow null for clearing time
-  repeat?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+  repeat?: string; // 'none' | RFC 5545 RRULE
   repeat_until?: string | null;
   completed: boolean;
   created_at: string;
@@ -12,6 +12,7 @@ export interface Reminder {
   priority_id?: string | null; // Allow null for removing priority
   notes?: string | null;
   notification_offsets?: number[];
+  isGhost?: boolean; // UI-only flag for virtual occurrences
 }
 
 export interface Profile {

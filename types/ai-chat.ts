@@ -24,7 +24,7 @@ export interface ModalFieldUpdates {
   time?: string | null;  // HH:mm
   tag_id?: string | null;
   priority_id?: string | null;
-  repeat?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+  repeat?: string; // 'none' | RFC 5545 RRULE
   repeat_until?: string | null;
   notes?: string | null;
   notification_offsets?: number[];

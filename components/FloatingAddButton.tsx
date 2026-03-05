@@ -32,6 +32,7 @@ import { ChatMessage, ModalFieldUpdates } from '../types/ai-chat';
 import { Reminder } from '../types/reminder';
 import { ReminderCard } from './ReminderCard';
 import { AddReminderSheet } from './AddReminderSheet';
+import { InlineRepeatPicker } from './InlineRepeatPicker';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const FAB_SIZE = 56;
@@ -149,6 +150,31 @@ function MessageBubble({
                 : "Tap check to create • Tap card to edit • Swipe to discard"}
             </Text>
           )}
+        </View>
+      </View>
+    );
+  }
+
+  if ((message.panelType as any) === 'repeat_settings') {
+    const isStatic = message.panelIsStatic;
+    return (
+      <View style={[styles.messageContainer]}>
+        <View style={{ width: '100%', maxWidth: 340 }}>
+          <InlineRepeatPicker
+            initialRepeat={message.panelFields?.repeat}
+            reminderDate={message.panelFields?.date || null}
+            onConfirm={(rrule) => {
+              if (!isStatic) {
+                onDraftConfirm?.(message.id, { repeat: rrule });
+              }
+            }}
+            onCancel={() => {
+              if (!isStatic) {
+                onDraftConfirm?.(message.id, { repeat: 'none' });
+                onDraftDiscard?.(message.id);
+              }
+            }}
+          />
         </View>
       </View>
     );

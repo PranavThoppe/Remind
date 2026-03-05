@@ -13,6 +13,7 @@ import {
     addMonths,
     subMonths,
 } from 'date-fns';
+import { rrulestr } from 'rrule';
 import { useRemindersContext } from '../contexts/RemindersContext';
 import { useTheme } from '../hooks/useTheme';
 import { ReminderCard, CardLayout } from './ReminderCard';
@@ -42,14 +43,76 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onEdit }) => {
     // Group reminders by date
     const eventsByDate = useMemo(() => {
         const map: Record<string, any[]> = {};
+
+        // Calculate the view window for the calendar
+        const windowStart = startOfWeek(startOfMonth(currentDate));
+        const windowEnd = endOfWeek(endOfMonth(currentDate));
+
+        // Convert to UTC for rrule to avoid timezone shifts
+        const windowStartUtc = new Date(Date.UTC(windowStart.getFullYear(), windowStart.getMonth(), windowStart.getDate()));
+        const windowEndUtc = new Date(Date.UTC(windowEnd.getFullYear(), windowEnd.getMonth(), windowEnd.getDate(), 23, 59, 59));
+
         reminders.forEach(reminder => {
             if (reminder.date) {
                 if (!map[reminder.date]) map[reminder.date] = [];
                 map[reminder.date].push(reminder);
             }
+
+            // Generate Ghost Reminders for active repeating tasks
+            if (reminder.date && !reminder.completed && reminder.repeat && reminder.repeat !== 'none') {
+                try {
+                    const [year, month, day] = reminder.date.split('-').map(Number);
+                    let hour = 0, minute = 0;
+                    if (reminder.time) {
+                        const [h, m] = reminder.time.split(':').map(Number);
+                        hour = h;
+                        minute = m;
+                    }
+
+                    const dtstart = new Date(Date.UTC(year, month - 1, day, hour, minute));
+
+                    let ruleString = reminder.repeat;
+                    if (ruleString === 'daily') ruleString = 'FREQ=DAILY';
+                    else if (ruleString === 'weekly') ruleString = 'FREQ=WEEKLY';
+                    else if (ruleString === 'monthly') ruleString = 'FREQ=MONTHLY';
+                    else if (ruleString === 'yearly') ruleString = 'FREQ=YEARLY';
+
+                    if (reminder.repeat_until && !ruleString.includes('UNTIL=')) {
+                        const [uYear, uMonth, uDay] = reminder.repeat_until.split('-').map(Number);
+                        const untilUtc = new Date(Date.UTC(uYear, uMonth - 1, uDay, 23, 59, 59));
+                        const untilString = untilUtc.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+                        ruleString += `;UNTIL=${untilString}`;
+                    }
+
+                    const rule = rrulestr(ruleString, { dtstart });
+                    const occurrences = rule.between(windowStartUtc, windowEndUtc, true);
+
+                    occurrences.forEach(occUtc => {
+                        const occLocal = new Date(occUtc.getUTCFullYear(), occUtc.getUTCMonth(), occUtc.getUTCDate());
+                        const occDateString = format(occLocal, 'yyyy-MM-dd');
+
+                        // Ghosts should only be in the future relative to the active reminder's date
+                        if (occDateString > reminder.date!) {
+                            if (!map[occDateString]) map[occDateString] = [];
+
+                            // Prevent duplicates if already added by exact literal date
+                            if (!map[occDateString].some(r => r.id === reminder.id)) {
+                                map[occDateString].push({
+                                    ...reminder,
+                                    date: occDateString,
+                                    isGhost: true
+                                });
+                            }
+                        }
+                    });
+
+                } catch (e) {
+                    console.error('[CalendarView] Failed to parse rrule for ghost reminders:', e);
+                }
+            }
         });
         return map;
-    }, [reminders]);
+    }, [reminders, currentDate]);
 
     const selectedEvents = useMemo(() => {
         const dateKey = format(selectedDate, 'yyyy-MM-dd');
@@ -92,6 +155,16 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onEdit }) => {
 
     const handleEdit = (reminder: any, layout?: CardLayout) => {
         onEdit?.(reminder, layout);
+    };
+
+    const handleDelete = (event: any) => {
+        if (event.isGhost && event.date) {
+            const ghostDate = new Date(event.date + 'T00:00:00');
+            const dayBefore = new Date(ghostDate.getTime() - 24 * 60 * 60 * 1000);
+            updateReminder(event.id, { repeat_until: format(dayBefore, 'yyyy-MM-dd') });
+        } else {
+            deleteReminder(event.id);
+        }
     };
 
     return (
@@ -182,11 +255,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onEdit }) => {
                     <View style={{ gap: spacing.md }}>
                         {selectedEvents.map((event, idx) => (
                             <ReminderCard
-                                key={event.id}
+                                key={`${event.id}${event.isGhost ? '-ghost' : ''}`}
                                 reminder={event}
                                 onComplete={handleComplete}
                                 onEdit={handleEdit}
-                                onDelete={deleteReminder}
+                                onDelete={() => handleDelete(event)}
                                 index={idx}
                             />
                         ))}

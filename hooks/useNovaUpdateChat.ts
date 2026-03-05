@@ -207,12 +207,12 @@ export function useNovaUpdateChat(options: UseNovaUpdateChatOptions = {}) {
     const handleDraftDiscard = useCallback((messageId: string) => {
         // Find the message being discarded
         const discardedMsg = messages.find(m => m.id === messageId);
-        const isNotification = discardedMsg?.panelType === 'notification_settings';
+        const isSettingsPanel = discardedMsg?.panelType === 'notification_settings' || (discardedMsg?.panelType as any) === 'repeat_settings';
 
         setMessages(prev => prev.filter(m => m.id !== messageId));
 
-        // If it was a notification setting that got discarded, push fallback response with delay
-        if (isNotification) {
+        // If it was a notification/repeat setting that got discarded, push fallback response with delay
+        if (isSettingsPanel) {
             setIsThinking(true);
             setTimeout(() => {
                 setMessages(prev => [...prev, {
@@ -247,6 +247,18 @@ export function useNovaUpdateChat(options: UseNovaUpdateChatOptions = {}) {
         }]);
     }, [pinnedReminder]);
 
+    const pushRepeatSettings = useCallback(() => {
+        if (!pinnedReminder) return;
+        setMessages([{
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: "Please select a repeating schedule:",
+            timestamp: new Date(),
+            panelType: 'repeat_settings' as any,
+            panelFields: { repeat: pinnedReminder.repeat || 'none' }
+        }]);
+    }, [pinnedReminder]);
+
     return {
         messages, setMessages,
         isThinking,
@@ -258,6 +270,7 @@ export function useNovaUpdateChat(options: UseNovaUpdateChatOptions = {}) {
         handleDraftUpdateConfirm,
         handleDraftDiscard,
         pushNotificationSettings,
+        pushRepeatSettings,
         reset,
     };
 }

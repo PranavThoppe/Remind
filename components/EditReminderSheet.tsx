@@ -30,6 +30,7 @@ import { Reminder } from '../types/reminder';
 import { ReminderCard, CardLayout } from './ReminderCard';
 import { SuggestionChips } from './SuggestionChips';
 import { InlineNotificationPicker } from './InlineNotificationPicker';
+import { InlineRepeatPicker } from './InlineRepeatPicker';
 import { ModalFieldUpdates, ChatMessage } from '../types/ai-chat';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -166,6 +167,31 @@ function MessageBubble({
                             if (!isStatic) {
                                 // If they explicitly close the tool, clear the notifications
                                 onDraftConfirm?.(message.id, { notification_offsets: [] });
+                                onDraftDiscard?.(message.id);
+                            }
+                        }}
+                    />
+                </View>
+            </View>
+        );
+    }
+
+    if ((message.panelType as any) === 'repeat_settings') {
+        const isStatic = message.panelIsStatic;
+        return (
+            <View style={[localStyles.messageContainer]}>
+                <View style={{ width: '100%', maxWidth: 340 }}>
+                    <InlineRepeatPicker
+                        initialRepeat={message.panelFields?.repeat || reminder?.repeat}
+                        reminderDate={message.panelFields?.date || reminder?.date || null}
+                        onConfirm={(rrule) => {
+                            if (!isStatic) {
+                                onDraftConfirm?.(message.id, { repeat: rrule });
+                            }
+                        }}
+                        onCancel={() => {
+                            if (!isStatic) {
+                                onDraftConfirm?.(message.id, { repeat: 'none' });
                                 onDraftDiscard?.(message.id);
                             }
                         }}
@@ -635,6 +661,32 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
                             {(reminder?.notification_offsets && reminder.notification_offsets.length > 0) && (
                                 <Text style={[localStyles.chipText, { color: colors.primary }]}>
                                     Notification
+                                </Text>
+                            )}
+                        </TouchableOpacity>
+
+                        {/* Repeat Chip */}
+                        <TouchableOpacity
+                            style={[
+                                localStyles.chip,
+                                {
+                                    backgroundColor: (reminder?.repeat && reminder.repeat !== 'none') ? `${colors.primary}20` : colors.card,
+                                    borderColor: (reminder?.repeat && reminder.repeat !== 'none') ? colors.primary : colors.border,
+                                },
+                            ]}
+                            onPress={() => {
+                                Keyboard.dismiss();
+                                (nova as any).pushRepeatSettings();
+                            }}
+                        >
+                            <Ionicons
+                                name={(reminder?.repeat && reminder.repeat !== 'none') ? "repeat" : "repeat-outline"}
+                                size={14}
+                                color={(reminder?.repeat && reminder.repeat !== 'none') ? colors.primary : colors.mutedForeground}
+                            />
+                            {(reminder?.repeat && reminder.repeat !== 'none') && (
+                                <Text style={[localStyles.chipText, { color: colors.primary }]}>
+                                    Repeat
                                 </Text>
                             )}
                         </TouchableOpacity>
