@@ -31,6 +31,7 @@ import { ReminderCard, CardLayout } from './ReminderCard';
 import { SuggestionChips } from './SuggestionChips';
 import { InlineNotificationPicker } from './InlineNotificationPicker';
 import { InlineRepeatPicker } from './InlineRepeatPicker';
+import { InlineSubtaskList } from './InlineSubtaskList';
 import { ModalFieldUpdates, ChatMessage } from '../types/ai-chat';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -176,22 +177,22 @@ function MessageBubble({
         );
     }
 
-    if ((message.panelType as any) === 'repeat_settings') {
+    if ((message.panelType as any) === 'subtasks_settings') {
         const isStatic = message.panelIsStatic;
         return (
             <View style={[localStyles.messageContainer]}>
                 <View style={{ width: '100%', maxWidth: 340 }}>
-                    <InlineRepeatPicker
-                        initialRepeat={message.panelFields?.repeat || reminder?.repeat}
-                        reminderDate={message.panelFields?.date || reminder?.date || null}
-                        onConfirm={(rrule) => {
-                            if (!isStatic) {
-                                onDraftConfirm?.(message.id, { repeat: rrule });
-                            }
+                    <InlineSubtaskList
+                        subtasks={message.panelFields?.subtasks || []}
+                        onChange={(subtasks) => {
+                            // Local UI updates handled inside
                         }}
+                        onSave={!isStatic ? (subtasks) => {
+                            onDraftConfirm?.(message.id, { subtasks });
+                        } : undefined}
                         onCancel={() => {
                             if (!isStatic) {
-                                onDraftConfirm?.(message.id, { repeat: 'none' });
+                                // If they explicitly dismiss the subtask panel, just discard
                                 onDraftDiscard?.(message.id);
                             }
                         }}
@@ -691,6 +692,32 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
                             )}
                         </TouchableOpacity>
 
+                        {/* Subtasks Chip */}
+                        <TouchableOpacity
+                            style={[
+                                localStyles.chip,
+                                {
+                                    backgroundColor: (reminder?.subtasks && reminder.subtasks.length > 0) ? `${colors.primary}20` : colors.card,
+                                    borderColor: (reminder?.subtasks && reminder.subtasks.length > 0) ? colors.primary : colors.border,
+                                },
+                            ]}
+                            onPress={() => {
+                                Keyboard.dismiss();
+                                (nova as any).pushSubtasksSettings();
+                            }}
+                        >
+                            <Ionicons
+                                name={(reminder?.subtasks && reminder.subtasks.length > 0) ? "checkbox" : "checkbox-outline"}
+                                size={14}
+                                color={(reminder?.subtasks && reminder.subtasks.length > 0) ? colors.primary : colors.mutedForeground}
+                            />
+                            {(reminder?.subtasks && reminder.subtasks.length > 0) && (
+                                <Text style={[localStyles.chipText, { color: colors.primary }]}>
+                                    {reminder.subtasks.filter((s: any) => s.is_completed).length}/{reminder.subtasks.length}
+                                </Text>
+                            )}
+                        </TouchableOpacity>
+
                         {/* Save Button */}
                         <TouchableOpacity
                             style={[localStyles.chip, { backgroundColor: colors.primary, borderColor: colors.primary }]}
@@ -763,6 +790,11 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
                                 onDraftConfirm={(msgId, draftFields) => {
                                     // Make sure we pass the fields through properly (handleDraftConfirm expects msgId, fields)
                                     // Since we updated the signature of onDraftConfirm, we should use the new draftFields if provided.
+                                    // For subtasks, since onChange gets real-time data but we might not have updated the message's panelFields synchronously,
+                                    // we can let the "Save Subtasks" button pass the current subtasks to draftFields.
+                                    // Actually, we must use the latest state from the InlineSubtaskList, so we'll need to update it.
+                                    // The current button sends `message.panelFields.subtasks`. We should ensure this is updated.
+                                    // For now, let's keep it simple.
                                     const fieldsToUse = draftFields || messages.find(m => m.id === msgId)?.panelFields;
                                     if (fieldsToUse) {
                                         nova.handleDraftUpdateConfirm(msgId, fieldsToUse);

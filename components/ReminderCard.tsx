@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { isToday, isTomorrow, format } from 'date-fns';
 import {
   View,
@@ -11,10 +11,16 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { spacing, borderRadius, typography, shadows } from '../constants/theme';
-import { Reminder } from '../types/reminder';
+import { Reminder, Subtask } from '../types/reminder';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTheme } from '../hooks/useTheme';
+import { useReminders } from '../hooks/useReminders';
 import { BirthdayArt } from './BirthdayArt';
+import Reanimated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 
 export interface CardLayout {
   x: number;
@@ -39,9 +45,21 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, onNotific
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(8)).current;
   const checkScaleAnim = useRef(new Animated.Value(1)).current;
+  const chevronRotation = useRef(new Animated.Value(0)).current;
   const swipeableRef = useRef<Swipeable>(null);
   const cardRef = useRef<View>(null);
   const { tags, priorities } = useSettings();
+  const { updateSubtasks } = useReminders();
+
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [contentHeight, setContentHeight] = useState(0);
+  const heightAnim = useSharedValue(0);
+
+  const animatedHeightStyle = useAnimatedStyle(() => ({
+    height: heightAnim.value,
+    opacity: heightAnim.value > 0 ? 1 : 0,
+    overflow: 'hidden',
+  }));
 
   const isBirthday = reminder.title.toLowerCase().includes('birthday');
 
@@ -94,6 +112,30 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, onNotific
     const period = hours >= 12 ? 'PM' : 'AM';
     const displayHours = hours % 12 || 12;
     return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+  };
+
+  const handleToggleExpand = (e: any) => {
+    e.stopPropagation();
+    const willExpand = !isExpanded;
+
+    heightAnim.value = withTiming(willExpand ? contentHeight : 0, { duration: 300 });
+
+    Animated.timing(chevronRotation, {
+      toValue: willExpand ? 1 : 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+
+    setIsExpanded(willExpand);
+  };
+
+  const handleSubtaskToggle = (e: any, subtask: Subtask) => {
+    e.stopPropagation();
+    if (!reminder.subtasks) return;
+    const newSubtasks = reminder.subtasks.map(st =>
+      st.id === subtask.id ? { ...st, is_completed: !st.is_completed } : st
+    );
+    updateSubtasks(reminder.id, newSubtasks);
   };
 
   const tag = tags.find(t => t.id === reminder.tag_id);
@@ -277,9 +319,82 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, onNotific
                     </Text>
                   </View>
                 ) : null}
+                {reminder.subtasks && reminder.subtasks.length > 0 ? (
+                  <TouchableOpacity
+                    onPress={handleToggleExpand}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    style={[styles.metaItem, isExpanded && { backgroundColor: `${colors.primary}20`, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: -6 }]}
+                  >
+                    <Ionicons name="checkbox-outline" size={14} color={isExpanded ? colors.primary : (isBirthday && !reminder.completed ? 'rgba(0,0,0,0.6)' : colors.mutedForeground)} />
+                    <Text style={[styles.metaText, isExpanded && { color: colors.primary }, isBirthday && !reminder.completed && !isExpanded && styles.birthdayMetaText]}>
+                      {reminder.subtasks.filter((s: any) => s.is_completed).length}/{reminder.subtasks.length}
+                    </Text>
+                    <Animated.View style={{ transform: [{ rotate: chevronRotation.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}>
+                      <Ionicons name="chevron-down" size={12} color={isExpanded ? colors.primary : (isBirthday && !reminder.completed ? 'rgba(0,0,0,0.6)' : colors.mutedForeground)} />
+                    </Animated.View>
+                  </TouchableOpacity>
+                ) : null}
               </View>
             </View>
           </View>
+
+          {/* Subtasks Expanded View */}
+          {reminder.subtasks && reminder.subtasks.length > 0 && (
+            <>
+              {/* Invisible clone purely for measuring natural height */}
+              <View
+                style={[styles.subtasksContainer, { position: 'absolute', opacity: 0, left: spacing.md, right: spacing.md, zIndex: -1 }]}
+                pointerEvents="none"
+                onLayout={(e) => {
+                  const h = e.nativeEvent.layout.height;
+                  if (Math.abs(contentHeight - h) > 1) {
+                    setContentHeight(h);
+                    if (isExpanded) {
+                      heightAnim.value = withTiming(h, { duration: 300 });
+                    }
+                  }
+                }}
+              >
+                {reminder.subtasks.map((st) => (
+                  <View key={st.id} style={styles.subtaskRow}>
+                    <Ionicons name="ellipse-outline" size={20} />
+                    <Text style={styles.subtaskText}>{st.title}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {/* Real animated container */}
+              <Reanimated.View style={animatedHeightStyle}>
+                <View style={[styles.subtasksContainer, { marginTop: 0, paddingTop: 0 }]}>
+                  <View style={{ marginTop: spacing.md, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(0,0,0,0.05)', gap: spacing.sm }}>
+                    {reminder.subtasks.map((st) => (
+                      <TouchableOpacity
+                        key={st.id}
+                        style={styles.subtaskRow}
+                        onPress={(e) => handleSubtaskToggle(e, st)}
+                      >
+                        <Ionicons
+                          name={st.is_completed ? "checkmark-circle" : "ellipse-outline"}
+                          size={20}
+                          color={st.is_completed ? colors.primary : colors.mutedForeground}
+                        />
+                        <Text
+                          style={[
+                            styles.subtaskText,
+                            { color: st.is_completed ? colors.mutedForeground : colors.foreground },
+                            st.is_completed && { textDecorationLine: 'line-through' }
+                          ]}
+                        >
+                          {st.title}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              </Reanimated.View>
+            </>
+          )}
+
         </TouchableOpacity>
       </Animated.View>
     </Swipeable>
@@ -413,5 +528,19 @@ const createStyles = (colors: any) => StyleSheet.create({
   },
   birthdayMetaText: {
     color: 'rgba(0, 0, 0, 0.6)',
+  },
+  subtasksContainer: {
+    paddingLeft: 38, // align with text
+  },
+  subtaskRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: 2,
+  },
+  subtaskText: {
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.sm,
+    flexShrink: 1,
   },
 });

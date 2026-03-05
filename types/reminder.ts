@@ -1,3 +1,11 @@
+export interface Subtask {
+  id: string;
+  reminder_id: string;
+  title: string;
+  is_completed: boolean;
+  position: number;
+}
+
 export interface Reminder {
   id: string;
   user_id: string;
@@ -13,6 +21,7 @@ export interface Reminder {
   notes?: string | null;
   notification_offsets?: number[];
   isGhost?: boolean; // UI-only flag for virtual occurrences
+  subtasks?: Subtask[]; // Optional subtasks loaded client-side
 }
 
 export interface Profile {

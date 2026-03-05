@@ -109,6 +109,44 @@ const updateNotificationOffsetsTool = {
     }
 }
 
+const createSubtasksTool = {
+    name: "create_subtasks",
+    description: "Proposes breaking down the reminder into subtasks for the user to review. Use this when the user asks to add subtasks, break it down, make a plan, or implies a multi-step process.",
+    inputSchema: {
+        json: {
+            type: "object",
+            properties: {
+                reminder_id: { type: "string" },
+                subtasks: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Array of subtask titles to propose."
+                }
+            },
+            required: ["reminder_id", "subtasks"]
+        }
+    }
+}
+
+const updateSubtasksTool = {
+    name: "update_subtasks",
+    description: "Immediately sets the subtasks directly without needing confirmation. ONLY use this when the user EXPLICITLY lists out exactly what the subtasks should be.",
+    inputSchema: {
+        json: {
+            type: "object",
+            properties: {
+                reminder_id: { type: "string" },
+                subtasks: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Array of subtask titles to explicitly save."
+                }
+            },
+            required: ["reminder_id", "subtasks"]
+        }
+    }
+}
+
 const searchRemindersTool = {
     name: "search_reminders",
     description: "Search existing reminders, mainly for conflict detection when rescheduling. E.g. check if another reminder already exists at the new time.",
@@ -486,6 +524,8 @@ serve(async (req) => {
             { toolSpec: draftUpdateReminderTool },
             { toolSpec: updateReminderTool },
             { toolSpec: updateNotificationOffsetsTool },
+            { toolSpec: createSubtasksTool },
+            { toolSpec: updateSubtasksTool },
             { toolSpec: searchRemindersTool },
             { toolSpec: saveContextTool }
         ]
@@ -508,15 +548,21 @@ BEHAVIOUR:
 - You have the EXACT current state of the reminder in the PINNED REMINDER CONTEXT above. Use it to accurately answer questions about its current title, date, time, tag, or priority.
 - By default, ALWAYS use draft_update_reminder for any modification so the user can review proposed changes before they're applied.
 - Only use update_reminder (immediate, no confirmation) if the user explicitly says "just do it", "apply now", "confirm", or similar.
+- If the user asks to add subtasks, use create_subtasks to propose a list of subtasks.
+- ONLY use update_subtasks if the user explicitly spells out exactly what subtasks to add (e.g., "add subtasks: 1st, 2nd, 3rd").
+- If the user asks to "create a checklist", "break this down", "make a plan", "create a plan", or similar, interpret that as asking for subtasks for THIS reminder. Use create_subtasks.
+- When generating subtasks based on the user's input, summarize and rephrase their natural language into concise, actionable subtask titles (e.g., instead of "I have to look at lecture notes", use "Review lecture notes"). If they ask you to "plan" or "break down" a topic they provided, generate logical, actionable subtasks for that topic.
+- If the user asks for a checklist/plan but DOES NOT provide ANY topics or context, DO NOT generate the items yourself. Instead, use create_subtasks with an array of exactly 1 empty string (i.e. [""]) so the user can fill them out themselves or provide more info. Crucially, your text response MUST ask a clear question like "What would you like to plan?" or "What do you want to break down?" to invite the user to give you the topics.
+- When the user subsequently replies to that question with topics (e.g., "a study guide for my AI midterm"), you should then use create_subtasks again to actually generate and populate the suggested subtasks based on their input.
 - If the user asks to reschedule, use search_reminders first to check for conflicts at the new time, then draft the update.
 - Always calculate actual dates from relative references (e.g., "tomorrow" = ${tomorrowStr}).
 - Use the user's Common Times for vague terms: morning=${commonTimes.morning}, afternoon=${commonTimes.afternoon}, evening=${commonTimes.evening}, night=${commonTimes.night}.
 - TIME FORMAT FOR TEXT: The user's preferred time format is ${time_format}. When speaking to the user in text, format times accordingly (e.g., if '12h', say "6:00 PM"; if '24h', say "18:00").
 - TIME FORMAT FOR TOOLS: Regardless of the user's preference for text, you must ALWAYS use 24-hour 'HH:mm' format when calling tools like draft_update_reminder or update_reminder.
 - Keep responses warm, short and focused.
-- CRITICALLY IMPORTANT: After calling draft_update_reminder or update_reminder, you MUST STOP. Output a friendly message and wait for the user to confirm/reject the draft.
+- CRITICALLY IMPORTANT: After calling draft_update_reminder, create_subtasks, or update_reminder, you MUST STOP. Output a friendly message and wait for the user to confirm/reject the draft.
 - Never wrap your response in XML tags like <thinking> or <response>.
-- IF THE USER ASKS ABOUT SOMETHING UNRELATED TO THIS SPECIFIC REMINDER (e.g., "what's on my schedule today?", "create a new reminder", "how are you?"), gently but firmly redirect them: "I'm currently focused on editing this specific reminder. If you want to talk about something else or create a new reminder, please close this edit view and ask me in the main chat! 😊"
+- IF THE USER ASKS ABOUT SOMETHING TRULY UNRELATED TO THIS SPECIFIC REMINDER (e.g., "what's on my schedule today?", "create a new reminder for groceries", "how are you?"), gently but firmly redirect them: "I'm currently focused on editing this specific reminder. If you want to talk about something else or create a new reminder, please close this edit view and ask me in the main chat! 😊"
 - Use save_context to remember any personal facts or tag corrections the user shares during this edit session.`
 
         // ── Build conversation ────────────────────────────────────────────
@@ -593,6 +639,18 @@ BEHAVIOUR:
                             success: true,
                             offsets: toolInput.offsets,
                             message: "I've drafted the notification change. You can review it above."
+                        }
+                    } else if (toolName === "create_subtasks") {
+                        toolResult = {
+                            success: true,
+                            subtasks: toolInput.subtasks,
+                            message: "Here are the suggested subtasks. You can arrange them or save."
+                        }
+                    } else if (toolName === "update_subtasks") {
+                        toolResult = {
+                            success: true,
+                            subtasks: toolInput.subtasks,
+                            message: "I've added those subtasks for you!"
                         }
                     } else if (toolName === "search_reminders") {
                         toolResult = await handleSearchReminders(toolInput, userId, ADMIN_SECRET_KEY, SUPABASE_URL, supabaseClient)
