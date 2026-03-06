@@ -343,7 +343,7 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, onNotific
             <>
               {/* Invisible clone purely for measuring natural height */}
               <View
-                style={[styles.subtasksContainer, { position: 'absolute', opacity: 0, left: spacing.md, right: spacing.md, zIndex: -1 }]}
+                style={{ position: 'absolute', opacity: 0, left: 0, right: 0, zIndex: -1 }}
                 pointerEvents="none"
                 onLayout={(e) => {
                   const h = e.nativeEvent.layout.height;
@@ -355,12 +355,16 @@ export function ReminderCard({ reminder, onComplete, onEdit, onDelete, onNotific
                   }
                 }}
               >
-                {reminder.subtasks.map((st) => (
-                  <View key={st.id} style={styles.subtaskRow}>
-                    <Ionicons name="ellipse-outline" size={20} />
-                    <Text style={styles.subtaskText}>{st.title}</Text>
+                <View style={[styles.subtasksContainer, { marginTop: 0, paddingTop: 0 }]}>
+                  <View style={{ marginTop: spacing.md, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'transparent', gap: spacing.sm }}>
+                    {reminder.subtasks.map((st) => (
+                      <View key={st.id} style={styles.subtaskRow}>
+                        <Ionicons name="ellipse-outline" size={20} />
+                        <Text style={styles.subtaskText}>{st.title}</Text>
+                      </View>
+                    ))}
                   </View>
-                ))}
+                </View>
               </View>
 
               {/* Real animated container */}
