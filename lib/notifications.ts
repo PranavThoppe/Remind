@@ -345,3 +345,37 @@ export async function cancelReminderNotifications(reminderId: string) {
     console.error('Error cancelling reminder notifications:', error);
   }
 }
+
+/**
+ * Sync notifications with existing reminders
+ * @param reminders List of active reminders
+ * @param commonTimes Optional common times for default logic
+ */
+export async function syncNotifications(reminders: any[], commonTimes?: CommonTimes) {
+  try {
+    console.log('[Notifications] Starting resync of all notifications...');
+    await cancelAllNotifications();
+
+    let scheduledCount = 0;
+    for (const reminder of reminders) {
+      if (!reminder.completed && reminder.date) {
+        const id = await scheduleReminderNotification(
+          reminder.title,
+          reminder.date,
+          reminder.time || undefined,
+          reminder.repeat || undefined,
+          reminder.id,
+          commonTimes
+        );
+        if (id) {
+          scheduledCount++;
+        }
+      }
+    }
+    console.log(`[Notifications] Sync complete. Scheduled ${scheduledCount} notifications.`);
+    return scheduledCount;
+  } catch (error) {
+    console.error('[Notifications] Error syncing notifications:', error);
+    return 0;
+  }
+}

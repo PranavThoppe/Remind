@@ -244,6 +244,17 @@ export default function SettingsScreen() {
             />
           </Section>
 
+          {/* Advanced Section */}
+          <Section title="Advanced" colors={colors}>
+            <SettingItem
+              icon="bug-outline"
+              label="Notification Debug"
+              onPress={() => router.push('/settings/notifications-debug')}
+              isLast
+              colors={colors}
+            />
+          </Section>
+
           {/* Support Section */}
           <Section title="Support" colors={colors}>
             <SettingItem
