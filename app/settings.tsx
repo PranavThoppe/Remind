@@ -15,12 +15,12 @@ import {
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../../lib/supabase';
-import { shadows, spacing, borderRadius, typography } from '../../constants/theme';
-import { useAuth } from '../../contexts/AuthContext';
-import { useSettings } from '../../contexts/SettingsContext';
-import { useTheme } from '../../hooks/useTheme';
-import { ThemeType } from '../../types/settings';
+import { supabase } from '../lib/supabase';
+import { shadows, spacing, borderRadius, typography } from '../constants/theme';
+import { useAuth } from '../contexts/AuthContext';
+import { useSettings } from '../contexts/SettingsContext';
+import { useTheme } from '../hooks/useTheme';
+import { ThemeType } from '../types/settings';
 
 interface SettingItemProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -119,6 +119,12 @@ export default function SettingsScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="arrow-back" size={28} color={colors.foreground} />
+        </TouchableOpacity>
         <Text style={styles.title}>Settings</Text>
       </View>
 
@@ -310,6 +316,9 @@ const createStyles = (colors: any) => StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.lg,
     backgroundColor: colors.background,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   title: {
     fontFamily: typography.fontFamily.title,

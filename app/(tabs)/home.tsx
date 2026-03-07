@@ -33,7 +33,9 @@ import { Reminder } from '../../types/reminder';
 import { useReminders } from '../../hooks/useReminders';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useTheme } from '../../hooks/useTheme';
-import { AnimatedViewSelector } from '../../components/AnimatedViewSelector';
+import PagerView from 'react-native-pager-view';
+import { useRouter } from 'expo-router';
+import { ProfileAvatar } from '../../components/ProfileAvatar';
 
 
 // Enable LayoutAnimation on Android
@@ -47,10 +49,14 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const styles = createStyles(colors);
+  const router = useRouter();
 
   const { reminders, loading, addReminder, toggleComplete, refreshReminders, updateReminder, deleteReminder, hasFetched, searchReminders } = useReminders();
   const { tags, priorities, lastViewMode: viewMode, setLastViewMode: setViewMode, lastSortMode: sortMode, setLastSortMode: setSortMode } = useSettings();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+
+  const viewModeToIndex = (mode: string) => mode === 'calendar' ? 2 : mode === 'week' ? 1 : 0;
+  const indexToViewMode = (index: number) => index === 2 ? ('calendar' as any) : index === 1 ? ('week' as any) : ('list' as any);
   // Search State
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -524,14 +530,7 @@ export default function HomeScreen() {
                 >
                   <Ionicons name="search" size={24} color={colors.primary} />
                 </TouchableOpacity>
-
-                {/* View Mode Selector */}
-                {!isAiChatOpen && (
-                  <AnimatedViewSelector
-                    currentView={viewMode}
-                    onViewChange={setViewMode}
-                  />
-                )}
+                <ProfileAvatar onPress={() => router.push('/settings')} size={40} />
               </View>
             </>
           )}
@@ -553,23 +552,127 @@ export default function HomeScreen() {
         </View>
       ) : (
         <>
-          {activeReminders.length === 0 ? (
-            <View style={{ flex: 1 }}>
-              {isSearching ? (
-                <ScrollView contentContainerStyle={styles.emptySearchContainer}>
-                  {renderAnswer()}
-                  <View style={{ alignItems: 'center', marginTop: spacing.xl }}>
-                    <Ionicons name="search-outline" size={48} color={colors.mutedForeground} />
-                    <Text style={styles.emptyText}>No results found</Text>
-                    <Text style={styles.emptySubtext}>Try searching for something else</Text>
-                  </View>
-                </ScrollView>
+          <PagerView
+            style={{ flex: 1 }}
+            initialPage={viewModeToIndex(viewMode)}
+            onPageSelected={(e) => {
+              setViewMode(indexToViewMode(e.nativeEvent.position));
+            }}
+          >
+            <View key="list" style={{ flex: 1 }}>
+              {activeReminders.length === 0 ? (
+                <View style={{ flex: 1 }}>
+                  {isSearching ? (
+                    <ScrollView contentContainerStyle={styles.emptySearchContainer}>
+                      {renderAnswer()}
+                      <View style={{ alignItems: 'center', marginTop: spacing.xl }}>
+                        <Ionicons name="search-outline" size={48} color={colors.mutedForeground} />
+                        <Text style={styles.emptyText}>No results found</Text>
+                        <Text style={styles.emptySubtext}>Try searching for something else</Text>
+                      </View>
+                    </ScrollView>
+                  ) : (
+                    <EmptyState type="active" />
+                  )}
+                  <FlatList
+                    data={[]} // Keep this for refresh control
+                    renderItem={null}
+                    refreshControl={
+                      <RefreshControl
+                        refreshing={loading}
+                        onRefresh={async () => {
+                          await refreshReminders();
+                          setHistoryWeeks(prev => prev + 1);
+                        }}
+                        colors={[colors.primary]}
+                      />
+                    }
+                  />
+                </View>
               ) : (
-                <EmptyState type="active" />
+                <FlatList
+                  ref={flatListRef}
+                  ListHeaderComponent={renderAnswer()}
+                  data={groupedReminders}
+                  keyExtractor={(item) => item.id}
+                  maintainVisibleContentPosition={{
+                    minIndexForVisible: 0,
+                    autoscrollToTopThreshold: 10,
+                  }}
+                  onScrollToIndexFailed={(info) => {
+                    flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+                  }}
+                  renderItem={({ item, index: groupIndex }) => {
+                    const startIndex = groupedReminders
+                      .slice(0, groupIndex)
+                      .reduce((acc, g) => acc + g.reminders.length, 0);
+
+                    const isAnytime = item.id === 'anytime';
+
+                    if (isAnytime && sortMode === 'time') {
+                      return (
+                        <View style={styles.anytimeSection}>
+                          {groupIndex === 0 && (
+                            <View style={styles.headerRow}>
+                              <SortSelector
+                                currentSort={sortMode}
+                                onSortChange={setSortMode}
+                              />
+                            </View>
+                          )}
+                          <View style={styles.remindersList}>
+                            {item.reminders.map((reminder: Reminder, index: number) => (
+                              <ReminderCard
+                                key={reminder.id}
+                                reminder={reminder}
+                                onComplete={handleComplete}
+                                onEdit={handleEdit}
+                                onDelete={handleDelete}
+                                index={startIndex + index}
+                              />
+                            ))}
+                          </View>
+                        </View>
+                      );
+                    }
+
+                    return (
+                      <DaySection
+                        date={(item as any).date}
+                        title={(item as any).title}
+                        headerColor={(item as any).headerColor}
+                        reminders={item.reminders}
+                        onComplete={handleComplete}
+                        onEdit={handleEdit}
+                        onDelete={handleDelete}
+                        startIndex={startIndex}
+                        onSortChange={setSortMode as any}
+                        currentSort={sortMode}
+                        showSort={
+                          groupIndex === 0
+                        }
+                      />
+                    );
+                  }}
+                  contentContainerStyle={styles.listContent}
+                  showsVerticalScrollIndicator={false}
+                  refreshControl={
+                    <RefreshControl
+                      refreshing={loading}
+                      onRefresh={async () => {
+                        await refreshReminders();
+                        setHistoryWeeks(prev => prev + 1);
+                      }}
+                      colors={[colors.primary]}
+                    />
+                  }
+                />
               )}
-              <FlatList
-                data={[]} // Keep this for refresh control
-                renderItem={null}
+            </View>
+            <View key="week" style={{ flex: 1 }}>
+              <ScrollView
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
                 refreshControl={
                   <RefreshControl
                     refreshing={loading}
@@ -580,111 +683,19 @@ export default function HomeScreen() {
                     colors={[colors.primary]}
                   />
                 }
-              />
+              >
+                <WeekForecast
+                  reminders={activeReminders}
+                  onReminderClick={handleEdit}
+                  onComplete={handleComplete}
+                  onDelete={handleDelete}
+                />
+              </ScrollView>
             </View>
-          ) : viewMode === 'week' ? (
-            <ScrollView
-              contentContainerStyle={styles.listContent}
-              showsVerticalScrollIndicator={false}
-              refreshControl={
-                <RefreshControl
-                  refreshing={loading}
-                  onRefresh={async () => {
-                    await refreshReminders();
-                    setHistoryWeeks(prev => prev + 1);
-                  }}
-                  colors={[colors.primary]}
-                />
-              }
-            >
-              <WeekForecast
-                reminders={activeReminders}
-                onReminderClick={handleEdit}
-                onComplete={handleComplete}
-                onDelete={handleDelete}
-              />
-            </ScrollView>
-          ) : viewMode === 'calendar' ? (
-            <CalendarView onEdit={handleEdit} />
-          ) : (
-            <FlatList
-              ref={flatListRef}
-              ListHeaderComponent={renderAnswer()}
-              data={groupedReminders}
-              keyExtractor={(item) => item.id}
-              maintainVisibleContentPosition={{
-                minIndexForVisible: 0,
-                autoscrollToTopThreshold: 10,
-              }}
-              onScrollToIndexFailed={(info) => {
-                flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
-              }}
-              renderItem={({ item, index: groupIndex }) => {
-                const startIndex = groupedReminders
-                  .slice(0, groupIndex)
-                  .reduce((acc, g) => acc + g.reminders.length, 0);
-
-                const isAnytime = item.id === 'anytime';
-
-                if (isAnytime && sortMode === 'time') {
-                  return (
-                    <View style={styles.anytimeSection}>
-                      {groupIndex === 0 && (
-                        <View style={styles.headerRow}>
-                          <SortSelector
-                            currentSort={sortMode}
-                            onSortChange={setSortMode}
-                          />
-                        </View>
-                      )}
-                      <View style={styles.remindersList}>
-                        {item.reminders.map((reminder: Reminder, index: number) => (
-                          <ReminderCard
-                            key={reminder.id}
-                            reminder={reminder}
-                            onComplete={handleComplete}
-                            onEdit={handleEdit}
-                            onDelete={handleDelete}
-                            index={startIndex + index}
-                          />
-                        ))}
-                      </View>
-                    </View>
-                  );
-                }
-
-                return (
-                  <DaySection
-                    date={(item as any).date}
-                    title={(item as any).title}
-                    headerColor={(item as any).headerColor}
-                    reminders={item.reminders}
-                    onComplete={handleComplete}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                    startIndex={startIndex}
-                    onSortChange={setSortMode as any}
-                    currentSort={sortMode}
-                    showSort={
-                      groupIndex === 0
-                    }
-                  />
-                );
-              }}
-              contentContainerStyle={styles.listContent}
-              showsVerticalScrollIndicator={false}
-              refreshControl={
-                <RefreshControl
-                  refreshing={loading}
-                  onRefresh={async () => {
-                    await refreshReminders();
-                    setHistoryWeeks(prev => prev + 1);
-                  }}
-                  colors={[colors.primary]}
-                />
-              }
-            />
-          )}
+            <View key="calendar" style={{ flex: 1 }}>
+              <CalendarView onEdit={handleEdit} />
+            </View>
+          </PagerView>
 
           {/* Only show FloatingAddButton if NOT editing a reminder (EditReminderSheet takes over the bottom) */}
           {!editSourceLayout && !editingReminder && (
