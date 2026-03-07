@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Linking } from 'react-native';
 import { Audio } from 'expo-av';
 import { callNovaTranscribe } from '../lib/nova-client';
 
@@ -38,7 +38,14 @@ export function useVoiceDictation(onTranscriptReceived: (text: string) => void) 
         try {
             const permission = await Audio.requestPermissionsAsync();
             if (permission.status !== 'granted') {
-                Alert.alert('Microphone Access', 'Please grant microphone access to use voice dictation.');
+                Alert.alert(
+                    'Microphone Access',
+                    'Please grant microphone access in your settings to use voice dictation.',
+                    [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Open Settings', onPress: () => Linking.openSettings() }
+                    ]
+                );
                 return;
             }
 
