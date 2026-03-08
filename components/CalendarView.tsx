@@ -233,9 +233,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({ onEdit }) => {
                                 ]}>
                                     {format(date, 'd')}
                                 </Text>
-                                {hasEvents && !isSelected && (
-                                    <View style={[styles.eventDot, { backgroundColor: colors.primary }]} />
-                                )}
                             </TouchableOpacity>
                         );
                     })}
@@ -334,12 +331,6 @@ const styles = StyleSheet.create({
     },
     todayDay: {
         borderWidth: 1,
-    },
-    eventDot: {
-        width: 4,
-        height: 4,
-        borderRadius: 2,
-        marginTop: 2,
     },
     agendaContainer: {
         marginTop: spacing.xl,

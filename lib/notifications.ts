@@ -3,10 +3,18 @@ import { Platform } from 'react-native';
 import { CommonTimes } from '../types/settings';
 import { rrulestr } from 'rrule';
 
+export const BACKGROUND_NOTIFICATION_TASK = 'BACKGROUND-NOTIFICATION-TASK';
+
 /**
  * Request permissions and set up notification handler
  */
 export async function initializeNotifications() {
+  try {
+    await Notifications.registerTaskAsync(BACKGROUND_NOTIFICATION_TASK);
+  } catch (error) {
+    console.warn('Failed to register background task:', error);
+  }
+
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
 
@@ -36,7 +44,7 @@ export async function initializeNotifications() {
       identifier: 'complete',
       buttonTitle: '✅ Mark as Complete',
       options: {
-        opensAppToForeground: true, // Opens app to update UI state immediately
+        opensAppToForeground: false, // Update in background without interrupting the user
       },
     },
     {

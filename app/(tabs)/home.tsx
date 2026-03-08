@@ -14,7 +14,11 @@ import {
   LayoutAnimation,
   Keyboard,
   UIManager,
+  Animated,
+  Dimensions,
+  TouchableWithoutFeedback,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons'; // Added import
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { startOfDay, isSameDay, isToday, addDays, startOfWeek, endOfWeek, isAfter, isBefore, addWeeks, isTomorrow, subWeeks, format } from 'date-fns';
@@ -37,6 +41,7 @@ import PagerView from 'react-native-pager-view';
 import { useRouter } from 'expo-router';
 import { ProfileAvatar } from '../../components/ProfileAvatar';
 
+const SCREEN_WIDTH = Dimensions.get('window').width;
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android') {
@@ -59,6 +64,7 @@ export default function HomeScreen() {
   const indexToViewMode = (index: number) => index === 2 ? ('calendar' as any) : index === 1 ? ('week' as any) : ('list' as any);
   // Search State
   const [isSearching, setIsSearching] = useState(false);
+  const searchExpandAnim = useRef(new Animated.Value(0)).current;
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Reminder[]>([]);
   const [searchAnswer, setSearchAnswer] = useState<string | null>(null);
@@ -392,18 +398,21 @@ export default function HomeScreen() {
   };
 
   const toggleSearch = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     if (isSearching) {
       // Close search
-      setIsSearching(false);
-      setSearchQuery('');
-      setSearchResults([]);
-      setSearchAnswer(null);
       Keyboard.dismiss();
+      Animated.timing(searchExpandAnim, { toValue: 0, duration: 300, useNativeDriver: false }).start(() => {
+        setIsSearching(false);
+        setSearchQuery('');
+        setSearchResults([]);
+        setSearchAnswer(null);
+      });
     } else {
       // Open search
       setIsSearching(true);
-      setTimeout(() => searchInputRef.current?.focus(), 100);
+      Animated.timing(searchExpandAnim, { toValue: 1, duration: 300, useNativeDriver: false }).start(() => {
+        setTimeout(() => searchInputRef.current?.focus(), 100);
+      });
     }
   };
 
@@ -493,47 +502,77 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
+      <View style={[styles.header, { paddingTop: insets.top + spacing.lg, zIndex: 100 }]}>
         <View style={styles.headerTop}>
-          {isSearching ? (
-            <View style={styles.searchBarContainer}>
-              <Ionicons name="search" size={20} color={colors.mutedForeground} style={styles.searchIcon} />
-              <TextInput
-                ref={searchInputRef}
-                style={styles.searchInput}
-                placeholder="Ask or search reminders..."
-                placeholderTextColor={colors.mutedForeground}
-                value={searchQuery}
-                onChangeText={handleSearchTextChange}
-                returnKeyType="search"
-              />
-              {isSearchLoading ? (
-                <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: spacing.sm }} />
-              ) : (
-                <TouchableOpacity onPress={toggleSearch} style={styles.closeSearchButton}>
-                  <Text style={styles.closeSearchText}>Cancel</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          ) : (
-            <>
-              <View>
-                <Text style={styles.dateText}>{formatDate()}</Text>
-                <Text style={styles.greeting}>{greeting()}</Text>
-              </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.dateText}>{formatDate()}</Text>
+            <Text style={styles.greeting}>{greeting()}</Text>
+          </View>
 
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                <TouchableOpacity
-                  onPress={toggleSearch}
-                  style={styles.searchButton}
-                >
-                  <Ionicons name="search" size={24} color={colors.primary} />
-                </TouchableOpacity>
-                <ProfileAvatar onPress={() => router.push('/settings')} size={40} />
-              </View>
-            </>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+            <View style={{ width: 40, height: 40 }} />
+            <ProfileAvatar onPress={() => router.push('/settings')} size={40} />
+          </View>
+
+          {/* Search Blur Overlay that breaks out of Header */}
+          {isSearching && (
+            <TouchableWithoutFeedback onPress={toggleSearch}>
+              <Animated.View style={[{
+                position: 'absolute',
+                top: -(insets.top + spacing.lg),
+                left: -spacing.xl,
+                width: SCREEN_WIDTH,
+                height: Dimensions.get('window').height + 100,
+                zIndex: 90,
+                opacity: searchExpandAnim,
+              }]}>
+                <BlurView intensity={40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.25)' }]} />
+              </Animated.View>
+            </TouchableWithoutFeedback>
           )}
+
+          {/* Animated Expanding Search Button / Input */}
+          <Animated.View style={[{
+            position: 'absolute',
+            right: searchExpandAnim.interpolate({ inputRange: [0, 1], outputRange: [40 + spacing.sm, 0] }),
+            width: searchExpandAnim.interpolate({ inputRange: [0, 1], outputRange: [40, SCREEN_WIDTH - spacing.xl * 2] }),
+            height: searchExpandAnim.interpolate({ inputRange: [0, 1], outputRange: [40, 44] }),
+            borderRadius: 22,
+            backgroundColor: searchExpandAnim.interpolate({ inputRange: [0, 1], outputRange: [`${colors.primary}15`, colors.card] }),
+            borderColor: searchExpandAnim.interpolate({ inputRange: [0, 1], outputRange: ['transparent', colors.primary] }),
+            borderWidth: searchExpandAnim.interpolate({ inputRange: [0, 0.1, 1], outputRange: [0, 1, 1] }),
+            overflow: 'hidden',
+            flexDirection: 'row',
+            alignItems: 'center',
+            zIndex: 100, // Keeps search bar above the BlurView
+          }]}>
+            {isSearching ? (
+              <Animated.View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingLeft: spacing.md, opacity: searchExpandAnim }}>
+                <Ionicons name="search" size={20} color={colors.primary} style={styles.searchIcon} />
+                <TextInput
+                  ref={searchInputRef}
+                  style={styles.searchInput}
+                  placeholder="Ask or search reminders..."
+                  placeholderTextColor={colors.mutedForeground}
+                  value={searchQuery}
+                  onChangeText={handleSearchTextChange}
+                  returnKeyType="search"
+                />
+                {isSearchLoading ? (
+                  <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: spacing.sm }} />
+                ) : (
+                  <TouchableOpacity onPress={toggleSearch} style={styles.closeSearchButton}>
+                    <Text style={styles.closeSearchText}>Cancel</Text>
+                  </TouchableOpacity>
+                )}
+              </Animated.View>
+            ) : (
+              <TouchableOpacity onPress={toggleSearch} style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="search" size={20} color={colors.primary} />
+              </TouchableOpacity>
+            )}
+          </Animated.View>
         </View>
       </View>
 
