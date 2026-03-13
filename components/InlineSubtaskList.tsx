@@ -29,6 +29,9 @@ export function InlineSubtaskList({ subtasks, onChange, onSave, onCancel }: Inli
     const listRef = useRef<any>(null);
     const subtasksRef = useRef(subtasks);
     const isCancelledRef = useRef(false);
+    // Always hold the latest onSave to avoid stale closure in the cleanup effect
+    const onSaveRef = useRef(onSave);
+    useEffect(() => { onSaveRef.current = onSave; }, [onSave]);
 
     useEffect(() => {
         setLocalSubtasks(subtasks);
@@ -40,10 +43,10 @@ export function InlineSubtaskList({ subtasks, onChange, onSave, onCancel }: Inli
 
     useEffect(() => {
         return () => {
-            if (onSave && !isCancelledRef.current) {
+            if (onSaveRef.current && !isCancelledRef.current) {
                 // Filter out empty subtasks so we don't save blanks
                 const validSubtasks = subtasksRef.current.filter(t => t.title.trim().length > 0);
-                onSave(validSubtasks);
+                onSaveRef.current(validSubtasks);
             }
         };
     }, []);

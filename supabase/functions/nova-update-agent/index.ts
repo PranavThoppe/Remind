@@ -35,7 +35,7 @@ const draftUpdateReminderTool = {
                 },
                 time: {
                     type: "string",
-                    description: "New time in HH:mm 24-hour format. Only include if changing the time."
+                    description: "New time in HH:mm 24-hour format. Only include if changing the time. Pass null or empty string if the user explicitly wants to remove the time (e.g., 'change it to anytime')."
                 },
                 repeat: {
                     type: "string",
@@ -556,7 +556,8 @@ BEHAVIOUR:
 - When the user subsequently replies to that question with topics (e.g., "a study guide for my AI midterm"), you should then use create_subtasks again to actually generate and populate the suggested subtasks based on their input.
 - If the user asks to reschedule, use search_reminders first to check for conflicts at the new time, then draft the update.
 - Always calculate actual dates from relative references (e.g., "tomorrow" = ${tomorrowStr}).
-- Use the user's Common Times for vague terms: morning=${commonTimes.morning}, afternoon=${commonTimes.afternoon}, evening=${commonTimes.evening}, night=${commonTimes.night}.
+- If the user does not specify a time when creating/rescheduling or asks to remove the time, omit the time or pass null so it defaults to "Anytime".
+- If the user uses vague time terms ("tonight", "morning"), use their Common Times and DO NOT ask clarifying questions: morning=${commonTimes.morning}, afternoon=${commonTimes.afternoon}, evening=${commonTimes.evening}, night=${commonTimes.night}.
 - TIME FORMAT FOR TEXT: The user's preferred time format is ${time_format}. When speaking to the user in text, format times accordingly (e.g., if '12h', say "6:00 PM"; if '24h', say "18:00").
 - TIME FORMAT FOR TOOLS: Regardless of the user's preference for text, you must ALWAYS use 24-hour 'HH:mm' format when calling tools like draft_update_reminder or update_reminder.
 - Keep responses warm, short and focused.

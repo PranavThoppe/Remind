@@ -10,7 +10,7 @@ import { scheduleReminderNotification } from '../lib/notifications';
 export function useNovaAddChat() {
     const { user } = useAuth();
     const { tags, priorities } = useSettings();
-    const { addReminder, reminders, deleteReminder, updateReminder, updateSubtasks } = useReminders();
+    const { addReminder, updateSubtasks } = useReminders();
 
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [hiddenMessages, setHiddenMessages] = useState<ChatMessage[]>([]);
@@ -89,40 +89,6 @@ export function useNovaAddChat() {
                         content: response.message || toolResult.message || "Reminder created!", timestamp: new Date(),
                     }]);
                 }
-            } else if (toolName === 'search_reminders') {
-                const parsedResults = Array.isArray(toolResult.reminders) ? toolResult.reminders : [];
-                setMessages(prev => [...prev, {
-                    id: Date.now().toString(), role: 'assistant',
-                    content: response.message || "Here's what I found:", timestamp: new Date(),
-                    panelType: 'search', panelSearchResults: parsedResults,
-                }]);
-            } else if (toolName === 'delete_reminder') {
-                const idToDelete = toolResult.reminder_id || toolResult.id;
-                if (idToDelete) {
-                    await deleteReminder(idToDelete);
-                }
-                const remainingToday = reminders.filter(
-                    r => r.date === clientDate && !r.completed && r.id !== idToDelete
-                );
-                setMessages(prev => [...prev, {
-                    id: Date.now().toString(),
-                    role: 'assistant',
-                    content: response.message || toolResult.message || "Reminder deleted successfully!",
-                    timestamp: new Date(),
-                    panelType: 'reminder_list',
-                    panelSearchResults: remainingToday,
-                }]);
-            } else if (toolName === 'update_reminder') {
-                // Even in 'Add' mode, if they ask to update via search, we process it inline if the agent handled it.
-                const updatedId = toolResult.reminder_id || toolResult.id || toolResult.reminder?.id;
-                const updatedReminder = updatedId ? reminders.find(r => r.id === updatedId) : undefined;
-                setMessages(prev => [...prev, {
-                    id: Date.now().toString(),
-                    role: 'assistant',
-                    content: response.message || toolResult.message || "Reminder updated.",
-                    timestamp: new Date(),
-                    ...(updatedReminder ? { panelType: 'reminder_list', panelSearchResults: [updatedReminder] } : {}),
-                }]);
             } else {
                 setMessages(prev => [...prev, {
                     id: Date.now().toString(), role: 'assistant',
@@ -137,7 +103,7 @@ export function useNovaAddChat() {
         } finally {
             setIsThinking(false);
         }
-    }, [user, tags, priorities, reminders]);
+    }, [user, tags, priorities]);
 
     const handleSend = useCallback(async (overrideText?: string) => {
         const trimmed = overrideText ? overrideText.trim() : inputText.trim();
@@ -189,6 +155,32 @@ export function useNovaAddChat() {
         setHiddenMessages([]);
     }, [hiddenMessages]);
 
+    const pushRepeatSettings = useCallback((initialFields?: { repeat?: string; date?: string | null }) => {
+        setMessages(prev => [...prev, {
+            id: `temp-repeat-${Date.now()}`, role: 'assistant' as const,
+            content: '', timestamp: new Date(), panelType: 'repeat_settings' as const,
+            panelFields: { repeat: initialFields?.repeat, date: initialFields?.date },
+            panelIsStatic: false,
+        }]);
+    }, []);
+
+    const pushSubtasksSettings = useCallback((initialFields?: { subtasks?: any[] }) => {
+        setMessages(prev => [...prev, {
+            id: `temp-subtasks-${Date.now()}`, role: 'assistant' as const,
+            content: '', timestamp: new Date(), panelType: 'subtasks_settings' as const,
+            panelFields: { subtasks: initialFields?.subtasks || [] },
+            panelIsStatic: false,
+        }]);
+    }, []);
+
+    const pushNotificationSettings = useCallback(() => {
+        setMessages(prev => [...prev, {
+            id: `temp-notification-${Date.now()}`, role: 'assistant' as const,
+            content: '', timestamp: new Date(), panelType: 'notification_settings' as const, panelFields: {},
+            panelIsStatic: false,
+        }]);
+    }, []);
+
     const reset = useCallback(() => {
         setInputText('');
         setSelectedImage(null);
@@ -206,6 +198,9 @@ export function useNovaAddChat() {
         handleDraftConfirm,
         handleDraftDiscard,
         processMessage,
+        pushRepeatSettings,
+        pushSubtasksSettings,
+        pushNotificationSettings,
         reset,
     };
 }

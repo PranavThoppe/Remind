@@ -6,6 +6,7 @@ import { useAuth } from './AuthContext';
 import { Reminder, Subtask } from '../types/reminder';
 import { cancelReminderNotifications } from '../lib/notifications';
 import { rrulestr } from 'rrule';
+import * as Crypto from 'expo-crypto';
 
 interface RemindersContextType {
   reminders: Reminder[];
@@ -279,7 +280,7 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
 
       if (!error && data) {
         setReminders((prev) =>
-          prev.map((r) => (r.id === id ? data : r))
+          prev.map((r) => (r.id === id ? { ...r, ...data } : r))
         );
       }
       return { data, error };
@@ -314,7 +315,7 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
     try {
       if (!user) return { error: new Error('User not authenticated') };
 
-      // Filter out temporary IDs (starting with 'temp-') so Supabase generates new UUIDs if mapped without id
+      // Ensure all objects have an `id` to prevent Supabase bulk insert schema mismatch
       const toUpsert = newSubtasks.map(t => {
         const payload: any = {
           reminder_id: reminderId,
@@ -322,11 +323,9 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
           title: t.title,
           is_completed: t.is_completed,
           position: t.position,
+          // If it's a new subtask (starts with 'temp-' or missing id), generate a valid UUID
+          id: (t.id && !t.id.startsWith('temp-')) ? t.id : Crypto.randomUUID(),
         };
-        // Provide the id only if it exists and isn't a temp id
-        if (t.id && !t.id.startsWith('temp-')) {
-          payload.id = t.id;
-        }
         return payload;
       });
 
