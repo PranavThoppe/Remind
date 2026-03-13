@@ -10,9 +10,10 @@ import { scheduleReminderNotification } from '../lib/notifications';
 export function useNovaAddChat() {
     const { user } = useAuth();
     const { tags, priorities } = useSettings();
-    const { addReminder, reminders, deleteReminder, updateReminder } = useReminders();
+    const { addReminder, reminders, deleteReminder, updateReminder, updateSubtasks } = useReminders();
 
     const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [hiddenMessages, setHiddenMessages] = useState<ChatMessage[]>([]);
     const [isThinking, setIsThinking] = useState(false);
     const [inputText, setInputText] = useState('');
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -69,12 +70,19 @@ export function useNovaAddChat() {
                         tag_id: draft.tag_name ? tags.find(t => t.name.toLowerCase() === draft.tag_name.toLowerCase())?.id : undefined,
                         priority_id: draft.priority_name ? priorities.find(p => p.name.toLowerCase() === draft.priority_name.toLowerCase())?.id : undefined,
                         notes: draft.notes,
+                        subtasks: draft.subtasks,
                     };
-                    setMessages(prev => [...prev, {
-                        id: Date.now().toString(), role: 'assistant',
+                    const newMessage = {
+                        id: Date.now().toString(), role: 'assistant' as const,
                         content: response.message || toolResult.message || "Here's a draft for your reminder:",
-                        timestamp: new Date(), panelType: 'draft', panelFields: sheetDraft,
-                    }]);
+                        timestamp: new Date(), panelType: 'draft' as const, panelFields: sheetDraft,
+                    };
+                    if (draft.subtasks && draft.subtasks.length > 0) {
+                        setHiddenMessages(currentMessages);
+                        setMessages([newMessage]);
+                    } else {
+                        setMessages(prev => [...prev, newMessage]);
+                    }
                 } else {
                     setMessages(prev => [...prev, {
                         id: Date.now().toString(), role: 'assistant',
@@ -160,6 +168,9 @@ export function useNovaAddChat() {
         });
 
         if (!result.error && result.data) {
+            if (fields.subtasks && fields.subtasks.length > 0) {
+                await updateSubtasks((result.data as Reminder).id, fields.subtasks);
+            }
             try {
                 await scheduleReminderNotification(fields.title, dateStr, fields.time || undefined, fields.repeat || 'none', (result.data as Reminder).id);
             } catch (_err) { }
@@ -167,10 +178,22 @@ export function useNovaAddChat() {
         }
     }, [addReminder]);
 
+    const handleDraftDiscard = useCallback((messageId: string) => {
+        setMessages(prev => {
+            const isDiscardingSubtaskDraft = prev.find(m => m.id === messageId && m.panelFields?.subtasks && m.panelFields.subtasks.length > 0);
+            if (isDiscardingSubtaskDraft && hiddenMessages.length > 0) {
+                return hiddenMessages;
+            }
+            return prev.filter(m => m.id !== messageId);
+        });
+        setHiddenMessages([]);
+    }, [hiddenMessages]);
+
     const reset = useCallback(() => {
         setInputText('');
         setSelectedImage(null);
         setMessages([]);
+        setHiddenMessages([]);
     }, []);
 
     return {
@@ -181,6 +204,7 @@ export function useNovaAddChat() {
         flatListRef,
         handleSend,
         handleDraftConfirm,
+        handleDraftDiscard,
         processMessage,
         reset,
     };

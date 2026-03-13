@@ -307,7 +307,7 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
   const {
     messages, setMessages, isThinking, inputText, setInputText,
     selectedImage, setSelectedImage,
-    flatListRef, handleSend, handleDraftConfirm,
+    flatListRef, handleSend, handleDraftConfirm, handleDraftDiscard
   } = nova;
 
   const handleTranscript = (text: string) => {
@@ -490,7 +490,7 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
                   setIsSheetOpen(true);
                 }}
                 onDraftDiscard={(msgId) => {
-                  setMessages(prev => prev.filter(m => m.id !== msgId));
+                  handleDraftDiscard(msgId);
                 }}
                 onSelectSearchResult={(r) => {
                   // When we split completely, tapping a search result in the Add flow could open the EditReminderSheet 

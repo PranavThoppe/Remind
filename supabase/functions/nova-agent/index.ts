@@ -53,6 +53,13 @@ const createReminderTool = {
                 notes: {
                     type: "string",
                     description: "Contextual notes or details about the reminder."
+                },
+                subtasks: {
+                    type: "array",
+                    items: {
+                        type: "string"
+                    },
+                    description: "List of subtasks if the user asks to break down the task or asks for a checklist. Only include if explicitly requested or heavily implied (e.g. 'pack for my trip with a checklist')."
                 }
             },
             required: ["title", "date"]
@@ -94,6 +101,13 @@ const draftReminderTool = {
                 notes: {
                     type: "string",
                     description: "Contextual notes or details about the reminder derived from the conversation."
+                },
+                subtasks: {
+                    type: "array",
+                    items: {
+                        type: "string"
+                    },
+                    description: "List of subtasks if the user asks to break down the task or asks for a checklist."
                 }
             },
             required: ["title", "date"]
@@ -262,6 +276,21 @@ async function handleCreateReminder(toolInput: any, userId: string, supabase: an
         return { success: false, error: error.message }
     }
 
+    if (toolInput.subtasks && Array.isArray(toolInput.subtasks) && toolInput.subtasks.length > 0) {
+        const subtasksToInsert = toolInput.subtasks.map((title: string, index: number) => ({
+            reminder_id: data.id,
+            title: title,
+            is_completed: false,
+            position: index
+        }));
+        const { error: subtaskError } = await supabase
+            .from('subtasks')
+            .insert(subtasksToInsert);
+        if (subtaskError) {
+            console.error('[DB Error] create_reminder subtasks:', subtaskError);
+        }
+    }
+
     return {
         success: true,
         reminder: {
@@ -281,11 +310,25 @@ async function handleCreateReminder(toolInput: any, userId: string, supabase: an
 
 function handleDraftReminder(toolInput: any) {
     console.log('[Agent] draft_reminder:', JSON.stringify(toolInput, null, 2))
+
+    // Map string subtasks to Subtask objects for the UI
+    let formattedSubtasks = [];
+    if (toolInput.subtasks && Array.isArray(toolInput.subtasks)) {
+        formattedSubtasks = toolInput.subtasks.map((title: string, index: number) => ({
+            id: `temp-subtask-${Date.now()}-${index}`,
+            reminder_id: 'draft',
+            title: title,
+            is_completed: false,
+            position: index
+        }));
+    }
+
     // Just echo back the input as a "draft"
     return {
         success: true,
         draft: {
             ...toolInput,
+            subtasks: formattedSubtasks.length > 0 ? formattedSubtasks : undefined,
             is_draft: true
         },
         message: "I've drafted a reminder for you. Please review it above."
