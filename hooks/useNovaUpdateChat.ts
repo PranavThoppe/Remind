@@ -22,6 +22,9 @@ export function useNovaUpdateChat(options: UseNovaUpdateChatOptions = {}) {
     const [inputText, setInputText] = useState('');
     const [pinnedReminder, setPinnedReminder] = useState<Reminder | null>(initialPinnedReminder || null);
 
+    // Track if we've already run the initial analysis for this reminder/session
+    const hasTriggeredInitialAnalysis = useRef<string | null>(null);
+
     // Explicit suggestion states
     const [suggestions, setSuggestions] = useState<string[]>([]);
     const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
@@ -32,6 +35,10 @@ export function useNovaUpdateChat(options: UseNovaUpdateChatOptions = {}) {
     useEffect(() => {
         if (initialPinnedReminder) {
             setPinnedReminder(initialPinnedReminder);
+            // Reset trigger tracking if the reminder changes
+            if (hasTriggeredInitialAnalysis.current !== initialPinnedReminder.id) {
+                hasTriggeredInitialAnalysis.current = null;
+            }
         }
     }, [initialPinnedReminder]);
 
@@ -64,7 +71,11 @@ export function useNovaUpdateChat(options: UseNovaUpdateChatOptions = {}) {
         input: string,
         currentMessages: ChatMessage[],
     ) => {
-        if (!pinnedReminder) return;
+        // Use the prop as a fallback if state hasn't synced yet
+        const activeReminder = pinnedReminder || initialPinnedReminder;
+        if (!activeReminder) return;
+
+        const currentReminderId = activeReminder.id;
         try {
             if (!user) {
                 setMessages(prev => [...prev, {
@@ -85,10 +96,16 @@ export function useNovaUpdateChat(options: UseNovaUpdateChatOptions = {}) {
             const response = await callNovaUpdateAgent({
                 query: input,
                 user_id: user.id,
-                reminder: { ...pinnedReminder, date: pinnedReminder.date || undefined },
+                reminder: {
+                    ...activeReminder,
+                    date: activeReminder.date || undefined
+                } as any,
                 conversation: conversationHistory,
                 client_date: clientDate,
             });
+
+            const nowActiveId = (pinnedReminder || initialPinnedReminder)?.id;
+            if (nowActiveId !== currentReminderId) return;
 
             const lastToolCall = response.tool_calls?.[response.tool_calls.length - 1];
 
@@ -121,17 +138,6 @@ export function useNovaUpdateChat(options: UseNovaUpdateChatOptions = {}) {
                     id: Date.now().toString(), role: 'assistant',
                     content: response.message || toolResult.message || "Here's the proposed update:",
                     timestamp: new Date(), panelType: 'draft_update' as any, panelFields: sheetDraft,
-                }]);
-            } else if (toolName === 'delete_reminder') {
-                const idToDelete = toolResult.reminder_id || toolResult.id;
-                if (idToDelete) {
-                    await deleteReminder(idToDelete);
-                }
-                setMessages(prev => [...prev, {
-                    id: Date.now().toString(),
-                    role: 'assistant',
-                    content: response.message || toolResult.message || "Reminder deleted successfully!",
-                    timestamp: new Date(),
                 }]);
             } else if (toolName === 'update_notification_offsets') {
                 const offsets = toolResult.offsets || [];
@@ -193,9 +199,12 @@ export function useNovaUpdateChat(options: UseNovaUpdateChatOptions = {}) {
                 content: error.message || "An error occurred.", timestamp: new Date(),
             }]);
         } finally {
-            setIsThinking(false);
+            const nowActiveId = (pinnedReminder || initialPinnedReminder)?.id;
+            if (nowActiveId === currentReminderId) {
+                setIsThinking(false);
+            }
         }
-    }, [user, tags, priorities, pinnedReminder]);
+    }, [user, tags, priorities, pinnedReminder, initialPinnedReminder]);
 
     const handleSend = useCallback(async (overrideText?: string) => {
         const trimmed = overrideText ? overrideText.trim() : inputText.trim();
@@ -308,6 +317,15 @@ export function useNovaUpdateChat(options: UseNovaUpdateChatOptions = {}) {
         }]);
     }, [pinnedReminder]);
 
+    const triggerInitialAnalysis = useCallback(async () => {
+        const activeReminder = pinnedReminder || initialPinnedReminder;
+        if (!activeReminder || hasTriggeredInitialAnalysis.current === activeReminder.id) return;
+
+        hasTriggeredInitialAnalysis.current = activeReminder.id;
+        setIsThinking(true);
+        await processMessage('ACTION:INITIAL_ANALYSIS', messages);
+    }, [pinnedReminder, initialPinnedReminder, messages, processMessage]);
+
     return {
         messages, setMessages,
         isThinking,
@@ -321,6 +339,7 @@ export function useNovaUpdateChat(options: UseNovaUpdateChatOptions = {}) {
         pushNotificationSettings,
         pushRepeatSettings,
         pushSubtasksSettings,
+        triggerInitialAnalysis,
         reset,
     };
 }

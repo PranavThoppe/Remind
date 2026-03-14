@@ -43,7 +43,7 @@ const ANIM_DURATION = 350;
 
 // ─────────────── Reusable sub-components from FloatingAddButton ───────────────
 
-function TypingIndicator({ colors }: { colors: any }) {
+function TypingIndicator({ colors, onOverlayPress }: { colors: any; onOverlayPress?: () => void }) {
     const dot1 = useRef(new Animated.Value(0)).current;
     const dot2 = useRef(new Animated.Value(0)).current;
     const dot3 = useRef(new Animated.Value(0)).current;
@@ -69,13 +69,17 @@ function TypingIndicator({ colors }: { colors: any }) {
     });
 
     return (
-        <View style={[localStyles.messageBubble, localStyles.aiBubble, { backgroundColor: colors.card, borderColor: colors.border, alignSelf: 'flex-start', marginLeft: spacing.lg }]}>
-            <View style={localStyles.typingContainer}>
-                <Animated.View style={[localStyles.typingDot, { backgroundColor: colors.mutedForeground }, dotStyle(dot1)]} />
-                <Animated.View style={[localStyles.typingDot, { backgroundColor: colors.mutedForeground }, dotStyle(dot2)]} />
-                <Animated.View style={[localStyles.typingDot, { backgroundColor: colors.mutedForeground }, dotStyle(dot3)]} />
+        <TouchableWithoutFeedback onPress={onOverlayPress}>
+            <View style={[localStyles.messageContainer]}>
+                <View style={[localStyles.messageBubble, localStyles.aiBubble, { backgroundColor: colors.card, borderColor: colors.border, alignSelf: 'flex-start', marginLeft: spacing.lg }]}>
+                    <View style={localStyles.typingContainer}>
+                        <Animated.View style={[localStyles.typingDot, { backgroundColor: colors.mutedForeground }, dotStyle(dot1)]} />
+                        <Animated.View style={[localStyles.typingDot, { backgroundColor: colors.mutedForeground }, dotStyle(dot2)]} />
+                        <Animated.View style={[localStyles.typingDot, { backgroundColor: colors.mutedForeground }, dotStyle(dot3)]} />
+                    </View>
+                </View>
             </View>
-        </View>
+        </TouchableWithoutFeedback>
     );
 }
 
@@ -86,6 +90,7 @@ function MessageBubble({
     reminder,
     onDraftConfirm,
     onDraftDiscard,
+    onOverlayPress,
 }: {
     message: ChatMessage;
     colors: any;
@@ -93,6 +98,7 @@ function MessageBubble({
     reminder?: Reminder | null;
     onDraftConfirm?: (messageId: string, draft: ModalFieldUpdates) => void;
     onDraftDiscard?: (messageId: string) => void;
+    onOverlayPress?: () => void;
 }) {
     const isUser = message.role === 'user';
 
@@ -118,116 +124,132 @@ function MessageBubble({
         const isStatic = message.panelIsStatic;
 
         return (
-            <View style={[localStyles.messageContainer]}>
-                <View style={{ width: '100%', maxWidth: 340 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, marginLeft: 4 }}>
-                        <Ionicons
-                            name={isStatic ? 'checkmark-circle' : 'sparkles'}
-                            size={16}
-                            color={isStatic ? colors.success : colors.primary}
-                            style={{ marginRight: 6 }}
-                        />
-                        <Text style={{ color: isStatic ? colors.success : colors.mutedForeground, fontSize: 12, fontFamily: typography.fontFamily.medium }}>
-                            {isStatic
-                                ? ((message.panelType as any) === 'draft_update' ? 'Reminder Updated' : 'Reminder Created')
-                                : 'Proposed Update'}
-                        </Text>
-                    </View>
+            <TouchableWithoutFeedback onPress={onOverlayPress}>
+                <View style={[localStyles.messageContainer]}>
+                    <TouchableWithoutFeedback onPress={() => { }}>
+                        <View style={{ width: '100%', maxWidth: 340 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, marginLeft: 4 }}>
+                                <Ionicons
+                                    name={isStatic ? 'checkmark-circle' : 'sparkles'}
+                                    size={16}
+                                    color={isStatic ? colors.success : colors.primary}
+                                    style={{ marginRight: 6 }}
+                                />
+                                <Text style={{ color: isStatic ? colors.success : colors.mutedForeground, fontSize: 12, fontFamily: typography.fontFamily.medium }}>
+                                    {isStatic
+                                        ? ((message.panelType as any) === 'draft_update' ? 'Reminder Updated' : 'Reminder Created')
+                                        : 'Proposed Update'}
+                                </Text>
+                            </View>
 
-                    <ReminderCard
-                        reminder={draftReminder}
-                        index={0}
-                        onComplete={isStatic ? () => { } : () => onDraftConfirm?.(message.id, message.panelFields!)}
-                        onEdit={isStatic ? () => { } : () => { }}
-                        onDelete={isStatic ? undefined : () => onDraftDiscard?.(message.id)}
-                    /* We don't allow opening notification sheet from a drafted message bubble for now, they use the ghost card */
-                    />
+                            <ReminderCard
+                                reminder={draftReminder}
+                                index={0}
+                                onComplete={isStatic ? () => { } : () => onDraftConfirm?.(message.id, message.panelFields!)}
+                                onEdit={isStatic ? () => { } : () => { }}
+                                onDelete={isStatic ? undefined : () => onDraftDiscard?.(message.id)}
+                            /* We don't allow opening notification sheet from a drafted message bubble for now, they use the ghost card */
+                            />
 
-                    {!isStatic && (
-                        <Text style={{ textAlign: 'center', marginTop: 8, color: colors.mutedForeground, fontSize: 11 }}>
-                            Tap check to update • Swipe to discard
-                        </Text>
-                    )}
+                            {!isStatic && (
+                                <Text style={{ textAlign: 'center', marginTop: 8, color: colors.mutedForeground, fontSize: 11 }}>
+                                    Tap check to update • Swipe to discard
+                                </Text>
+                            )}
+                        </View>
+                    </TouchableWithoutFeedback>
                 </View>
-            </View>
+            </TouchableWithoutFeedback>
         );
     }
 
     if (message.panelType === 'notification_settings') {
         const isStatic = message.panelIsStatic;
         return (
-            <View style={[localStyles.messageContainer]}>
-                <View style={{ width: '100%', maxWidth: 340 }}>
-                    <InlineNotificationPicker
-                        initialOffsets={message.panelFields?.notification_offsets || []}
-                        baseTime={reminder?.time}
-                        onConfirm={(offsets) => {
-                            if (!isStatic) {
-                                // Instantly auto-save so the ghost card updates and shows the bell icon
-                                onDraftConfirm?.(message.id, { notification_offsets: offsets });
-                            }
-                        }}
-                        onCancel={() => {
-                            if (!isStatic) {
-                                // If they explicitly close the tool, clear the notifications
-                                onDraftConfirm?.(message.id, { notification_offsets: [] });
-                                onDraftDiscard?.(message.id);
-                            }
-                        }}
-                    />
+            <TouchableWithoutFeedback onPress={onOverlayPress}>
+                <View style={[localStyles.messageContainer]}>
+                    <TouchableWithoutFeedback onPress={() => { }}>
+                        <View style={{ width: '100%', maxWidth: 340 }}>
+                            <InlineNotificationPicker
+                                initialOffsets={message.panelFields?.notification_offsets || []}
+                                baseTime={reminder?.time}
+                                onConfirm={(offsets) => {
+                                    if (!isStatic) {
+                                        // Instantly auto-save so the ghost card updates and shows the bell icon
+                                        onDraftConfirm?.(message.id, { notification_offsets: offsets });
+                                    }
+                                }}
+                                onCancel={() => {
+                                    if (!isStatic) {
+                                        // If they explicitly close the tool, clear the notifications
+                                        onDraftConfirm?.(message.id, { notification_offsets: [] });
+                                        onDraftDiscard?.(message.id);
+                                    }
+                                }}
+                            />
+                        </View>
+                    </TouchableWithoutFeedback>
                 </View>
-            </View>
+            </TouchableWithoutFeedback>
         );
     }
 
     if ((message.panelType as any) === 'subtasks_settings') {
         const isStatic = message.panelIsStatic;
         return (
-            <View style={[localStyles.messageContainer]}>
-                <View style={{ width: '100%', maxWidth: 340 }}>
-                    <InlineSubtaskList
-                        subtasks={message.panelFields?.subtasks || []}
-                        onChange={(subtasks) => {
-                            // Local UI updates handled inside
-                        }}
-                        onSave={!isStatic ? (subtasks) => {
-                            onDraftConfirm?.(message.id, { subtasks });
-                        } : undefined}
-                        onCancel={() => {
-                            if (!isStatic) {
-                                // If they explicitly dismiss the subtask panel, just discard
-                                onDraftDiscard?.(message.id);
-                            }
-                        }}
-                    />
+            <TouchableWithoutFeedback onPress={onOverlayPress}>
+                <View style={[localStyles.messageContainer]}>
+                    <TouchableWithoutFeedback onPress={() => { }}>
+                        <View style={{ width: '100%', maxWidth: 340 }}>
+                            <InlineSubtaskList
+                                subtasks={message.panelFields?.subtasks || []}
+                                onChange={(subtasks) => {
+                                    // Local UI updates handled inside
+                                }}
+                                onSave={!isStatic ? (subtasks) => {
+                                    onDraftConfirm?.(message.id, { subtasks });
+                                } : undefined}
+                                onCancel={() => {
+                                    if (!isStatic) {
+                                        // If they explicitly dismiss the subtask panel, just discard
+                                        onDraftDiscard?.(message.id);
+                                    }
+                                }}
+                            />
+                        </View>
+                    </TouchableWithoutFeedback>
                 </View>
-            </View>
+            </TouchableWithoutFeedback>
         );
     }
 
     return (
-        <View style={[localStyles.messageContainer, isUser && localStyles.userMessageContainer]}>
-            <View
-                style={[
-                    localStyles.messageBubble,
-                    isUser
-                        ? [localStyles.userBubble, { backgroundColor: colors.primary }]
-                        : [localStyles.aiBubble, { backgroundColor: colors.card, borderColor: colors.border }],
-                ]}
-            >
-                {message.content ? (
-                    <Text
-                        style={
+        <TouchableWithoutFeedback onPress={onOverlayPress}>
+            <View style={[localStyles.messageContainer, isUser && localStyles.userMessageContainer]}>
+                <TouchableWithoutFeedback onPress={() => { }}>
+                    <View
+                        style={[
+                            localStyles.messageBubble,
                             isUser
-                                ? [localStyles.messageText, { color: colors.primaryForeground }]
-                                : [localStyles.aiMessageText, { color: colors.foreground }]
-                        }
+                                ? [localStyles.userBubble, { backgroundColor: colors.primary }]
+                                : [localStyles.aiBubble, { backgroundColor: colors.card, borderColor: colors.border }],
+                        ]}
                     >
-                        {message.content}
-                    </Text>
-                ) : null}
+                        {message.content ? (
+                            <Text
+                                style={
+                                    isUser
+                                        ? [localStyles.messageText, { color: colors.primaryForeground }]
+                                        : [localStyles.aiMessageText, { color: colors.foreground }]
+                                }
+                            >
+                                {message.content}
+                            </Text>
+                        ) : null}
+                    </View>
+                </TouchableWithoutFeedback>
             </View>
-        </View>
+        </TouchableWithoutFeedback>
     );
 }
 
@@ -276,6 +298,7 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
         pinnedReminder, setPinnedReminder,
         suggestions, isGeneratingSuggestions,
         flatListRef, handleSend, handleDraftUpdateConfirm,
+        triggerInitialAnalysis,
     } = nova;
 
     const handleTranscript = (text: string) => {
@@ -290,7 +313,7 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
     const targetX = spacing.xl;
     const targetWidth = SCREEN_WIDTH - spacing.xl * 2;
 
-    const hasStartedChatting = messages.length > 0 || inputText.trim().length > 0 || isKeyboardVisible;
+    const hasStartedChatting = messages.some(m => m.role === 'user') || inputText.trim().length > 0 || isKeyboardVisible;
 
     useEffect(() => {
         if (!isVisible) return;
@@ -374,6 +397,17 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
             ]).start();
         }
     }, [reminder, sourceLayout]);
+
+    // Trigger initial analysis when ready
+    useEffect(() => {
+        if (isVisible && reminder) {
+            // Small buffer to ensure everything is settled after animation starts
+            const timer = setTimeout(() => {
+                triggerInitialAnalysis();
+            }, 600);
+            return () => clearTimeout(timer);
+        }
+    }, [isVisible, !!reminder, triggerInitialAnalysis]);
 
     const handleClose = () => {
         Keyboard.dismiss();
@@ -592,6 +626,7 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
                                 colors={colors}
                                 tags={tags}
                                 reminder={reminder}
+                                onOverlayPress={handleOverlayPress}
                                 onDraftConfirm={(msgId, draftFields) => {
                                     // Make sure we pass the fields through properly (handleDraftConfirm expects msgId, fields)
                                     // Since we updated the signature of onDraftConfirm, we should use the new draftFields if provided.
@@ -613,7 +648,7 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
                         contentContainerStyle={{ paddingBottom: spacing.lg + 50 }}
                         showsVerticalScrollIndicator={false}
                         keyboardShouldPersistTaps="handled"
-                        ListFooterComponent={isThinking ? <TypingIndicator colors={colors} /> : null}
+                        ListFooterComponent={isThinking ? <TypingIndicator colors={colors} onOverlayPress={handleOverlayPress} /> : null}
                     />
                 ) : (
                     <TouchableWithoutFeedback onPress={handleOverlayPress}>
