@@ -432,7 +432,10 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
     };
 
     const handleOverlayPress = () => {
-        if (isKeyboardVisible) {
+        if (isPickerOpen) {
+            // Let the picker's internal hooks handle closing it; do NOT close the sheet.
+            return;
+        } else if (isKeyboardVisible) {
             Keyboard.dismiss();
         } else if (messages.some(m => m.panelType === 'notification_settings')) {
             // If the user tapped the overlay while notification setting is open, close and save the sheet

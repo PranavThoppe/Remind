@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, ScrollView, TouchableOpacity, Text, StyleSheet, Keyboard, Platform } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, ScrollView, TouchableOpacity, Text, StyleSheet, Keyboard, Platform, Animated, Modal, TouchableWithoutFeedback } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '../hooks/useTheme';
@@ -41,10 +41,39 @@ export function InlineEditChips({
 
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showTimePicker, setShowTimePicker] = useState(false);
+    const [showTagDropdown, setShowTagDropdown] = useState(false);
+    const [tagChipLayout, setTagChipLayout] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
+    const tagDropdownAnim = useRef(new Animated.Value(0)).current;
+    const tagChipRef = useRef<View>(null);
+
+    const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
+    const [priorityChipLayout, setPriorityChipLayout] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
+    const priorityDropdownAnim = useRef(new Animated.Value(0)).current;
+    const priorityChipRef = useRef<View>(null);
 
     useEffect(() => {
-        onPickerStateChange?.(showDatePicker || showTimePicker);
-    }, [showDatePicker, showTimePicker, onPickerStateChange]);
+        onPickerStateChange?.(showDatePicker || showTimePicker || showTagDropdown || showPriorityDropdown);
+    }, [showDatePicker, showTimePicker, showTagDropdown, showPriorityDropdown, onPickerStateChange]);
+
+    const closeTagDropdown = () => {
+        Animated.timing(tagDropdownAnim, {
+            toValue: 0,
+            duration: 150,
+            useNativeDriver: true,
+        }).start(() => {
+            setShowTagDropdown(false);
+        });
+    };
+
+    const closePriorityDropdown = () => {
+        Animated.timing(priorityDropdownAnim, {
+            toValue: 0,
+            duration: 150,
+            useNativeDriver: true,
+        }).start(() => {
+            setShowPriorityDropdown(false);
+        });
+    };
 
     // Helper functions
     const formatDate = (dateStr: string | null) => {
@@ -88,7 +117,11 @@ export function InlineEditChips({
     return (
         <View style={styles.container}>
             <View style={styles.chipsContainer}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsScroll}>
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.chipsScroll}
+                >
                     {/* Date Chip */}
                     <TouchableOpacity
                         style={[styles.chip, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -121,6 +154,7 @@ export function InlineEditChips({
 
                     {/* Tag Chip */}
                     <TouchableOpacity
+                        ref={tagChipRef as any}
                         style={[
                             styles.chip,
                             {
@@ -129,12 +163,22 @@ export function InlineEditChips({
                             },
                         ]}
                         onPress={() => {
-                            const currentIdx = tags.findIndex(t => t.id === tag_id);
-                            if (currentIdx === -1 || currentIdx === tags.length - 1) {
-                                onChange({ tag_id: tags.length > 0 ? tags[0].id : null });
-                            } else {
-                                onChange({ tag_id: tags[currentIdx + 1].id });
+                            Keyboard.dismiss();
+                            if (showTagDropdown) {
+                                closeTagDropdown();
+                                return;
                             }
+                            tagChipRef.current?.measureInWindow((x, y, width, height) => {
+                                setTagChipLayout({ x, y, width, height });
+                                setShowTagDropdown(true);
+                                tagDropdownAnim.setValue(0);
+                                Animated.spring(tagDropdownAnim, {
+                                    toValue: 1,
+                                    friction: 8,
+                                    tension: 65,
+                                    useNativeDriver: true,
+                                }).start();
+                            });
                         }}
                         onLongPress={() => onChange({ tag_id: null })}
                     >
@@ -148,6 +192,7 @@ export function InlineEditChips({
 
                     {/* Priority Chip */}
                     <TouchableOpacity
+                        ref={priorityChipRef as any}
                         style={[
                             styles.chip,
                             {
@@ -156,12 +201,22 @@ export function InlineEditChips({
                             },
                         ]}
                         onPress={() => {
-                            const currentIdx = priorities.findIndex(p => p.id === priority_id);
-                            if (currentIdx === -1 || currentIdx === priorities.length - 1) {
-                                onChange({ priority_id: priorities.length > 0 ? priorities[0].id : null });
-                            } else {
-                                onChange({ priority_id: priorities[currentIdx + 1].id });
+                            Keyboard.dismiss();
+                            if (showPriorityDropdown) {
+                                closePriorityDropdown();
+                                return;
                             }
+                            priorityChipRef.current?.measureInWindow((x, y, width, height) => {
+                                setPriorityChipLayout({ x, y, width, height });
+                                setShowPriorityDropdown(true);
+                                priorityDropdownAnim.setValue(0);
+                                Animated.spring(priorityDropdownAnim, {
+                                    toValue: 1,
+                                    friction: 8,
+                                    tension: 65,
+                                    useNativeDriver: true,
+                                }).start();
+                            });
                         }}
                         onLongPress={() => onChange({ priority_id: null })}
                     >
@@ -301,6 +356,114 @@ export function InlineEditChips({
                     />
                 </View>
             )}
+
+            {/* Tag Dropdown Modal */}
+            {showTagDropdown && tagChipLayout && (
+                <Modal transparent visible={showTagDropdown} animationType="none" onRequestClose={closeTagDropdown}>
+                    <TouchableWithoutFeedback onPress={closeTagDropdown}>
+                        <View style={StyleSheet.absoluteFillObject} />
+                    </TouchableWithoutFeedback>
+                    <Animated.View
+                        style={[
+                            styles.dropdownContainer,
+                            {
+                                backgroundColor: colors.card,
+                                borderColor: colors.border,
+                                top: tagChipLayout.y + tagChipLayout.height + 8,
+                                left: tagChipLayout.x,
+                                opacity: tagDropdownAnim,
+                                transform: [
+                                    {
+                                        translateY: tagDropdownAnim.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [-10, 0],
+                                        }),
+                                    },
+                                ],
+                            },
+                        ]}
+                    >
+                        <ScrollView style={{ maxHeight: 215 }} showsVerticalScrollIndicator={false}>
+                            {tags.length === 0 ? (
+                                <View style={styles.dropdownItem}>
+                                    <Text style={[styles.dropdownItemText, { color: colors.mutedForeground }]}>No tags available</Text>
+                                </View>
+                            ) : (
+                                tags.map((t) => (
+                                    <TouchableOpacity
+                                        key={t.id}
+                                        style={styles.dropdownItem}
+                                        onPress={() => {
+                                            onChange({ tag_id: t.id });
+                                            closeTagDropdown();
+                                        }}
+                                    >
+                                        <View style={[styles.tagColorDot, { backgroundColor: t.color }]} />
+                                        <Text style={[styles.dropdownItemText, { color: colors.foreground }]}>{t.name}</Text>
+                                        {tag_id === t.id && (
+                                            <Ionicons name="checkmark" size={16} color={colors.primary} style={{ marginLeft: 'auto' }} />
+                                        )}
+                                    </TouchableOpacity>
+                                ))
+                            )}
+                        </ScrollView>
+                    </Animated.View>
+                </Modal>
+            )}
+
+            {/* Priority Dropdown Modal */}
+            {showPriorityDropdown && priorityChipLayout && (
+                <Modal transparent visible={showPriorityDropdown} animationType="none" onRequestClose={closePriorityDropdown}>
+                    <TouchableWithoutFeedback onPress={closePriorityDropdown}>
+                        <View style={StyleSheet.absoluteFillObject} />
+                    </TouchableWithoutFeedback>
+                    <Animated.View
+                        style={[
+                            styles.dropdownContainer,
+                            {
+                                backgroundColor: colors.card,
+                                borderColor: colors.border,
+                                top: priorityChipLayout.y + priorityChipLayout.height + 8,
+                                left: priorityChipLayout.x,
+                                opacity: priorityDropdownAnim,
+                                transform: [
+                                    {
+                                        translateY: priorityDropdownAnim.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [-10, 0],
+                                        }),
+                                    },
+                                ],
+                            },
+                        ]}
+                    >
+                        <ScrollView style={{ maxHeight: 215 }} showsVerticalScrollIndicator={false}>
+                            {priorities.length === 0 ? (
+                                <View style={styles.dropdownItem}>
+                                    <Text style={[styles.dropdownItemText, { color: colors.mutedForeground }]}>No priorities available</Text>
+                                </View>
+                            ) : (
+                                priorities.map((p) => (
+                                    <TouchableOpacity
+                                        key={p.id}
+                                        style={styles.dropdownItem}
+                                        onPress={() => {
+                                            onChange({ priority_id: p.id });
+                                            closePriorityDropdown();
+                                        }}
+                                    >
+                                        <Ionicons name="flag" size={16} color={p.color} style={{ marginRight: spacing.sm }} />
+                                        <Text style={[styles.dropdownItemText, { color: colors.foreground }]}>{p.name}</Text>
+                                        {priority_id === p.id && (
+                                            <Ionicons name="checkmark" size={16} color={colors.primary} style={{ marginLeft: 'auto' }} />
+                                        )}
+                                    </TouchableOpacity>
+                                ))
+                            )}
+                        </ScrollView>
+                    </Animated.View>
+                </Modal>
+            )}
         </View>
     );
 }
@@ -341,5 +504,37 @@ const styles = StyleSheet.create({
         borderRadius: borderRadius.lg,
         borderWidth: 1,
         alignItems: 'center',
+    },
+    dropdownContainer: {
+        position: 'absolute',
+        width: 180,
+        borderRadius: borderRadius.lg,
+        borderWidth: 1,
+        // using soft shadow since we can't easily import shadows directly without modifying imports at top. Wait, we imported theme. 
+        // Let's add shadows to the imports if missing, or manually write it:
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 8,
+        overflow: 'hidden',
+    },
+    dropdownItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.md,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: 'rgba(150, 150, 150, 0.2)',
+    },
+    tagColorDot: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        marginRight: spacing.sm,
+    },
+    dropdownItemText: {
+        fontFamily: typography.fontFamily.medium,
+        fontSize: typography.fontSize.sm,
     },
 });
