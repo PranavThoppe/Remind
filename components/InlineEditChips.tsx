@@ -389,22 +389,36 @@ export function InlineEditChips({
                                     <Text style={[styles.dropdownItemText, { color: colors.mutedForeground }]}>No tags available</Text>
                                 </View>
                             ) : (
-                                tags.map((t) => (
+                                <>
                                     <TouchableOpacity
-                                        key={t.id}
                                         style={styles.dropdownItem}
                                         onPress={() => {
-                                            onChange({ tag_id: t.id });
+                                            onChange({ tag_id: null });
                                             closeTagDropdown();
                                         }}
                                     >
-                                        <View style={[styles.tagColorDot, { backgroundColor: t.color }]} />
-                                        <Text style={[styles.dropdownItemText, { color: colors.foreground }]}>{t.name}</Text>
-                                        {tag_id === t.id && (
+                                        <Text style={[styles.dropdownItemText, { color: colors.foreground }]}>None</Text>
+                                        {!tag_id && (
                                             <Ionicons name="checkmark" size={16} color={colors.primary} style={{ marginLeft: 'auto' }} />
                                         )}
                                     </TouchableOpacity>
-                                ))
+                                    {tags.map((t) => (
+                                        <TouchableOpacity
+                                            key={t.id}
+                                            style={styles.dropdownItem}
+                                            onPress={() => {
+                                                onChange({ tag_id: t.id });
+                                                closeTagDropdown();
+                                            }}
+                                        >
+                                            <View style={[styles.tagColorDot, { backgroundColor: t.color }]} />
+                                            <Text style={[styles.dropdownItemText, { color: colors.foreground }]}>{t.name}</Text>
+                                            {tag_id === t.id && (
+                                                <Ionicons name="checkmark" size={16} color={colors.primary} style={{ marginLeft: 'auto' }} />
+                                            )}
+                                        </TouchableOpacity>
+                                    ))}
+                                </>
                             )}
                         </ScrollView>
                     </Animated.View>
@@ -443,22 +457,36 @@ export function InlineEditChips({
                                     <Text style={[styles.dropdownItemText, { color: colors.mutedForeground }]}>No priorities available</Text>
                                 </View>
                             ) : (
-                                priorities.map((p) => (
+                                <>
                                     <TouchableOpacity
-                                        key={p.id}
                                         style={styles.dropdownItem}
                                         onPress={() => {
-                                            onChange({ priority_id: p.id });
+                                            onChange({ priority_id: null });
                                             closePriorityDropdown();
                                         }}
                                     >
-                                        <Ionicons name="flag" size={16} color={p.color} style={{ marginRight: spacing.sm }} />
-                                        <Text style={[styles.dropdownItemText, { color: colors.foreground }]}>{p.name}</Text>
-                                        {priority_id === p.id && (
+                                        <Text style={[styles.dropdownItemText, { color: colors.foreground }]}>None</Text>
+                                        {!priority_id && (
                                             <Ionicons name="checkmark" size={16} color={colors.primary} style={{ marginLeft: 'auto' }} />
                                         )}
                                     </TouchableOpacity>
-                                ))
+                                    {priorities.map((p) => (
+                                        <TouchableOpacity
+                                            key={p.id}
+                                            style={styles.dropdownItem}
+                                            onPress={() => {
+                                                onChange({ priority_id: p.id });
+                                                closePriorityDropdown();
+                                            }}
+                                        >
+                                            <Ionicons name="flag" size={16} color={p.color} style={{ marginRight: spacing.sm }} />
+                                            <Text style={[styles.dropdownItemText, { color: colors.foreground }]}>{p.name}</Text>
+                                            {priority_id === p.id && (
+                                                <Ionicons name="checkmark" size={16} color={colors.primary} style={{ marginLeft: 'auto' }} />
+                                            )}
+                                        </TouchableOpacity>
+                                    ))}
+                                </>
                             )}
                         </ScrollView>
                     </Animated.View>

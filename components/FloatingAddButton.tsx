@@ -488,14 +488,14 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
           {/* Top Right Buttons */}
           <View style={[styles.topButtonsContainer, { right: spacing.xl }]}>
             <TouchableOpacity
-              style={[styles.topActionButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+              style={[styles.topActionButton, { backgroundColor: colors.primary, borderColor: colors.primary }]}
               onPress={() => {
                 nova.reset();
                 setEditingMessageId(null);
               }}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Ionicons name="add" size={20} color={colors.foreground} />
+              <Ionicons name="add" size={20} color={colors.primaryForeground} />
             </TouchableOpacity>
 
             <TouchableOpacity

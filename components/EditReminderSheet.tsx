@@ -545,29 +545,36 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
             >
                 {/* Field Chips (Hidden when interaction starts) */}
                 {!hasStartedChatting && (
-                    <ScrollView bounces={false} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: spacing.xl * 2 }} keyboardShouldPersistTaps="handled">
-                        <View style={localStyles.chipsContainer}>
-                            <InlineEditChips
-                                date={editDate}
-                                time={editTime}
-                                tag_id={editTagId}
-                                priority_id={editPriorityId}
-                                notification_offsets={reminder.notification_offsets}
-                                repeat={reminder.repeat}
-                                subtasks={reminder.subtasks}
-                                onChange={(fields) => {
-                                    if (fields.date !== undefined) setEditDate(fields.date);
-                                    if (fields.time !== undefined) setEditTime(fields.time);
-                                    if (fields.tag_id !== undefined) setEditTagId(fields.tag_id);
-                                    if (fields.priority_id !== undefined) setEditPriorityId(fields.priority_id);
-                                }}
-                                onOpenNotifications={nova.pushNotificationSettings}
-                                onOpenRepeat={(nova as any).pushRepeatSettings}
-                                onOpenSubtasks={(nova as any).pushSubtasksSettings}
-                                onPickerStateChange={setIsPickerOpen}
-                            />
-
-                        </View>
+                    <ScrollView
+                        bounces={false}
+                        showsVerticalScrollIndicator={false}
+                        contentContainerStyle={{ paddingBottom: isPickerOpen ? spacing.xl * 2 : 0 }}
+                        style={{ flexGrow: 0 }}
+                        keyboardShouldPersistTaps="handled"
+                    >
+                        <TouchableWithoutFeedback onPress={handleOverlayPress}>
+                            <View style={localStyles.chipsContainer}>
+                                <InlineEditChips
+                                    date={editDate}
+                                    time={editTime}
+                                    tag_id={editTagId}
+                                    priority_id={editPriorityId}
+                                    notification_offsets={reminder.notification_offsets}
+                                    repeat={reminder.repeat}
+                                    subtasks={reminder.subtasks}
+                                    onChange={(fields) => {
+                                        if (fields.date !== undefined) setEditDate(fields.date);
+                                        if (fields.time !== undefined) setEditTime(fields.time);
+                                        if (fields.tag_id !== undefined) setEditTagId(fields.tag_id);
+                                        if (fields.priority_id !== undefined) setEditPriorityId(fields.priority_id);
+                                    }}
+                                    onOpenNotifications={nova.pushNotificationSettings}
+                                    onOpenRepeat={(nova as any).pushRepeatSettings}
+                                    onOpenSubtasks={(nova as any).pushSubtasksSettings}
+                                    onPickerStateChange={setIsPickerOpen}
+                                />
+                            </View>
+                        </TouchableWithoutFeedback>
                     </ScrollView>
                 )}
 
