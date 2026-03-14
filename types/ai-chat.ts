@@ -8,7 +8,7 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   // Inline panel support
-  panelType?: 'create' | 'edit' | 'search' | 'draft' | 'draft_update' | 'reminder_list' | 'notification_settings' | 'subtasks_settings' | 'repeat_settings';
+  panelType?: 'create' | 'edit' | 'search' | 'draft' | 'draft_update' | 'reminder_list' | 'notification_settings' | 'subtasks_settings' | 'repeat_settings' | 'day_overview';
   panelFields?: ModalFieldUpdates;
   panelSearchResults?: Reminder[];
   panelReminderId?: string; // For editing

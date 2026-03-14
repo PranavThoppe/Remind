@@ -13,12 +13,23 @@ export function useNovaAddChat() {
     const { addReminder, updateSubtasks } = useReminders();
 
     const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const messagesRef = useRef<ChatMessage[]>([]); // mirror for sync reads
     const [hiddenMessages, setHiddenMessages] = useState<ChatMessage[]>([]);
     const [isThinking, setIsThinking] = useState(false);
     const [inputText, setInputText] = useState('');
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const [dayOverviewDate, setDayOverviewDate] = useState<string | null>(null);
 
     const flatListRef = useRef<any>(null);
+
+    // Keep messagesRef in sync so handleDraftConfirm can read current messages synchronously
+    const syncedSetMessages: typeof setMessages = useCallback((updater) => {
+        setMessages(prev => {
+            const next = typeof updater === 'function' ? (updater as any)(prev) : updater;
+            messagesRef.current = next;
+            return next;
+        });
+    }, []);
 
     const processMessage = useCallback(async (
         input: string,
@@ -62,41 +73,41 @@ export function useNovaAddChat() {
             const toolName = lastToolCall.tool;
             const toolResult = lastToolCall.result;
 
-            if (toolName === 'draft_reminder' || toolName === 'create_reminder') {
-                if (toolName === 'draft_reminder') {
-                    const draft = toolResult.draft;
-                    const sheetDraft = {
-                        title: draft.title, date: draft.date, time: draft.time, repeat: draft.repeat || 'none',
-                        tag_id: draft.tag_name ? tags.find(t => t.name.toLowerCase() === draft.tag_name.toLowerCase())?.id : undefined,
-                        priority_id: draft.priority_name ? priorities.find(p => p.name.toLowerCase() === draft.priority_name.toLowerCase())?.id : undefined,
-                        notes: draft.notes,
-                        subtasks: draft.subtasks,
-                    };
-                    const newMessage = {
-                        id: Date.now().toString(), role: 'assistant' as const,
-                        content: response.message || toolResult.message || "Here's a draft for your reminder:",
-                        timestamp: new Date(), panelType: 'draft' as const, panelFields: sheetDraft,
-                    };
-                    if (draft.subtasks && draft.subtasks.length > 0) {
-                        setHiddenMessages(currentMessages);
-                        setMessages([newMessage]);
-                    } else {
-                        setMessages(prev => [...prev, newMessage]);
-                    }
+            if (toolName === 'draft_reminder') {
+                const draft = toolResult.draft;
+                const sheetDraft = {
+                    title: draft.title, date: draft.date, time: draft.time, repeat: draft.repeat || 'none',
+                    tag_id: draft.tag_name ? tags.find(t => t.name.toLowerCase() === draft.tag_name.toLowerCase())?.id : undefined,
+                    priority_id: draft.priority_name ? priorities.find(p => p.name.toLowerCase() === draft.priority_name.toLowerCase())?.id : undefined,
+                    notes: draft.notes,
+                    subtasks: draft.subtasks,
+                };
+
+                const newMessage = {
+                    id: Date.now().toString(), role: 'assistant' as const,
+                    content: response.message || toolResult.message || "Here's a draft for your reminder:",
+                    timestamp: new Date(), panelType: 'draft' as const, panelFields: sheetDraft,
+                };
+                if (draft.subtasks && draft.subtasks.length > 0) {
+                    setHiddenMessages(currentMessages);
+                    syncedSetMessages([newMessage]);
                 } else {
-                    setMessages(prev => [...prev, {
-                        id: Date.now().toString(), role: 'assistant',
-                        content: response.message || toolResult.message || "Reminder created!", timestamp: new Date(),
-                    }]);
+                    syncedSetMessages(prev => [...prev, newMessage]);
                 }
+            } else if (toolName === 'comment_on_day') {
+                // Agent responded with a day comment after confirmation — just show the text
+                syncedSetMessages(prev => [...prev, {
+                    id: Date.now().toString(), role: 'assistant',
+                    content: response.message, timestamp: new Date(),
+                }]);
             } else {
-                setMessages(prev => [...prev, {
+                syncedSetMessages(prev => [...prev, {
                     id: Date.now().toString(), role: 'assistant',
                     content: response.message, timestamp: new Date(),
                 }]);
             }
         } catch (error: any) {
-            setMessages(prev => [...prev, {
+            syncedSetMessages(prev => [...prev, {
                 id: (Date.now() + 1).toString(), role: 'assistant',
                 content: error.message || "An error occurred.", timestamp: new Date(),
             }]);
@@ -118,10 +129,10 @@ export function useNovaAddChat() {
             content: trimmed, imageUri: userImage || undefined, timestamp: new Date(),
         };
         const updatedMessages = [...messages, userMessage];
-        setMessages(updatedMessages);
+        syncedSetMessages(updatedMessages);
         setIsThinking(true);
         await processMessage(trimmed, updatedMessages, userImage || undefined);
-    }, [inputText, selectedImage, isThinking, messages, processMessage]);
+    }, [inputText, selectedImage, isThinking, messages, processMessage, syncedSetMessages]);
 
     const handleDraftConfirm = useCallback(async (messageId: string, fields: ModalFieldUpdates) => {
         if (!fields.title?.trim()) return;
@@ -140,9 +151,27 @@ export function useNovaAddChat() {
             try {
                 await scheduleReminderNotification(fields.title, dateStr, fields.time || undefined, fields.repeat || 'none', (result.data as Reminder).id);
             } catch (_err) { }
-            setMessages(prev => prev.map(m => m.id === messageId ? { ...m, panelIsStatic: true } : m));
+
+            // Mark draft as static
+            syncedSetMessages(prev => prev.map(m => m.id === messageId ? { ...m, panelIsStatic: true } : m));
+
+            // Inject the day overview panel inline in the chat
+            setDayOverviewDate(dateStr);
+            syncedSetMessages(prev => [...prev, {
+                id: `day-overview-${Date.now()}`,
+                role: 'assistant',
+                content: '',
+                timestamp: new Date(),
+                panelType: 'day_overview',
+                panelFields: { date: dateStr },
+            }]);
+
+            // Ask the agent to comment on the day
+            setIsThinking(true);
+            const confirmPrompt = `Reminder confirmed: "${fields.title}" on ${dateStr}${fields.time ? ' at ' + fields.time : ''}. Please call comment_on_day.`;
+            await processMessage(confirmPrompt, messagesRef.current);
         }
-    }, [addReminder]);
+    }, [addReminder, updateSubtasks, processMessage, syncedSetMessages]);
 
     const handleDraftDiscard = useCallback((messageId: string) => {
         setMessages(prev => {
@@ -186,6 +215,7 @@ export function useNovaAddChat() {
         setSelectedImage(null);
         setMessages([]);
         setHiddenMessages([]);
+        setDayOverviewDate(null);
     }, []);
 
     return {
@@ -193,6 +223,7 @@ export function useNovaAddChat() {
         isThinking,
         inputText, setInputText,
         selectedImage, setSelectedImage,
+        dayOverviewDate, setDayOverviewDate,
         flatListRef,
         handleSend,
         handleDraftConfirm,

@@ -71,6 +71,23 @@ const createReminderTool = {
     }
 }
 
+const commentOnDayTool = {
+    name: "comment_on_day",
+    description: "Called ONLY after the user has just confirmed and saved a new reminder. Fetches the full schedule for that day so you can make a warm, personalized comment about their day.",
+    inputSchema: {
+        json: {
+            type: "object",
+            properties: {
+                date: {
+                    type: "string",
+                    description: "The date to fetch the schedule for, in YYYY-MM-DD format."
+                }
+            },
+            required: ["date"]
+        }
+    }
+}
+
 const draftReminderTool = {
     name: "draft_reminder",
     description: "Proposes a reminder to the user for review before saving. Use this BY DEFAULT whenever the user wants to create a reminder. The user can review and edit details before confirming.",
@@ -126,6 +143,20 @@ const draftReminderTool = {
             required: ["title", "date"]
         }
     }
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+function formatTime(timeStr: string | null, format: '12h' | '24h' = '12h') {
+    if (!timeStr) return 'Anytime';
+    if (format === '24h') return timeStr;
+
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const displayHours = hours % 12 || 12;
+    return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
 }
 
 // ============================================================
@@ -212,6 +243,19 @@ async function handleCreateReminder(toolInput: any, userId: string, supabase: an
         }
     }
 
+    // Fetch existing schedule for context
+    const { data: dayReminders } = await supabase
+        .from('reminders')
+        .select('title, time')
+        .eq('user_id', userId)
+        .eq('date', toolInput.date)
+        .neq('id', data.id) // exclude the one we just made
+        .order('time', { ascending: true })
+
+    const existing_schedule = dayReminders && dayReminders.length > 0
+        ? dayReminders.map((r: any) => `${formatTime(r.time, toolInput.time_format || '12h')} - ${r.title}`).join('\n')
+        : "No other reminders today."
+
     return {
         success: true,
         reminder: {
@@ -225,11 +269,13 @@ async function handleCreateReminder(toolInput: any, userId: string, supabase: an
             priority: toolInput.priority_name || null,
             notes: data.notes || null
         },
+        existing_schedule,
+        is_empty_day: !dayReminders || dayReminders.length === 0,
         message: "Reminder created successfully"
     }
 }
 
-function handleDraftReminder(toolInput: any) {
+async function handleDraftReminder(toolInput: any, userId: string, supabase: any) {
     console.log('[Agent] draft_reminder:', JSON.stringify(toolInput, null, 2))
 
     // Map string subtasks to Subtask objects for the UI
@@ -252,6 +298,28 @@ function handleDraftReminder(toolInput: any) {
             is_draft: true
         },
         message: "I've drafted a reminder for you. Please review it above."
+    }
+}
+
+async function handleCommentOnDay(toolInput: any, userId: string, supabase: any) {
+    console.log('[Agent] comment_on_day:', JSON.stringify(toolInput, null, 2))
+
+    const { data: dayReminders } = await supabase
+        .from('reminders')
+        .select('title, time')
+        .eq('user_id', userId)
+        .eq('date', toolInput.date)
+        .order('time', { ascending: true })
+
+    const day_schedule = dayReminders && dayReminders.length > 0
+        ? dayReminders.map((r: any) => `${formatTime(r.time, toolInput.time_format || '12h')} - ${r.title}`).join('\n')
+        : "No other reminders for this day."
+
+    return {
+        success: true,
+        date: toolInput.date,
+        day_schedule,
+        reminder_count: dayReminders?.length || 0
     }
 }
 
@@ -424,6 +492,7 @@ serve(async (req) => {
         const tools = [
             { toolSpec: draftReminderTool },
             { toolSpec: createReminderTool },
+            { toolSpec: commentOnDayTool },
         ]
 
         const systemPrompt = `You are Nova, a friendly and focused reminder creation assistant. Your ONE job is to help the user create new reminders. Today is ${fullToday}.
@@ -494,15 +563,21 @@ If the user asks to search their existing reminders, update an ALREADY SAVED rem
 
 ## Rules
 
-- CRITICALLY IMPORTANT: After calling draft_reminder or create_reminder, you MUST STOP. Output a short friendly message and wait for the user to respond. Do not call any other tool.
+- After calling draft_reminder, output a short friendly confirmation message and STOP. Wait for the user to respond. Do not call any other tool after draft_reminder.
 - Do NOT ask follow-up questions for simple, clear requests (e.g., "Remind me to buy milk tomorrow").
 - When info is genuinely missing (e.g., no date at all), ask the user to clarify in one friendly sentence.
 - If a term is ambiguous (acronym, unusual category), ask what it means before drafting.
 - Assign tags only when the reminder clearly fits a tag's description. Never guess.
-- TIME FORMAT FOR TEXT: The user's preferred time format is ${time_format}. When speaking, use 12h or 24h accordingly.
+The user's preferred time format is ${time_format}. When speaking, use 12h or 24h accordingly.
 - TIME FORMAT FOR TOOLS: Always use HH:mm 24-hour format in tool calls.
 - Keep reminder titles under 6 words.
 - Be warm and encouraging. Short affirmations ("Sure!", "Got it!", "No problem!") work great for simple requests.
+
+## After Reminder Confirmation
+
+When the user confirms a reminder and the system sends you a message like "Reminder confirmed: ...", you MUST immediately call comment_on_day with the reminder's date. Do not output any text before calling this tool.
+After comment_on_day returns the \`day_schedule\`, write a warm, personalized comment about the user's day — as if you're looking at their planner together with them. Mention specific reminders by name. If it's an empty day, note how nice it is to have breathing room. Keep it natural and brief (2-3 sentences max).
+
 - Never wrap responses in XML tags like <thinking> or <response>.`
 
         // ============================================================
@@ -599,9 +674,11 @@ If the user asks to search their existing reminders, update an ALREADY SAVED rem
 
                     let toolResult: any
                     if (toolName === "draft_reminder") {
-                        toolResult = handleDraftReminder(toolInput)
+                        toolResult = await handleDraftReminder(toolInput, userId, supabaseClient)
                     } else if (toolName === "create_reminder") {
-                        toolResult = await handleCreateReminder(toolInput, userId, supabaseClient)
+                        toolResult = await handleCreateReminder({ ...toolInput, time_format }, userId, supabaseClient)
+                    } else if (toolName === "comment_on_day") {
+                        toolResult = await handleCommentOnDay({ ...toolInput, time_format }, userId, supabaseClient)
                     } else {
                         toolResult = { error: `Unknown tool: ${toolName}` }
                     }

@@ -35,6 +35,7 @@ import { AddReminderSheet } from './AddReminderSheet';
 import { InlineRepeatPicker } from './InlineRepeatPicker';
 import { InlineSubtaskList } from './InlineSubtaskList';
 import { InlineEditChips } from './InlineEditChips';
+import { DayOverviewModal } from './DayOverviewModal';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const FAB_SIZE = 56;
@@ -256,6 +257,23 @@ function MessageBubble({
     );
   }
 
+  // day_overview panel — rendered inline after a reminder is confirmed
+  if ((message.panelType as any) === 'day_overview' && message.panelFields?.date) {
+    return (
+      <View style={[styles.messageContainer]}>
+        <View style={{ width: '100%', maxWidth: 340 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, marginLeft: 4 }}>
+            <Ionicons name="calendar-outline" size={16} color={colors.primary} style={{ marginRight: 6 }} />
+            <Text style={{ color: colors.mutedForeground, fontSize: 12, fontFamily: typography.fontFamily.medium }}>
+              Your day
+            </Text>
+          </View>
+          <DayOverviewModal date={message.panelFields.date as string} />
+        </View>
+      </View>
+    );
+  }
+
   const renderContent = () => {
     return (
       <View>
@@ -316,7 +334,7 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
   const nova = useNovaAddChat();
   const {
     messages, setMessages, isThinking, inputText, setInputText,
-    selectedImage, setSelectedImage,
+    selectedImage, setSelectedImage, dayOverviewDate,
     flatListRef, handleSend, handleDraftConfirm, handleDraftDiscard,
     pushRepeatSettings, pushSubtasksSettings, pushNotificationSettings
   } = nova;

@@ -179,6 +179,20 @@ const saveContextTool = {
 }
 
 // ============================================================
+// HELPERS
+// ============================================================
+
+function formatTime(timeStr: string | null, format: '12h' | '24h' = '12h') {
+    if (!timeStr) return 'Anytime';
+    if (format === '24h') return timeStr;
+
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const period = hours >= 12 ? 'PM' : 'AM';
+    const displayHours = hours % 12 || 12;
+    return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+}
+
+// ============================================================
 // TOOL HANDLERS
 // ============================================================
 
@@ -507,7 +521,7 @@ serve(async (req) => {
             `ID: ${pinnedReminder.id}`,
             `Title: ${pinnedReminder.title || 'Unknown'}`,
             pinnedReminder.date ? `Date: ${pinnedReminder.date}` : `Date: Not set`,
-            pinnedReminder.time ? `Time: ${pinnedReminder.time}` : `Time: Not set`,
+            pinnedReminder.time ? `Time: ${formatTime(pinnedReminder.time, time_format)}` : `Time: Not set`,
             pinnedReminder.repeat && pinnedReminder.repeat !== 'none' ? `Repeats: ${pinnedReminder.repeat}` : `Repeats: none`,
             currentTagName ? `Tag: ${currentTagName}` : null,
             currentPriorityName ? `Priority: ${currentPriorityName}` : null,
