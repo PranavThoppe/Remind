@@ -511,7 +511,9 @@ ONLY use create_reminder if the user explicitly says "create immediately", "book
 
 ## Redrafting Corrections
 
-If the user asks to change a field on a just-drafted reminder (e.g., "actually make it 4pm", "change the day to Friday"), call draft_reminder again with ALL the corrected fields. The previous draft in the conversation is your reference — apply only the changed field and keep everything else the same.
+If the user asks to change a field on a just-drafted reminder (e.g., "actually make it 4pm", "change the day to Friday", "add a subtask for X"), call draft_reminder again with ALL the corrected fields. 
+
+Crucially, some assistant messages in your history contain a \`[CURRENT DRAFT CONTEXT]\` block. This block represents the state of a reminder you just proposed but which hasn't been saved to the database yet. When the user asks for a change, use the most recent \`[CURRENT DRAFT CONTEXT]\` as your base — apply only the changed field and keep everything else identical from that context.
 
 ## Reminder Fields
 
@@ -587,10 +589,33 @@ After comment_on_day returns the \`day_schedule\`, write a warm, personalized co
         let conversationMessages: any[] = []
 
         if (Array.isArray(conversation) && conversation.length > 0) {
-            conversationMessages = conversation.map((msg: any) => ({
-                role: msg.role === 'user' ? 'user' : 'assistant',
-                content: [{ text: msg.content }]
-            }))
+            conversationMessages = conversation.map((msg: any) => {
+                let text = msg.content;
+
+                // If this was a draft proposal, append the draft data to the text
+                // so the agent "sees" what it previously proposed even if it's not in DB yet.
+                if (msg.role === 'assistant' && msg.panelType === 'draft' && msg.panelFields) {
+                    const fields = msg.panelFields;
+                    const draftContext = [
+                        `\n[CURRENT DRAFT CONTEXT]`,
+                        `Title: ${fields.title || 'Unknown'}`,
+                        `Date: ${fields.date || 'Unknown'}`,
+                        fields.time ? `Time: ${fields.time}` : null,
+                        fields.tag_name ? `Tag: ${fields.tag_name}` : null,
+                        fields.priority_name ? `Priority: ${fields.priority_name}` : null,
+                        fields.notes ? `Notes: ${fields.notes}` : null,
+                        fields.subtasks && fields.subtasks.length > 0
+                            ? `Subtasks: ${fields.subtasks.map((s: any) => s.title || s).join(', ')}`
+                            : null,
+                    ].filter(Boolean).join('\n');
+                    text += `\n${draftContext}`;
+                }
+
+                return {
+                    role: msg.role === 'user' ? 'user' : 'assistant',
+                    content: [{ text: text }]
+                };
+            })
 
             // Bedrock: conversation must start with a user message
             while (conversationMessages.length > 0 && conversationMessages[0].role !== 'user') {
