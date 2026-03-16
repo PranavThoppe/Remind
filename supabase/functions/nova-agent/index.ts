@@ -308,8 +308,10 @@ ${commonTimesContext}
 
 ## How to Create/Update Drafts
 
-- **New Reminders**: Call draft_reminder immediately for any new task mention.
-- **Redrafting Corrections**: If the user asks to change a field on a just-drafted reminder, call draft_reminder again with ALL the corrected fields. Use the \`[CURRENT DRAFT CONTEXT]\` block from history as your base.
+- **Continuous Iteration**: The drafting process is iterative. The user will keep sending messages to refine or correct the reminder (e.g., "add a tag", "change the time", "actually make it for Monday"). Treat every message AS a refinement request for the current draft.
+- **Primary Interface**: The \`draft_reminder\` tool IS your primary way to "speak" to the user. Instead of explaining what you are doing, just call the tool with the updated state. The user sees the draft card as your response.
+- **Redrafting Corrections**: If the user asks to change a field, call \`draft_reminder\` again with ALL the corrected fields. Use the \`[CURRENT DRAFT STATE]\` block from history as your absolute base. **CRITICAL**: Always copy the title, date, tag, and all other fields from the current state unless the user explicitly asks to change them.
+- **Keep Drafting**: Keep calling \`draft_reminder\` for every message until the user specifically says "Reminder confirmed:".
 
 ## Reminder Fields
 
@@ -324,7 +326,7 @@ ${commonTimesContext}
 ## Forbidden Behavior
 
 - DO NOT say "I cannot assist with...", "I don't have access to...", or "I'm just a reminder assistant".
-- DO NOT ask "What would you like to check?" or "Can you provide more details?" if you can instead just draft a reminder with what you already have.
+- DO NOT say "I've updated the draft" or "Here is the new draft" with text. The tool call itself is the update.
 - **CRITICAL**: DO NOT output any text when you call a tool. Your response should contain ONLY the tool call. No confirmation, no friendly message, no text at all. Stop immediately after the tool call.
 - **Confirmation Handling**: If the user's message starts with "Reminder confirmed:", it means they just saved a draft you provided. Respond with "Done!" and DO NOT call ANY tools.
 - Never wrap responses in XML tags like <thinking> or <response>.
@@ -348,19 +350,24 @@ ${commonTimesContext}
                 // so the agent "sees" what it previously proposed even if it's not in DB yet.
                 if (msg.role === 'assistant' && msg.panelType === 'draft' && msg.panelFields) {
                     const fields = msg.panelFields;
+
+                    // Map IDs back to names for the LLM context
+                    const tagName = fields.tag_id ? userTags.find((t: any) => t.id === fields.tag_id)?.name : fields.tag_name;
+                    const priorityName = fields.priority_id ? userPriorities.find((p: any) => p.id === fields.priority_id)?.name : fields.priority_name;
+
                     const draftContext = [
-                        `\n[CURRENT DRAFT CONTEXT]`,
-                        `Title: ${fields.title || 'Unknown'}`,
-                        `Date: ${fields.date || 'Unknown'}`,
-                        fields.time ? `Time: ${fields.time}` : null,
-                        fields.tag_name ? `Tag: ${fields.tag_name}` : null,
-                        fields.priority_name ? `Priority: ${fields.priority_name}` : null,
-                        fields.notes ? `Notes: ${fields.notes}` : null,
+                        `\n### [CURRENT DRAFT STATE]`,
+                        `* **Title**: ${fields.title || 'None'}`,
+                        `* **Date**: ${fields.date || 'None'}`,
+                        fields.time ? `* **Time**: ${fields.time}` : null,
+                        tagName ? `* **Tag**: ${tagName}` : null,
+                        priorityName ? `* **Priority**: ${priorityName}` : null,
+                        fields.notes ? `* **Notes**: ${fields.notes}` : null,
                         fields.subtasks && fields.subtasks.length > 0
-                            ? `Subtasks: ${fields.subtasks.map((s: any) => s.title || s).join(', ')}`
+                            ? `* **Subtasks**: ${fields.subtasks.map((s: any) => s.title || s).join(', ')}`
                             : null,
                     ].filter(Boolean).join('\n');
-                    text += `\n${draftContext}`;
+                    text += `\n${draftContext}\n`;
                 }
 
                 return {
