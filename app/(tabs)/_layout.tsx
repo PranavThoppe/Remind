@@ -41,27 +41,7 @@ function TabIcon({ name, focused, colors }: TabIconProps) {
   );
 }
 
-function ProfileAvatar({ focused, colors }: { focused: boolean; colors: any }) {
-  const { user, profile } = useAuth();
-  const avatarUrl = profile?.avatar_url || user?.user_metadata?.avatar_url;
 
-  return (
-    <View style={createAvatarContainerStyle(colors)}>
-      {avatarUrl ? (
-        <Image
-          source={{ uri: avatarUrl }}
-          style={createAvatarImageStyle(colors)}
-        />
-      ) : (
-        <Ionicons
-          name="person"
-          size={18}
-          color={colors.primaryForeground}
-        />
-      )}
-    </View>
-  );
-}
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -93,7 +73,7 @@ export default function TabLayout() {
         },
         tabBarShowIcon: true,
         tabBarShowLabel: false,
-        swipeEnabled: true,
+        swipeEnabled: false,
         animationEnabled: true,
       }}
     >
@@ -107,38 +87,9 @@ export default function TabLayout() {
           tabBarLabel: () => null,
         }}
       />
-      <MaterialTopTabs.Screen
-        name="settings"
-        options={{
-          title: 'Settings',
-          tabBarIcon: ({ focused }) => (
-            <ProfileAvatar focused={focused} colors={colors} />
-          ),
-          tabBarLabel: () => null,
-        }}
-      />
     </MaterialTopTabs>
   );
 }
-
-const createAvatarContainerStyle = (colors: any) => ({
-  alignItems: 'center' as const,
-  justifyContent: 'center' as const,
-  width: 36,
-  height: 36,
-  borderRadius: 18,
-  backgroundColor: colors.primary,
-  overflow: 'hidden' as const,
-  ...shadows.soft,
-});
-
-const createAvatarImageStyle = (colors: any) => ({
-  width: 32,
-  height: 32,
-  borderRadius: 16,
-  borderWidth: 2,
-  borderColor: colors.primary,
-});
 
 const createStyles = (colors: any) => StyleSheet.create({
   iconContainer: {

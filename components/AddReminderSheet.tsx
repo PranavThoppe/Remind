@@ -60,7 +60,7 @@ export function AddReminderSheet({
   const [title, setTitle] = useState('');
   const [date, setDate] = useState<Date | undefined>();
   const [time, setTime] = useState('');
-  const [repeat, setRepeat] = useState<'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'>('none');
+  const [repeat, setRepeat] = useState<string>('none');
   const [repeatUntil, setRepeatUntil] = useState<string | null>(null);
   const [showRepeatUntilPicker, setShowRepeatUntilPicker] = useState(false);
   const [tagId, setTagId] = useState<string | null | undefined>();

@@ -29,7 +29,11 @@ import { useVoiceDictation } from '../hooks/useVoiceDictation';
 import { Reminder } from '../types/reminder';
 import { ReminderCard, CardLayout } from './ReminderCard';
 import { SuggestionChips } from './SuggestionChips';
+import { InlineNotificationPicker } from './InlineNotificationPicker';
+import { InlineRepeatPicker } from './InlineRepeatPicker';
+import { InlineSubtaskList } from './InlineSubtaskList';
 import { ModalFieldUpdates, ChatMessage } from '../types/ai-chat';
+import { InlineEditChips } from './InlineEditChips';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const PILL_HEIGHT = 52;
@@ -39,7 +43,7 @@ const ANIM_DURATION = 350;
 
 // ─────────────── Reusable sub-components from FloatingAddButton ───────────────
 
-function TypingIndicator({ colors }: { colors: any }) {
+function TypingIndicator({ colors, onOverlayPress }: { colors: any; onOverlayPress?: () => void }) {
     const dot1 = useRef(new Animated.Value(0)).current;
     const dot2 = useRef(new Animated.Value(0)).current;
     const dot3 = useRef(new Animated.Value(0)).current;
@@ -65,13 +69,17 @@ function TypingIndicator({ colors }: { colors: any }) {
     });
 
     return (
-        <View style={[localStyles.messageBubble, localStyles.aiBubble, { backgroundColor: colors.card, borderColor: colors.border, alignSelf: 'flex-start', marginLeft: spacing.lg }]}>
-            <View style={localStyles.typingContainer}>
-                <Animated.View style={[localStyles.typingDot, { backgroundColor: colors.mutedForeground }, dotStyle(dot1)]} />
-                <Animated.View style={[localStyles.typingDot, { backgroundColor: colors.mutedForeground }, dotStyle(dot2)]} />
-                <Animated.View style={[localStyles.typingDot, { backgroundColor: colors.mutedForeground }, dotStyle(dot3)]} />
+        <TouchableWithoutFeedback onPress={onOverlayPress}>
+            <View style={[localStyles.messageContainer]}>
+                <View style={[localStyles.messageBubble, localStyles.aiBubble, { backgroundColor: colors.card, borderColor: colors.border, alignSelf: 'flex-start', marginLeft: spacing.lg }]}>
+                    <View style={localStyles.typingContainer}>
+                        <Animated.View style={[localStyles.typingDot, { backgroundColor: colors.mutedForeground }, dotStyle(dot1)]} />
+                        <Animated.View style={[localStyles.typingDot, { backgroundColor: colors.mutedForeground }, dotStyle(dot2)]} />
+                        <Animated.View style={[localStyles.typingDot, { backgroundColor: colors.mutedForeground }, dotStyle(dot3)]} />
+                    </View>
+                </View>
             </View>
-        </View>
+        </TouchableWithoutFeedback>
     );
 }
 
@@ -79,14 +87,18 @@ function MessageBubble({
     message,
     colors,
     tags,
+    reminder,
     onDraftConfirm,
     onDraftDiscard,
+    onOverlayPress,
 }: {
     message: ChatMessage;
     colors: any;
     tags: any[];
+    reminder?: Reminder | null;
     onDraftConfirm?: (messageId: string, draft: ModalFieldUpdates) => void;
     onDraftDiscard?: (messageId: string) => void;
+    onOverlayPress?: () => void;
 }) {
     const isUser = message.role === 'user';
 
@@ -103,6 +115,8 @@ function MessageBubble({
         tag_id: fields.tag_id,
         priority_id: fields.priority_id,
         notes: fields.notes,
+        subtasks: fields.subtasks,
+        notification_offsets: fields.notification_offsets,
     });
 
     if ((message.panelType === 'draft' || (message.panelType as any) === 'draft_update') && message.panelFields) {
@@ -110,63 +124,132 @@ function MessageBubble({
         const isStatic = message.panelIsStatic;
 
         return (
-            <View style={[localStyles.messageContainer]}>
-                <View style={{ width: '100%', maxWidth: 340 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, marginLeft: 4 }}>
-                        <Ionicons
-                            name={isStatic ? 'checkmark-circle' : 'sparkles'}
-                            size={16}
-                            color={isStatic ? colors.success : colors.primary}
-                            style={{ marginRight: 6 }}
-                        />
-                        <Text style={{ color: isStatic ? colors.success : colors.mutedForeground, fontSize: 12, fontFamily: typography.fontFamily.medium }}>
-                            {isStatic
-                                ? ((message.panelType as any) === 'draft_update' ? 'Reminder Updated' : 'Reminder Created')
-                                : 'Proposed Update'}
-                        </Text>
-                    </View>
+            <TouchableWithoutFeedback onPress={onOverlayPress}>
+                <View style={[localStyles.messageContainer]}>
+                    <TouchableWithoutFeedback onPress={() => { }}>
+                        <View style={{ width: '100%', maxWidth: 340 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, marginLeft: 4 }}>
+                                <Ionicons
+                                    name={isStatic ? 'checkmark-circle' : 'sparkles'}
+                                    size={16}
+                                    color={isStatic ? colors.success : colors.primary}
+                                    style={{ marginRight: 6 }}
+                                />
+                                <Text style={{ color: isStatic ? colors.success : colors.mutedForeground, fontSize: 12, fontFamily: typography.fontFamily.medium }}>
+                                    {isStatic
+                                        ? ((message.panelType as any) === 'draft_update' ? 'Reminder Updated' : 'Reminder Created')
+                                        : 'Proposed Update'}
+                                </Text>
+                            </View>
 
-                    <ReminderCard
-                        reminder={draftReminder}
-                        index={0}
-                        onComplete={isStatic ? () => { } : () => onDraftConfirm?.(message.id, message.panelFields!)}
-                        onEdit={isStatic ? () => { } : () => { }}
-                        onDelete={isStatic ? undefined : () => onDraftDiscard?.(message.id)}
-                    />
+                            <ReminderCard
+                                reminder={draftReminder}
+                                index={0}
+                                onComplete={isStatic ? () => { } : () => onDraftConfirm?.(message.id, message.panelFields!)}
+                                onEdit={isStatic ? () => { } : () => { }}
+                                onDelete={isStatic ? undefined : () => onDraftDiscard?.(message.id)}
+                            /* We don't allow opening notification sheet from a drafted message bubble for now, they use the ghost card */
+                            />
 
-                    {!isStatic && (
-                        <Text style={{ textAlign: 'center', marginTop: 8, color: colors.mutedForeground, fontSize: 11 }}>
-                            Tap check to update • Swipe to discard
-                        </Text>
-                    )}
+                            {!isStatic && (
+                                <Text style={{ textAlign: 'center', marginTop: 8, color: colors.mutedForeground, fontSize: 11 }}>
+                                    Tap check to update • Swipe to discard
+                                </Text>
+                            )}
+                        </View>
+                    </TouchableWithoutFeedback>
                 </View>
-            </View>
+            </TouchableWithoutFeedback>
+        );
+    }
+
+    if (message.panelType === 'notification_settings') {
+        const isStatic = message.panelIsStatic;
+        return (
+            <TouchableWithoutFeedback onPress={onOverlayPress}>
+                <View style={[localStyles.messageContainer]}>
+                    <TouchableWithoutFeedback onPress={() => { }}>
+                        <View style={{ width: '100%', maxWidth: 340 }}>
+                            <InlineNotificationPicker
+                                initialOffsets={message.panelFields?.notification_offsets || []}
+                                baseTime={reminder?.time}
+                                onConfirm={(offsets) => {
+                                    if (!isStatic) {
+                                        // Instantly auto-save so the ghost card updates and shows the bell icon
+                                        onDraftConfirm?.(message.id, { notification_offsets: offsets });
+                                    }
+                                }}
+                                onCancel={() => {
+                                    if (!isStatic) {
+                                        // If they explicitly close the tool, clear the notifications
+                                        onDraftConfirm?.(message.id, { notification_offsets: [] });
+                                        onDraftDiscard?.(message.id);
+                                    }
+                                }}
+                            />
+                        </View>
+                    </TouchableWithoutFeedback>
+                </View>
+            </TouchableWithoutFeedback>
+        );
+    }
+
+    if ((message.panelType as any) === 'subtasks_settings') {
+        const isStatic = message.panelIsStatic;
+        return (
+            <TouchableWithoutFeedback onPress={onOverlayPress}>
+                <View style={[localStyles.messageContainer]}>
+                    <TouchableWithoutFeedback onPress={() => { }}>
+                        <View style={{ width: '100%', maxWidth: 340 }}>
+                            <InlineSubtaskList
+                                subtasks={message.panelFields?.subtasks || []}
+                                onChange={(subtasks) => {
+                                    // Local UI updates handled inside
+                                }}
+                                onSave={!isStatic ? (subtasks) => {
+                                    onDraftConfirm?.(message.id, { subtasks });
+                                } : undefined}
+                                onCancel={() => {
+                                    if (!isStatic) {
+                                        // If they explicitly dismiss the subtask panel, just discard
+                                        onDraftDiscard?.(message.id);
+                                    }
+                                }}
+                            />
+                        </View>
+                    </TouchableWithoutFeedback>
+                </View>
+            </TouchableWithoutFeedback>
         );
     }
 
     return (
-        <View style={[localStyles.messageContainer, isUser && localStyles.userMessageContainer]}>
-            <View
-                style={[
-                    localStyles.messageBubble,
-                    isUser
-                        ? [localStyles.userBubble, { backgroundColor: colors.primary }]
-                        : [localStyles.aiBubble, { backgroundColor: colors.card, borderColor: colors.border }],
-                ]}
-            >
-                {message.content ? (
-                    <Text
-                        style={
+        <TouchableWithoutFeedback onPress={onOverlayPress}>
+            <View style={[localStyles.messageContainer, isUser && localStyles.userMessageContainer]}>
+                <TouchableWithoutFeedback onPress={() => { }}>
+                    <View
+                        style={[
+                            localStyles.messageBubble,
                             isUser
-                                ? [localStyles.messageText, { color: colors.primaryForeground }]
-                                : [localStyles.aiMessageText, { color: colors.foreground }]
-                        }
+                                ? [localStyles.userBubble, { backgroundColor: colors.primary }]
+                                : [localStyles.aiBubble, { backgroundColor: colors.card, borderColor: colors.border }],
+                        ]}
                     >
-                        {message.content}
-                    </Text>
-                ) : null}
+                        {message.content ? (
+                            <Text
+                                style={
+                                    isUser
+                                        ? [localStyles.messageText, { color: colors.primaryForeground }]
+                                        : [localStyles.aiMessageText, { color: colors.foreground }]
+                                }
+                            >
+                                {message.content}
+                            </Text>
+                        ) : null}
+                    </View>
+                </TouchableWithoutFeedback>
             </View>
-        </View>
+        </TouchableWithoutFeedback>
     );
 }
 
@@ -199,12 +282,11 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
     const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
     // Quick-edit field state (local overrides while editing)
-    const [editDate, setEditDate] = useState<Date | undefined>();
-    const [editTime, setEditTime] = useState('');
-    const [editTagId, setEditTagId] = useState<string | null | undefined>();
-    const [editPriorityId, setEditPriorityId] = useState<string | null | undefined>();
-    const [showDatePicker, setShowDatePicker] = useState(false);
-    const [showTimePicker, setShowTimePicker] = useState(false);
+    const [editDate, setEditDate] = useState<string | null>(reminder?.date || null);
+    const [editTime, setEditTime] = useState<string | null>(reminder?.time || null);
+    const [editTagId, setEditTagId] = useState<string | null | undefined>(reminder?.tag_id);
+    const [editPriorityId, setEditPriorityId] = useState<string | null | undefined>(reminder?.priority_id);
+    const [isPickerOpen, setIsPickerOpen] = useState(false);
 
     const [isVisible, setIsVisible] = useState(false);
 
@@ -216,6 +298,7 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
         pinnedReminder, setPinnedReminder,
         suggestions, isGeneratingSuggestions,
         flatListRef, handleSend, handleDraftUpdateConfirm,
+        triggerInitialAnalysis,
     } = nova;
 
     const handleTranscript = (text: string) => {
@@ -230,7 +313,7 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
     const targetX = spacing.xl;
     const targetWidth = SCREEN_WIDTH - spacing.xl * 2;
 
-    const hasStartedChatting = messages.length > 0 || inputText.trim().length > 0 || isKeyboardVisible;
+    const hasStartedChatting = messages.some(m => m.role === 'user') || inputText.trim().length > 0 || isKeyboardVisible;
 
     useEffect(() => {
         if (!isVisible) return;
@@ -285,12 +368,10 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
     useEffect(() => {
         if (reminder && sourceLayout) {
             // Initialize local field state from reminder
-            setEditDate(reminder.date ? new Date(reminder.date + 'T00:00:00') : undefined);
-            setEditTime(reminder.time || '');
+            setEditDate(reminder.date || null);
+            setEditTime(reminder.time || null);
             setEditTagId(reminder.tag_id);
             setEditPriorityId(reminder.priority_id);
-            setShowDatePicker(false);
-            setShowTimePicker(false);
 
             // Set initial position = source card position
             chatOffset.setValue(MIDDLE_Y_OFFSET);
@@ -317,14 +398,23 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
         }
     }, [reminder, sourceLayout]);
 
+    // Trigger initial analysis when ready
+    useEffect(() => {
+        if (isVisible && reminder) {
+            // Small buffer to ensure everything is settled after animation starts
+            const timer = setTimeout(() => {
+                triggerInitialAnalysis();
+            }, 600);
+            return () => clearTimeout(timer);
+        }
+    }, [isVisible, !!reminder, triggerInitialAnalysis]);
+
     const handleClose = () => {
         Keyboard.dismiss();
-        setShowDatePicker(false);
-        setShowTimePicker(false);
 
         // Auto-save any local edits on close
         if (reminder) {
-            const newDate = editDate ? `${editDate.getFullYear()}-${(editDate.getMonth() + 1).toString().padStart(2, '0')}-${editDate.getDate().toString().padStart(2, '0')}` : reminder.date;
+            const newDate = editDate || reminder.date;
             const newTime = editTime || reminder.time;
             const newTagId = editTagId !== undefined ? editTagId : reminder.tag_id;
             const newPriorityId = editPriorityId !== undefined ? editPriorityId : reminder.priority_id;
@@ -339,11 +429,14 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
                 onSave({
                     title: reminder.title,
                     date: newDate,
-                    time: newTime || undefined,
+                    time: newTime === '' ? null : (newTime || undefined),
                     repeat: reminder.repeat || 'none',
                     repeat_until: reminder.repeat_until,
                     tag_id: newTagId,
                     priority_id: newPriorityId,
+                    // Note: We deliberately omit subtasks and notification_offsets from this basic
+                    // onSave payload because they are stored in separate tables. Including them
+                    // causes a Supabase schema cache error ("Column subtasks does not exist").
                 });
             }
         }
@@ -373,8 +466,14 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
     };
 
     const handleOverlayPress = () => {
-        if (isKeyboardVisible) {
+        if (isPickerOpen) {
+            // Let the picker's internal hooks handle closing it; do NOT close the sheet.
+            return;
+        } else if (isKeyboardVisible) {
             Keyboard.dismiss();
+        } else if (messages.some(m => m.panelType === 'notification_settings')) {
+            // If the user tapped the overlay while notification setting is open, close and save the sheet
+            handleClose();
         } else if (messages.length > 0) {
             // Clear chat and move card back to middle — don't close the sheet
             nova.reset();
@@ -387,19 +486,6 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
 
     const handleQuickSave = () => {
         handleClose();
-    };
-
-    const formatDate = (d: Date) => {
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
-    };
-
-    const formatDisplayTime = (timeStr: string) => {
-        if (!timeStr) return 'No time';
-        const [hours, minutes] = timeStr.split(':').map(Number);
-        const period = hours >= 12 ? 'PM' : 'AM';
-        const displayHours = hours % 12 || 12;
-        return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
     };
 
     const handleKeyPress = (e: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
@@ -418,7 +504,7 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
     // Build the ghost card as a Reminder object with current edit state
     const displayReminder: Reminder = {
         ...reminder,
-        date: editDate ? `${editDate.getFullYear()}-${(editDate.getMonth() + 1).toString().padStart(2, '0')}-${editDate.getDate().toString().padStart(2, '0')}` : reminder.date,
+        date: editDate || reminder.date,
         time: editTime || reminder.time,
         tag_id: editTagId !== undefined ? editTagId : reminder.tag_id,
         priority_id: editPriorityId !== undefined ? editPriorityId : reminder.priority_id,
@@ -471,6 +557,9 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
                     index={0}
                     onComplete={() => { }}
                     onEdit={() => { }}
+                    onNotificationTap={() => {
+                        nova.pushNotificationSettings();
+                    }}
                 />
             </Animated.View>
 
@@ -488,145 +577,41 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
                 ]}
                 pointerEvents="box-none"
             >
-                {/* Quick-Edit Field Chips */}
-                <View style={localStyles.chipsContainer}>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={localStyles.chipsScroll}>
-                        {/* Date Chip */}
-                        <TouchableOpacity
-                            style={[localStyles.chip, { backgroundColor: colors.card, borderColor: colors.border }]}
-                            onPress={() => {
-                                Keyboard.dismiss();
-                                setShowDatePicker(!showDatePicker);
-                                setShowTimePicker(false);
-                            }}
-                        >
-                            <Ionicons name="calendar-outline" size={14} color={colors.primary} />
-                            <Text style={[localStyles.chipText, { color: colors.foreground }]}>
-                                {editDate ? formatDate(editDate) : 'No date'}
-                            </Text>
-                        </TouchableOpacity>
-
-                        {/* Time Chip */}
-                        <TouchableOpacity
-                            style={[localStyles.chip, { backgroundColor: colors.card, borderColor: colors.border }]}
-                            onPress={() => {
-                                Keyboard.dismiss();
-                                setShowTimePicker(!showTimePicker);
-                                setShowDatePicker(false);
-                            }}
-                        >
-                            <Ionicons name="time-outline" size={14} color={colors.primary} />
-                            <Text style={[localStyles.chipText, { color: colors.foreground }]}>
-                                {formatDisplayTime(editTime)}
-                            </Text>
-                        </TouchableOpacity>
-
-                        {/* Tag Chip */}
-                        <TouchableOpacity
-                            style={[
-                                localStyles.chip,
-                                {
-                                    backgroundColor: tag ? `${tag.color}20` : colors.card,
-                                    borderColor: tag ? tag.color : colors.border,
-                                },
-                            ]}
-                            onPress={() => {
-                                // Cycle through tags
-                                const currentIdx = tags.findIndex(t => t.id === editTagId);
-                                if (currentIdx === -1 || currentIdx === tags.length - 1) {
-                                    setEditTagId(tags.length > 0 ? tags[0].id : null);
-                                } else {
-                                    setEditTagId(tags[currentIdx + 1].id);
-                                }
-                            }}
-                            onLongPress={() => setEditTagId(null)}
-                        >
-                            <Ionicons name="pricetag-outline" size={14} color={tag ? tag.color : colors.mutedForeground} />
-                            <Text style={[localStyles.chipText, { color: tag ? tag.color : colors.mutedForeground }]}>
-                                {tag ? tag.name : 'No tag'}
-                            </Text>
-                        </TouchableOpacity>
-
-                        {/* Priority Chip */}
-                        <TouchableOpacity
-                            style={[
-                                localStyles.chip,
-                                {
-                                    backgroundColor: priority ? `${priority.color}20` : colors.card,
-                                    borderColor: priority ? priority.color : colors.border,
-                                },
-                            ]}
-                            onPress={() => {
-                                const currentIdx = priorities.findIndex(p => p.id === editPriorityId);
-                                if (currentIdx === -1 || currentIdx === priorities.length - 1) {
-                                    setEditPriorityId(priorities.length > 0 ? priorities[0].id : null);
-                                } else {
-                                    setEditPriorityId(priorities[currentIdx + 1].id);
-                                }
-                            }}
-                            onLongPress={() => setEditPriorityId(null)}
-                        >
-                            <Ionicons name="flag-outline" size={14} color={priority ? priority.color : colors.mutedForeground} />
-                            <Text style={[localStyles.chipText, { color: priority ? priority.color : colors.mutedForeground }]}>
-                                {priority ? priority.name : 'No priority'}
-                            </Text>
-                        </TouchableOpacity>
-
-                        {/* Save Button */}
-                        <TouchableOpacity
-                            style={[localStyles.chip, { backgroundColor: colors.primary, borderColor: colors.primary }]}
-                            onPress={handleQuickSave}
-                        >
-                            <Ionicons name="checkmark" size={16} color={colors.primaryForeground} />
-                            <Text style={[localStyles.chipText, { color: colors.primaryForeground, fontFamily: typography.fontFamily.semibold }]}>
-                                Save
-                            </Text>
-                        </TouchableOpacity>
+                {/* Field Chips (Hidden when interaction starts) */}
+                {!hasStartedChatting && (
+                    <ScrollView
+                        bounces={false}
+                        showsVerticalScrollIndicator={false}
+                        contentContainerStyle={{ paddingBottom: isPickerOpen ? spacing.xl * 2 : 0 }}
+                        style={{ flexGrow: 0 }}
+                        keyboardShouldPersistTaps="handled"
+                    >
+                        <TouchableWithoutFeedback onPress={handleOverlayPress}>
+                            <View style={localStyles.chipsContainer}>
+                                <InlineEditChips
+                                    date={editDate}
+                                    time={editTime}
+                                    tag_id={editTagId}
+                                    priority_id={editPriorityId}
+                                    notification_offsets={reminder.notification_offsets}
+                                    repeat={reminder.repeat}
+                                    subtasks={reminder.subtasks}
+                                    onChange={(fields) => {
+                                        if (fields.date !== undefined) setEditDate(fields.date);
+                                        if (fields.time !== undefined) setEditTime(fields.time);
+                                        if (fields.tag_id !== undefined) setEditTagId(fields.tag_id);
+                                        if (fields.priority_id !== undefined) setEditPriorityId(fields.priority_id);
+                                    }}
+                                    onOpenNotifications={nova.pushNotificationSettings}
+                                    onOpenRepeat={(nova as any).pushRepeatSettings}
+                                    onOpenSubtasks={(nova as any).pushSubtasksSettings}
+                                    onPickerStateChange={setIsPickerOpen}
+                                />
+                            </View>
+                        </TouchableWithoutFeedback>
                     </ScrollView>
-                </View>
-
-                {/* Inline Pickers */}
-                {showDatePicker && (
-                    <View style={[localStyles.pickerContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                        <DateTimePicker
-                            value={editDate || new Date()}
-                            mode="date"
-                            display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                            onChange={(_event: any, selectedDate?: Date) => {
-                                setShowDatePicker(Platform.OS === 'ios');
-                                if (selectedDate) setEditDate(selectedDate);
-                            }}
-                            textColor={colors.foreground}
-                            themeVariant={isDark ? 'dark' : 'light'}
-                        />
-                    </View>
                 )}
 
-                {showTimePicker && (
-                    <View style={[localStyles.pickerContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                        <DateTimePicker
-                            value={(() => {
-                                if (!editTime) return new Date();
-                                const [h, m] = editTime.split(':').map(Number);
-                                const d = new Date(); d.setHours(h, m, 0, 0);
-                                return d;
-                            })()}
-                            mode="time"
-                            is24Hour={false}
-                            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                            onChange={(_event: any, selectedTime?: Date) => {
-                                setShowTimePicker(Platform.OS === 'ios');
-                                if (selectedTime) {
-                                    const hours = selectedTime.getHours().toString().padStart(2, '0');
-                                    const mins = selectedTime.getMinutes().toString().padStart(2, '0');
-                                    setEditTime(`${hours}:${mins}`);
-                                }
-                            }}
-                            textColor={colors.foreground}
-                            themeVariant={isDark ? 'dark' : 'light'}
-                        />
-                    </View>
-                )}
 
                 {/* Chat Messages */}
                 {messages.length > 0 || isThinking ? (
@@ -634,27 +619,36 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
                         ref={flatListRef}
                         data={messages}
                         keyExtractor={item => item.id}
-                        style={{ flexGrow: 1 }}
+                        style={{ flexShrink: 1, flexGrow: 0 }}
                         renderItem={({ item }) => (
                             <MessageBubble
                                 message={item}
                                 colors={colors}
                                 tags={tags}
-                                onDraftConfirm={(msgId) => {
-                                    const draftField = messages.find(m => m.id === msgId)?.panelFields;
-                                    if (draftField) {
-                                        handleDraftUpdateConfirm(msgId, draftField);
+                                reminder={reminder}
+                                onOverlayPress={handleOverlayPress}
+                                onDraftConfirm={(msgId, draftFields) => {
+                                    // Make sure we pass the fields through properly (handleDraftConfirm expects msgId, fields)
+                                    // Since we updated the signature of onDraftConfirm, we should use the new draftFields if provided.
+                                    // For subtasks, since onChange gets real-time data but we might not have updated the message's panelFields synchronously,
+                                    // we can let the "Save Subtasks" button pass the current subtasks to draftFields.
+                                    // Actually, we must use the latest state from the InlineSubtaskList, so we'll need to update it.
+                                    // The current button sends `message.panelFields.subtasks`. We should ensure this is updated.
+                                    // For now, let's keep it simple.
+                                    const fieldsToUse = draftFields || messages.find(m => m.id === msgId)?.panelFields;
+                                    if (fieldsToUse) {
+                                        nova.handleDraftUpdateConfirm(msgId, fieldsToUse);
                                     }
                                 }}
                                 onDraftDiscard={(msgId) => {
-                                    nova.setMessages(prev => prev.filter(m => m.id !== msgId));
+                                    nova.handleDraftDiscard(msgId);
                                 }}
                             />
                         )}
                         contentContainerStyle={{ paddingBottom: spacing.lg + 50 }}
                         showsVerticalScrollIndicator={false}
                         keyboardShouldPersistTaps="handled"
-                        ListFooterComponent={isThinking ? <TypingIndicator colors={colors} /> : null}
+                        ListFooterComponent={isThinking ? <TypingIndicator colors={colors} onOverlayPress={handleOverlayPress} /> : null}
                     />
                 ) : (
                     <TouchableWithoutFeedback onPress={handleOverlayPress}>
@@ -663,7 +657,7 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
                 )}
 
                 {/* Suggestion Chips */}
-                {!isKeyboardVisible && (
+                {(!isKeyboardVisible && !isPickerOpen) && (
                     <View style={{ position: 'absolute', bottom: 0, left: -spacing.lg, right: -spacing.lg }}>
                         <SuggestionChips
                             suggestions={suggestions}

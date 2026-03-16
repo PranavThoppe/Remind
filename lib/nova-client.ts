@@ -74,7 +74,9 @@ export async function callNovaAgent(
                 client_date,
                 conversation: params.conversation?.map(msg => ({
                     role: msg.role,
-                    content: msg.content
+                    content: msg.content,
+                    panelType: msg.panelType,
+                    panelFields: msg.panelFields
                 }))
             }),
             signal: controller.signal,

@@ -10,14 +10,26 @@ import { scheduleReminderNotification } from '../lib/notifications';
 export function useNovaAddChat() {
     const { user } = useAuth();
     const { tags, priorities } = useSettings();
-    const { addReminder, reminders, deleteReminder, updateReminder } = useReminders();
+    const { addReminder, updateSubtasks } = useReminders();
 
     const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const messagesRef = useRef<ChatMessage[]>([]); // mirror for sync reads
+    const [hiddenMessages, setHiddenMessages] = useState<ChatMessage[]>([]);
     const [isThinking, setIsThinking] = useState(false);
     const [inputText, setInputText] = useState('');
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const [dayOverviewDate, setDayOverviewDate] = useState<string | null>(null);
 
     const flatListRef = useRef<any>(null);
+
+    // Keep messagesRef in sync so handleDraftConfirm can read current messages synchronously
+    const syncedSetMessages: typeof setMessages = useCallback((updater) => {
+        setMessages(prev => {
+            const next = typeof updater === 'function' ? (updater as any)(prev) : updater;
+            messagesRef.current = next;
+            return next;
+        });
+    }, []);
 
     const processMessage = useCallback(async (
         input: string,
@@ -61,75 +73,48 @@ export function useNovaAddChat() {
             const toolName = lastToolCall.tool;
             const toolResult = lastToolCall.result;
 
-            if (toolName === 'draft_reminder' || toolName === 'create_reminder') {
-                if (toolName === 'draft_reminder') {
-                    const draft = toolResult.draft;
-                    const sheetDraft = {
-                        title: draft.title, date: draft.date, time: draft.time, repeat: draft.repeat || 'none',
-                        tag_id: draft.tag_name ? tags.find(t => t.name.toLowerCase() === draft.tag_name.toLowerCase())?.id : undefined,
-                        priority_id: draft.priority_name ? priorities.find(p => p.name.toLowerCase() === draft.priority_name.toLowerCase())?.id : undefined,
-                        notes: draft.notes,
-                    };
-                    setMessages(prev => [...prev, {
-                        id: Date.now().toString(), role: 'assistant',
-                        content: response.message || toolResult.message || "Here's a draft for your reminder:",
-                        timestamp: new Date(), panelType: 'draft', panelFields: sheetDraft,
-                    }]);
+            if (toolName === 'draft_reminder') {
+                const draft = toolResult.draft;
+                const sheetDraft = {
+                    title: draft.title, date: draft.date, time: draft.time, repeat: draft.repeat || 'none',
+                    tag_id: draft.tag_name ? tags.find(t => t.name.toLowerCase() === draft.tag_name.toLowerCase())?.id : undefined,
+                    priority_id: draft.priority_name ? priorities.find(p => p.name.toLowerCase() === draft.priority_name.toLowerCase())?.id : undefined,
+                    notes: draft.notes,
+                    subtasks: draft.subtasks,
+                };
+
+                const newMessage = {
+                    id: Date.now().toString(), role: 'assistant' as const,
+                    content: response.message || toolResult.message || "Here's a draft for your reminder:",
+                    timestamp: new Date(), panelType: 'draft' as const, panelFields: sheetDraft,
+                };
+                if (draft.subtasks && draft.subtasks.length > 0) {
+                    setHiddenMessages(currentMessages);
+                    syncedSetMessages([newMessage]);
                 } else {
-                    setMessages(prev => [...prev, {
-                        id: Date.now().toString(), role: 'assistant',
-                        content: response.message || toolResult.message || "Reminder created!", timestamp: new Date(),
-                    }]);
+                    syncedSetMessages(prev => [...prev, newMessage]);
                 }
-            } else if (toolName === 'search_reminders') {
-                const parsedResults = Array.isArray(toolResult.reminders) ? toolResult.reminders : [];
-                setMessages(prev => [...prev, {
+            } else if (toolName === 'comment_on_day') {
+                // Agent responded with a day comment after confirmation — just show the text
+                syncedSetMessages(prev => [...prev, {
                     id: Date.now().toString(), role: 'assistant',
-                    content: response.message || "Here's what I found:", timestamp: new Date(),
-                    panelType: 'search', panelSearchResults: parsedResults,
-                }]);
-            } else if (toolName === 'delete_reminder') {
-                const idToDelete = toolResult.reminder_id || toolResult.id;
-                if (idToDelete) {
-                    await deleteReminder(idToDelete);
-                }
-                const remainingToday = reminders.filter(
-                    r => r.date === clientDate && !r.completed && r.id !== idToDelete
-                );
-                setMessages(prev => [...prev, {
-                    id: Date.now().toString(),
-                    role: 'assistant',
-                    content: response.message || toolResult.message || "Reminder deleted successfully!",
-                    timestamp: new Date(),
-                    panelType: 'reminder_list',
-                    panelSearchResults: remainingToday,
-                }]);
-            } else if (toolName === 'update_reminder') {
-                // Even in 'Add' mode, if they ask to update via search, we process it inline if the agent handled it.
-                const updatedId = toolResult.reminder_id || toolResult.id || toolResult.reminder?.id;
-                const updatedReminder = updatedId ? reminders.find(r => r.id === updatedId) : undefined;
-                setMessages(prev => [...prev, {
-                    id: Date.now().toString(),
-                    role: 'assistant',
-                    content: response.message || toolResult.message || "Reminder updated.",
-                    timestamp: new Date(),
-                    ...(updatedReminder ? { panelType: 'reminder_list', panelSearchResults: [updatedReminder] } : {}),
+                    content: response.message, timestamp: new Date(),
                 }]);
             } else {
-                setMessages(prev => [...prev, {
+                syncedSetMessages(prev => [...prev, {
                     id: Date.now().toString(), role: 'assistant',
                     content: response.message, timestamp: new Date(),
                 }]);
             }
         } catch (error: any) {
-            setMessages(prev => [...prev, {
+            syncedSetMessages(prev => [...prev, {
                 id: (Date.now() + 1).toString(), role: 'assistant',
                 content: error.message || "An error occurred.", timestamp: new Date(),
             }]);
         } finally {
             setIsThinking(false);
         }
-    }, [user, tags, priorities, reminders]);
+    }, [user, tags, priorities]);
 
     const handleSend = useCallback(async (overrideText?: string) => {
         const trimmed = overrideText ? overrideText.trim() : inputText.trim();
@@ -144,10 +129,10 @@ export function useNovaAddChat() {
             content: trimmed, imageUri: userImage || undefined, timestamp: new Date(),
         };
         const updatedMessages = [...messages, userMessage];
-        setMessages(updatedMessages);
+        syncedSetMessages(updatedMessages);
         setIsThinking(true);
         await processMessage(trimmed, updatedMessages, userImage || undefined);
-    }, [inputText, selectedImage, isThinking, messages, processMessage]);
+    }, [inputText, selectedImage, isThinking, messages, processMessage, syncedSetMessages]);
 
     const handleDraftConfirm = useCallback(async (messageId: string, fields: ModalFieldUpdates) => {
         if (!fields.title?.trim()) return;
@@ -160,17 +145,77 @@ export function useNovaAddChat() {
         });
 
         if (!result.error && result.data) {
+            if (fields.subtasks && fields.subtasks.length > 0) {
+                await updateSubtasks((result.data as Reminder).id, fields.subtasks);
+            }
             try {
                 await scheduleReminderNotification(fields.title, dateStr, fields.time || undefined, fields.repeat || 'none', (result.data as Reminder).id);
             } catch (_err) { }
-            setMessages(prev => prev.map(m => m.id === messageId ? { ...m, panelIsStatic: true } : m));
+
+            // Mark draft as static
+            syncedSetMessages(prev => prev.map(m => m.id === messageId ? { ...m, panelIsStatic: true } : m));
+
+            // Inject the day overview panel inline in the chat
+            setDayOverviewDate(dateStr);
+            syncedSetMessages(prev => [...prev, {
+                id: `day-overview-${Date.now()}`,
+                role: 'assistant',
+                content: '',
+                timestamp: new Date(),
+                panelType: 'day_overview',
+                panelFields: { date: dateStr },
+            }]);
+
+            // Ask the agent to comment on the day
+            setIsThinking(true);
+            const confirmPrompt = `Reminder confirmed: "${fields.title}" on ${dateStr}${fields.time ? ' at ' + fields.time : ''}. Please call comment_on_day.`;
+            await processMessage(confirmPrompt, messagesRef.current);
         }
-    }, [addReminder]);
+    }, [addReminder, updateSubtasks, processMessage, syncedSetMessages]);
+
+    const handleDraftDiscard = useCallback((messageId: string) => {
+        setMessages(prev => {
+            const isDiscardingSubtaskDraft = prev.find(m => m.id === messageId && m.panelFields?.subtasks && m.panelFields.subtasks.length > 0);
+            if (isDiscardingSubtaskDraft && hiddenMessages.length > 0) {
+                return hiddenMessages;
+            }
+            return prev.filter(m => m.id !== messageId);
+        });
+        setHiddenMessages([]);
+    }, [hiddenMessages]);
+
+    const pushRepeatSettings = useCallback((initialFields?: { repeat?: string; date?: string | null }) => {
+        setMessages(prev => [...prev, {
+            id: `temp-repeat-${Date.now()}`, role: 'assistant' as const,
+            content: '', timestamp: new Date(), panelType: 'repeat_settings' as const,
+            panelFields: { repeat: initialFields?.repeat, date: initialFields?.date },
+            panelIsStatic: false,
+        }]);
+    }, []);
+
+    const pushSubtasksSettings = useCallback((initialFields?: { subtasks?: any[] }) => {
+        setMessages(prev => [...prev, {
+            id: `temp-subtasks-${Date.now()}`, role: 'assistant' as const,
+            content: '', timestamp: new Date(), panelType: 'subtasks_settings' as const,
+            panelFields: { subtasks: initialFields?.subtasks || [] },
+            panelIsStatic: false,
+        }]);
+    }, []);
+
+    const pushNotificationSettings = useCallback(() => {
+        setMessages(prev => [...prev, {
+            id: `temp-notification-${Date.now()}`, role: 'assistant' as const,
+            content: '', timestamp: new Date(), panelType: 'notification_settings' as const, panelFields: {},
+            panelIsStatic: false,
+        }]);
+    }, []);
 
     const reset = useCallback(() => {
         setInputText('');
         setSelectedImage(null);
         setMessages([]);
+        setHiddenMessages([]);
+        setDayOverviewDate(null);
     }, []);
 
     return {
@@ -178,10 +223,15 @@ export function useNovaAddChat() {
         isThinking,
         inputText, setInputText,
         selectedImage, setSelectedImage,
+        dayOverviewDate, setDayOverviewDate,
         flatListRef,
         handleSend,
         handleDraftConfirm,
+        handleDraftDiscard,
         processMessage,
+        pushRepeatSettings,
+        pushSubtasksSettings,
+        pushNotificationSettings,
         reset,
     };
 }

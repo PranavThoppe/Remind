@@ -14,10 +14,14 @@ import {
   LayoutAnimation,
   Keyboard,
   UIManager,
+  Animated,
+  Dimensions,
+  TouchableWithoutFeedback,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons'; // Added import
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { startOfDay, isSameDay, isToday, addDays, startOfWeek, endOfWeek, isAfter, isBefore, addWeeks, isTomorrow, subWeeks } from 'date-fns';
+import { startOfDay, isSameDay, isToday, addDays, startOfWeek, endOfWeek, isAfter, isBefore, addWeeks, isTomorrow, subWeeks, format } from 'date-fns';
 import { ReminderCard } from '../../components/ReminderCard';
 import { DaySection } from '../../components/DaySection';
 import { EmptyState } from '../../components/EmptyState';
@@ -33,8 +37,11 @@ import { Reminder } from '../../types/reminder';
 import { useReminders } from '../../hooks/useReminders';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useTheme } from '../../hooks/useTheme';
-import { AnimatedViewSelector } from '../../components/AnimatedViewSelector';
+import PagerView from 'react-native-pager-view';
+import { useRouter } from 'expo-router';
+import { ProfileAvatar } from '../../components/ProfileAvatar';
 
+const SCREEN_WIDTH = Dimensions.get('window').width;
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android') {
@@ -47,12 +54,17 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useTheme();
   const styles = createStyles(colors);
+  const router = useRouter();
 
   const { reminders, loading, addReminder, toggleComplete, refreshReminders, updateReminder, deleteReminder, hasFetched, searchReminders } = useReminders();
   const { tags, priorities, lastViewMode: viewMode, setLastViewMode: setViewMode, lastSortMode: sortMode, setLastSortMode: setSortMode } = useSettings();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+
+  const viewModeToIndex = (mode: string) => mode === 'calendar' ? 2 : mode === 'week' ? 1 : 0;
+  const indexToViewMode = (index: number) => index === 2 ? ('calendar' as any) : index === 1 ? ('week' as any) : ('list' as any);
   // Search State
   const [isSearching, setIsSearching] = useState(false);
+  const searchExpandAnim = useRef(new Animated.Value(0)).current;
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Reminder[]>([]);
   const [searchAnswer, setSearchAnswer] = useState<string | null>(null);
@@ -342,8 +354,19 @@ export default function HomeScreen() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    await deleteReminder(id);
+  const handleDelete = async (eventOrId: string | Reminder) => {
+    if (typeof eventOrId === 'string') {
+      await deleteReminder(eventOrId);
+    } else {
+      const event = eventOrId;
+      if (event.isGhost && event.date) {
+        const ghostDate = new Date(event.date + 'T00:00:00');
+        const dayBefore = new Date(ghostDate.getTime() - 24 * 60 * 60 * 1000);
+        await updateReminder(event.id, { repeat_until: format(dayBefore, 'yyyy-MM-dd') });
+      } else {
+        await deleteReminder(event.id);
+      }
+    }
   };
 
   const handleSave = async (data: Omit<Reminder, 'id' | 'user_id' | 'created_at' | 'completed'>) => {
@@ -375,18 +398,21 @@ export default function HomeScreen() {
   };
 
   const toggleSearch = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     if (isSearching) {
       // Close search
-      setIsSearching(false);
-      setSearchQuery('');
-      setSearchResults([]);
-      setSearchAnswer(null);
       Keyboard.dismiss();
+      Animated.timing(searchExpandAnim, { toValue: 0, duration: 300, useNativeDriver: false }).start(() => {
+        setIsSearching(false);
+        setSearchQuery('');
+        setSearchResults([]);
+        setSearchAnswer(null);
+      });
     } else {
       // Open search
       setIsSearching(true);
-      setTimeout(() => searchInputRef.current?.focus(), 100);
+      Animated.timing(searchExpandAnim, { toValue: 1, duration: 300, useNativeDriver: false }).start(() => {
+        setTimeout(() => searchInputRef.current?.focus(), 100);
+      });
     }
   };
 
@@ -476,54 +502,77 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + spacing.lg }]}>
+      <View style={[styles.header, { paddingTop: insets.top + spacing.lg, zIndex: 100 }]}>
         <View style={styles.headerTop}>
-          {isSearching ? (
-            <View style={styles.searchBarContainer}>
-              <Ionicons name="search" size={20} color={colors.mutedForeground} style={styles.searchIcon} />
-              <TextInput
-                ref={searchInputRef}
-                style={styles.searchInput}
-                placeholder="Ask or search reminders..."
-                placeholderTextColor={colors.mutedForeground}
-                value={searchQuery}
-                onChangeText={handleSearchTextChange}
-                returnKeyType="search"
-              />
-              {isSearchLoading ? (
-                <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: spacing.sm }} />
-              ) : (
-                <TouchableOpacity onPress={toggleSearch} style={styles.closeSearchButton}>
-                  <Text style={styles.closeSearchText}>Cancel</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          ) : (
-            <>
-              <View>
-                <Text style={styles.dateText}>{formatDate()}</Text>
-                <Text style={styles.greeting}>{greeting()}</Text>
-              </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.dateText}>{formatDate()}</Text>
+            <Text style={styles.greeting}>{greeting()}</Text>
+          </View>
 
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                <TouchableOpacity
-                  onPress={toggleSearch}
-                  style={styles.searchButton}
-                >
-                  <Ionicons name="search" size={24} color={colors.primary} />
-                </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+            <View style={{ width: 40, height: 40 }} />
+            <ProfileAvatar onPress={() => router.push('/settings')} size={40} />
+          </View>
 
-                {/* View Mode Selector */}
-                {!isAiChatOpen && (
-                  <AnimatedViewSelector
-                    currentView={viewMode}
-                    onViewChange={setViewMode}
-                  />
-                )}
-              </View>
-            </>
+          {/* Search Blur Overlay that breaks out of Header */}
+          {isSearching && (
+            <TouchableWithoutFeedback onPress={toggleSearch}>
+              <Animated.View style={[{
+                position: 'absolute',
+                top: -(insets.top + spacing.lg),
+                left: -spacing.xl,
+                width: SCREEN_WIDTH,
+                height: Dimensions.get('window').height + 100,
+                zIndex: 90,
+                opacity: searchExpandAnim,
+              }]}>
+                <BlurView intensity={40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.25)' }]} />
+              </Animated.View>
+            </TouchableWithoutFeedback>
           )}
+
+          {/* Animated Expanding Search Button / Input */}
+          <Animated.View style={[{
+            position: 'absolute',
+            right: searchExpandAnim.interpolate({ inputRange: [0, 1], outputRange: [40 + spacing.sm, 0] }),
+            width: searchExpandAnim.interpolate({ inputRange: [0, 1], outputRange: [40, SCREEN_WIDTH - spacing.xl * 2] }),
+            height: searchExpandAnim.interpolate({ inputRange: [0, 1], outputRange: [40, 44] }),
+            borderRadius: 22,
+            backgroundColor: searchExpandAnim.interpolate({ inputRange: [0, 1], outputRange: [`${colors.primary}15`, colors.card] }),
+            borderColor: searchExpandAnim.interpolate({ inputRange: [0, 1], outputRange: ['transparent', colors.primary] }),
+            borderWidth: searchExpandAnim.interpolate({ inputRange: [0, 0.1, 1], outputRange: [0, 1, 1] }),
+            overflow: 'hidden',
+            flexDirection: 'row',
+            alignItems: 'center',
+            zIndex: 100, // Keeps search bar above the BlurView
+          }]}>
+            {isSearching ? (
+              <Animated.View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingLeft: spacing.md, opacity: searchExpandAnim }}>
+                <Ionicons name="search" size={20} color={colors.primary} style={styles.searchIcon} />
+                <TextInput
+                  ref={searchInputRef}
+                  style={styles.searchInput}
+                  placeholder="Ask or search reminders..."
+                  placeholderTextColor={colors.mutedForeground}
+                  value={searchQuery}
+                  onChangeText={handleSearchTextChange}
+                  returnKeyType="search"
+                />
+                {isSearchLoading ? (
+                  <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: spacing.sm }} />
+                ) : (
+                  <TouchableOpacity onPress={toggleSearch} style={styles.closeSearchButton}>
+                    <Text style={styles.closeSearchText}>Cancel</Text>
+                  </TouchableOpacity>
+                )}
+              </Animated.View>
+            ) : (
+              <TouchableOpacity onPress={toggleSearch} style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="search" size={20} color={colors.primary} />
+              </TouchableOpacity>
+            )}
+          </Animated.View>
         </View>
       </View>
 
@@ -542,23 +591,127 @@ export default function HomeScreen() {
         </View>
       ) : (
         <>
-          {activeReminders.length === 0 ? (
-            <View style={{ flex: 1 }}>
-              {isSearching ? (
-                <ScrollView contentContainerStyle={styles.emptySearchContainer}>
-                  {renderAnswer()}
-                  <View style={{ alignItems: 'center', marginTop: spacing.xl }}>
-                    <Ionicons name="search-outline" size={48} color={colors.mutedForeground} />
-                    <Text style={styles.emptyText}>No results found</Text>
-                    <Text style={styles.emptySubtext}>Try searching for something else</Text>
-                  </View>
-                </ScrollView>
+          <PagerView
+            style={{ flex: 1 }}
+            initialPage={viewModeToIndex(viewMode)}
+            onPageSelected={(e) => {
+              setViewMode(indexToViewMode(e.nativeEvent.position));
+            }}
+          >
+            <View key="list" style={{ flex: 1 }}>
+              {activeReminders.length === 0 ? (
+                <View style={{ flex: 1 }}>
+                  {isSearching ? (
+                    <ScrollView contentContainerStyle={styles.emptySearchContainer}>
+                      {renderAnswer()}
+                      <View style={{ alignItems: 'center', marginTop: spacing.xl }}>
+                        <Ionicons name="search-outline" size={48} color={colors.mutedForeground} />
+                        <Text style={styles.emptyText}>No results found</Text>
+                        <Text style={styles.emptySubtext}>Try searching for something else</Text>
+                      </View>
+                    </ScrollView>
+                  ) : (
+                    <EmptyState type="active" />
+                  )}
+                  <FlatList
+                    data={[]} // Keep this for refresh control
+                    renderItem={null}
+                    refreshControl={
+                      <RefreshControl
+                        refreshing={loading}
+                        onRefresh={async () => {
+                          await refreshReminders();
+                          setHistoryWeeks(prev => prev + 1);
+                        }}
+                        colors={[colors.primary]}
+                      />
+                    }
+                  />
+                </View>
               ) : (
-                <EmptyState type="active" />
+                <FlatList
+                  ref={flatListRef}
+                  ListHeaderComponent={renderAnswer()}
+                  data={groupedReminders}
+                  keyExtractor={(item) => item.id}
+                  maintainVisibleContentPosition={{
+                    minIndexForVisible: 0,
+                    autoscrollToTopThreshold: 10,
+                  }}
+                  onScrollToIndexFailed={(info) => {
+                    flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+                  }}
+                  renderItem={({ item, index: groupIndex }) => {
+                    const startIndex = groupedReminders
+                      .slice(0, groupIndex)
+                      .reduce((acc, g) => acc + g.reminders.length, 0);
+
+                    const isAnytime = item.id === 'anytime';
+
+                    if (isAnytime && sortMode === 'time') {
+                      return (
+                        <View style={styles.anytimeSection}>
+                          {groupIndex === 0 && (
+                            <View style={styles.headerRow}>
+                              <SortSelector
+                                currentSort={sortMode}
+                                onSortChange={setSortMode}
+                              />
+                            </View>
+                          )}
+                          <View style={styles.remindersList}>
+                            {item.reminders.map((reminder: Reminder, index: number) => (
+                              <ReminderCard
+                                key={reminder.id}
+                                reminder={reminder}
+                                onComplete={handleComplete}
+                                onEdit={handleEdit}
+                                onDelete={handleDelete}
+                                index={startIndex + index}
+                              />
+                            ))}
+                          </View>
+                        </View>
+                      );
+                    }
+
+                    return (
+                      <DaySection
+                        date={(item as any).date}
+                        title={(item as any).title}
+                        headerColor={(item as any).headerColor}
+                        reminders={item.reminders}
+                        onComplete={handleComplete}
+                        onEdit={handleEdit}
+                        onDelete={handleDelete}
+                        startIndex={startIndex}
+                        onSortChange={setSortMode as any}
+                        currentSort={sortMode}
+                        showSort={
+                          groupIndex === 0
+                        }
+                      />
+                    );
+                  }}
+                  contentContainerStyle={styles.listContent}
+                  showsVerticalScrollIndicator={false}
+                  refreshControl={
+                    <RefreshControl
+                      refreshing={loading}
+                      onRefresh={async () => {
+                        await refreshReminders();
+                        setHistoryWeeks(prev => prev + 1);
+                      }}
+                      colors={[colors.primary]}
+                    />
+                  }
+                />
               )}
-              <FlatList
-                data={[]} // Keep this for refresh control
-                renderItem={null}
+            </View>
+            <View key="week" style={{ flex: 1 }}>
+              <ScrollView
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
                 refreshControl={
                   <RefreshControl
                     refreshing={loading}
@@ -569,111 +722,19 @@ export default function HomeScreen() {
                     colors={[colors.primary]}
                   />
                 }
-              />
+              >
+                <WeekForecast
+                  reminders={activeReminders}
+                  onReminderClick={handleEdit}
+                  onComplete={handleComplete}
+                  onDelete={handleDelete}
+                />
+              </ScrollView>
             </View>
-          ) : viewMode === 'week' ? (
-            <ScrollView
-              contentContainerStyle={styles.listContent}
-              showsVerticalScrollIndicator={false}
-              refreshControl={
-                <RefreshControl
-                  refreshing={loading}
-                  onRefresh={async () => {
-                    await refreshReminders();
-                    setHistoryWeeks(prev => prev + 1);
-                  }}
-                  colors={[colors.primary]}
-                />
-              }
-            >
-              <WeekForecast
-                reminders={activeReminders}
-                onReminderClick={handleEdit}
-                onComplete={handleComplete}
-                onDelete={handleDelete}
-              />
-            </ScrollView>
-          ) : viewMode === 'calendar' ? (
-            <CalendarView onEdit={handleEdit} />
-          ) : (
-            <FlatList
-              ref={flatListRef}
-              ListHeaderComponent={renderAnswer()}
-              data={groupedReminders}
-              keyExtractor={(item) => item.id}
-              maintainVisibleContentPosition={{
-                minIndexForVisible: 0,
-                autoscrollToTopThreshold: 10,
-              }}
-              onScrollToIndexFailed={(info) => {
-                flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
-              }}
-              renderItem={({ item, index: groupIndex }) => {
-                const startIndex = groupedReminders
-                  .slice(0, groupIndex)
-                  .reduce((acc, g) => acc + g.reminders.length, 0);
-
-                const isAnytime = item.id === 'anytime';
-
-                if (isAnytime && sortMode === 'time') {
-                  return (
-                    <View style={styles.anytimeSection}>
-                      {groupIndex === 0 && (
-                        <View style={styles.headerRow}>
-                          <SortSelector
-                            currentSort={sortMode}
-                            onSortChange={setSortMode}
-                          />
-                        </View>
-                      )}
-                      <View style={styles.remindersList}>
-                        {item.reminders.map((reminder: Reminder, index: number) => (
-                          <ReminderCard
-                            key={reminder.id}
-                            reminder={reminder}
-                            onComplete={handleComplete}
-                            onEdit={handleEdit}
-                            onDelete={handleDelete}
-                            index={startIndex + index}
-                          />
-                        ))}
-                      </View>
-                    </View>
-                  );
-                }
-
-                return (
-                  <DaySection
-                    date={(item as any).date}
-                    title={(item as any).title}
-                    headerColor={(item as any).headerColor}
-                    reminders={item.reminders}
-                    onComplete={handleComplete}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                    startIndex={startIndex}
-                    onSortChange={setSortMode as any}
-                    currentSort={sortMode}
-                    showSort={
-                      groupIndex === 0
-                    }
-                  />
-                );
-              }}
-              contentContainerStyle={styles.listContent}
-              showsVerticalScrollIndicator={false}
-              refreshControl={
-                <RefreshControl
-                  refreshing={loading}
-                  onRefresh={async () => {
-                    await refreshReminders();
-                    setHistoryWeeks(prev => prev + 1);
-                  }}
-                  colors={[colors.primary]}
-                />
-              }
-            />
-          )}
+            <View key="calendar" style={{ flex: 1 }}>
+              <CalendarView onEdit={handleEdit} />
+            </View>
+          </PagerView>
 
           {/* Only show FloatingAddButton if NOT editing a reminder (EditReminderSheet takes over the bottom) */}
           {!editSourceLayout && !editingReminder && (

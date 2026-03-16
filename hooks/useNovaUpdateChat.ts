@@ -8,18 +8,22 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useReminders } from './useReminders';
 
 export interface UseNovaUpdateChatOptions {
-    initialPinnedReminder: Reminder | null;
+    initialPinnedReminder?: Reminder | null;
 }
 
-export function useNovaUpdateChat({ initialPinnedReminder }: UseNovaUpdateChatOptions) {
+export function useNovaUpdateChat(options: UseNovaUpdateChatOptions = {}) {
+    const { initialPinnedReminder } = options;
     const { user } = useAuth();
     const { tags, priorities } = useSettings();
-    const { updateReminder, deleteReminder } = useReminders();
+    const { updateReminder, deleteReminder, updateSubtasks } = useReminders();
 
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isThinking, setIsThinking] = useState(false);
     const [inputText, setInputText] = useState('');
-    const [pinnedReminder, setPinnedReminder] = useState<Reminder | null>(initialPinnedReminder);
+    const [pinnedReminder, setPinnedReminder] = useState<Reminder | null>(initialPinnedReminder || null);
+
+    // Track if we've already run the initial analysis for this reminder/session
+    const hasTriggeredInitialAnalysis = useRef<string | null>(null);
 
     // Explicit suggestion states
     const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -31,6 +35,10 @@ export function useNovaUpdateChat({ initialPinnedReminder }: UseNovaUpdateChatOp
     useEffect(() => {
         if (initialPinnedReminder) {
             setPinnedReminder(initialPinnedReminder);
+            // Reset trigger tracking if the reminder changes
+            if (hasTriggeredInitialAnalysis.current !== initialPinnedReminder.id) {
+                hasTriggeredInitialAnalysis.current = null;
+            }
         }
     }, [initialPinnedReminder]);
 
@@ -63,7 +71,11 @@ export function useNovaUpdateChat({ initialPinnedReminder }: UseNovaUpdateChatOp
         input: string,
         currentMessages: ChatMessage[],
     ) => {
-        if (!pinnedReminder) return;
+        // Use the prop as a fallback if state hasn't synced yet
+        const activeReminder = pinnedReminder || initialPinnedReminder;
+        if (!activeReminder) return;
+
+        const currentReminderId = activeReminder.id;
         try {
             if (!user) {
                 setMessages(prev => [...prev, {
@@ -84,10 +96,16 @@ export function useNovaUpdateChat({ initialPinnedReminder }: UseNovaUpdateChatOp
             const response = await callNovaUpdateAgent({
                 query: input,
                 user_id: user.id,
-                reminder: { ...pinnedReminder, date: pinnedReminder.date || undefined },
+                reminder: {
+                    ...activeReminder,
+                    date: activeReminder.date || undefined
+                } as any,
                 conversation: conversationHistory,
                 client_date: clientDate,
             });
+
+            const nowActiveId = (pinnedReminder || initialPinnedReminder)?.id;
+            if (nowActiveId !== currentReminderId) return;
 
             const lastToolCall = response.tool_calls?.[response.tool_calls.length - 1];
 
@@ -113,6 +131,7 @@ export function useNovaUpdateChat({ initialPinnedReminder }: UseNovaUpdateChatOp
                     tag_id: draft.tag_name !== undefined ? (draft.tag_name === "" ? null : tags.find(t => t.name.toLowerCase() === draft.tag_name.toLowerCase())?.id || pinnedReminder.tag_id) : pinnedReminder.tag_id,
                     priority_id: draft.priority_name !== undefined ? (draft.priority_name === "" ? null : priorities.find(p => p.name.toLowerCase() === draft.priority_name.toLowerCase())?.id || pinnedReminder.priority_id) : pinnedReminder.priority_id,
                     notes: draft.notes !== undefined ? draft.notes : (pinnedReminder.notes || null),
+                    subtasks: draft.subtasks !== undefined ? draft.subtasks : pinnedReminder.subtasks,
                 };
 
                 setMessages(prev => [...prev, {
@@ -120,16 +139,53 @@ export function useNovaUpdateChat({ initialPinnedReminder }: UseNovaUpdateChatOp
                     content: response.message || toolResult.message || "Here's the proposed update:",
                     timestamp: new Date(), panelType: 'draft_update' as any, panelFields: sheetDraft,
                 }]);
-            } else if (toolName === 'delete_reminder') {
-                const idToDelete = toolResult.reminder_id || toolResult.id;
-                if (idToDelete) {
-                    await deleteReminder(idToDelete);
-                }
+            } else if (toolName === 'update_notification_offsets') {
+                const offsets = toolResult.offsets || [];
+                const sheetDraft = {
+                    notification_offsets: offsets,
+                    title: pinnedReminder.title,
+                    date: pinnedReminder.date,
+                    time: pinnedReminder.time,
+                    repeat: pinnedReminder.repeat,
+                    repeat_until: pinnedReminder.repeat_until,
+                    tag_id: pinnedReminder.tag_id,
+                    priority_id: pinnedReminder.priority_id,
+                    notes: pinnedReminder.notes,
+                };
+
                 setMessages(prev => [...prev, {
-                    id: Date.now().toString(),
-                    role: 'assistant',
-                    content: response.message || toolResult.message || "Reminder deleted successfully!",
-                    timestamp: new Date(),
+                    id: Date.now().toString(), role: 'assistant',
+                    content: response.message || toolResult.message || "I've drafted the notification update.",
+                    timestamp: new Date(), panelType: 'notification_settings', panelFields: sheetDraft,
+                }]);
+            } else if (toolName === 'create_subtasks' || toolName === 'update_subtasks') {
+                const newSubtasks = toolResult.subtasks || [];
+                const sheetDraft = {
+                    title: pinnedReminder.title,
+                    date: pinnedReminder.date,
+                    time: pinnedReminder.time,
+                    repeat: pinnedReminder.repeat,
+                    repeat_until: pinnedReminder.repeat_until,
+                    tag_id: pinnedReminder.tag_id,
+                    priority_id: pinnedReminder.priority_id,
+                    notes: pinnedReminder.notes,
+                    subtasks: newSubtasks.map((st: string, idx: number) => ({
+                        id: `temp-${Date.now()}-${idx}`,
+                        reminder_id: pinnedReminder.id,
+                        title: st,
+                        is_completed: false,
+                        position: idx
+                    }))
+                };
+
+                // AI says: "I broke it down. Auto-saving if explicitly described."
+                // In instructions, if user lists them out, tool Result can indicate "auto_save".
+                // But typically if they ask to "break down", AI just drafts it.
+                // We show the subtask panel, which is an inline editor. User can tweak and confirm.
+                setMessages(prev => [...prev, {
+                    id: Date.now().toString(), role: 'assistant',
+                    content: response.message || toolResult.message || "Here are the suggested subtasks:",
+                    timestamp: new Date(), panelType: 'subtasks_settings' as any, panelFields: sheetDraft,
                 }]);
             } else {
                 setMessages(prev => [...prev, {
@@ -143,9 +199,12 @@ export function useNovaUpdateChat({ initialPinnedReminder }: UseNovaUpdateChatOp
                 content: error.message || "An error occurred.", timestamp: new Date(),
             }]);
         } finally {
-            setIsThinking(false);
+            const nowActiveId = (pinnedReminder || initialPinnedReminder)?.id;
+            if (nowActiveId === currentReminderId) {
+                setIsThinking(false);
+            }
         }
-    }, [user, tags, priorities, pinnedReminder]);
+    }, [user, tags, priorities, pinnedReminder, initialPinnedReminder]);
 
     const handleSend = useCallback(async (overrideText?: string) => {
         const trimmed = overrideText ? overrideText.trim() : inputText.trim();
@@ -173,15 +232,46 @@ export function useNovaUpdateChat({ initialPinnedReminder }: UseNovaUpdateChatOp
         if (fields.repeat_until) updates.repeat_until = fields.repeat_until;
         if (undefined !== fields.tag_id) updates.tag_id = fields.tag_id;
         if (undefined !== fields.priority_id) updates.priority_id = fields.priority_id;
-        if (undefined !== fields.notes) updates.notes = fields.notes;
+        if (fields.notes !== undefined) updates.notes = fields.notes;
+        if (fields.notification_offsets !== undefined) updates.notification_offsets = fields.notification_offsets;
 
-        const result = await updateReminder(pinnedReminder.id, updates);
+        const result = Object.keys(updates).length > 0
+            ? await updateReminder(pinnedReminder.id, updates)
+            : { error: null, data: pinnedReminder };
 
         if (!result.error) {
+            if (fields.subtasks !== undefined) {
+                await updateSubtasks(pinnedReminder.id, fields.subtasks);
+            }
             setMessages(prev => prev.map(m => m.id === messageId ? { ...m, panelIsStatic: true } : m));
-            setPinnedReminder({ ...pinnedReminder, ...updates });
+            setPinnedReminder({ ...pinnedReminder, ...updates, ...(fields.subtasks ? { subtasks: fields.subtasks } : {}) });
+        } else {
+            console.error('[useNovaUpdateChat] Failed to update reminder:', result.error);
         }
-    }, [pinnedReminder, updateReminder]);
+    }, [pinnedReminder, updateReminder, updateSubtasks]);
+
+    const handleDraftDiscard = useCallback((messageId: string) => {
+        // Find the message being discarded
+        const discardedMsg = messages.find(m => m.id === messageId);
+        const isSettingsPanel = discardedMsg?.panelType === 'notification_settings' || (discardedMsg?.panelType as any) === 'repeat_settings' || (discardedMsg?.panelType as any) === 'subtasks_settings';
+
+        setMessages(prev => prev.filter(m => m.id !== messageId));
+
+        // If it was a notification/repeat setting that got discarded, push fallback response with delay
+        if (isSettingsPanel) {
+            setIsThinking(true);
+            setTimeout(() => {
+                setMessages(prev => [...prev, {
+                    id: Date.now().toString(),
+                    role: 'assistant',
+                    content: "Anything else?",
+                    timestamp: new Date(),
+                }]);
+                setSuggestions(["Update title", "Change time", "Done"]);
+                setIsThinking(false);
+            }, 1000);
+        }
+    }, [messages]);
 
     const reset = useCallback(() => {
         setInputText('');
@@ -189,6 +279,52 @@ export function useNovaUpdateChat({ initialPinnedReminder }: UseNovaUpdateChatOp
         setSuggestions([]);
         setIsGeneratingSuggestions(false);
     }, []);
+
+    const pushNotificationSettings = useCallback(() => {
+        if (!pinnedReminder) return;
+        // Overwrite standard chat so the modal appears directly at the top under the card
+        setMessages([{
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: "Please select a time:",
+            timestamp: new Date(),
+            panelType: 'notification_settings',
+            panelFields: { notification_offsets: pinnedReminder.notification_offsets || [] }
+        }]);
+    }, [pinnedReminder]);
+
+    const pushRepeatSettings = useCallback(() => {
+        if (!pinnedReminder) return;
+        setMessages([{
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: "Please select a repeating schedule:",
+            timestamp: new Date(),
+            panelType: 'repeat_settings' as any,
+            panelFields: { repeat: pinnedReminder.repeat || 'none' }
+        }]);
+    }, [pinnedReminder]);
+
+    const pushSubtasksSettings = useCallback(() => {
+        if (!pinnedReminder) return;
+        setMessages([{
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: "Manage the list of subtasks:",
+            timestamp: new Date(),
+            panelType: 'subtasks_settings' as any,
+            panelFields: { subtasks: pinnedReminder.subtasks || [] }
+        }]);
+    }, [pinnedReminder]);
+
+    const triggerInitialAnalysis = useCallback(async () => {
+        const activeReminder = pinnedReminder || initialPinnedReminder;
+        if (!activeReminder || hasTriggeredInitialAnalysis.current === activeReminder.id) return;
+
+        hasTriggeredInitialAnalysis.current = activeReminder.id;
+        setIsThinking(true);
+        await processMessage('ACTION:INITIAL_ANALYSIS', messages);
+    }, [pinnedReminder, initialPinnedReminder, messages, processMessage]);
 
     return {
         messages, setMessages,
@@ -199,6 +335,11 @@ export function useNovaUpdateChat({ initialPinnedReminder }: UseNovaUpdateChatOp
         flatListRef,
         handleSend,
         handleDraftUpdateConfirm,
+        handleDraftDiscard,
+        pushNotificationSettings,
+        pushRepeatSettings,
+        pushSubtasksSettings,
+        triggerInitialAnalysis,
         reset,
     };
 }

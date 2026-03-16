@@ -32,6 +32,10 @@ import { ChatMessage, ModalFieldUpdates } from '../types/ai-chat';
 import { Reminder } from '../types/reminder';
 import { ReminderCard } from './ReminderCard';
 import { AddReminderSheet } from './AddReminderSheet';
+import { InlineRepeatPicker } from './InlineRepeatPicker';
+import { InlineSubtaskList } from './InlineSubtaskList';
+import { InlineEditChips } from './InlineEditChips';
+import { DayOverviewModal } from './DayOverviewModal';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const FAB_SIZE = 56;
@@ -83,18 +87,31 @@ function MessageBubble({
   message,
   colors,
   tags,
+  isEditingInline,
   onDraftConfirm,
-  onDraftEdit,
   onDraftDiscard,
-  onSelectSearchResult,
+  onToggleInlineEdit,
+  onDraftUpdateFields,
+  onDraftPanelConfirm,
+  onDraftPanelChange,
+  onPushRepeatSettings,
+  onPushSubtasksSettings,
+  onPushNotificationSettings,
 }: {
   message: ChatMessage;
   colors: any;
   tags: any[];
+  isEditingInline?: boolean;
   onDraftConfirm?: (messageId: string, draft: ModalFieldUpdates) => void;
-  onDraftEdit?: (messageId: string, draft: ModalFieldUpdates) => void;
   onDraftDiscard?: (messageId: string) => void;
-  onSelectSearchResult?: (reminder: Reminder) => void;
+  onToggleInlineEdit?: (messageId: string) => void;
+  onDraftUpdateFields?: (messageId: string, fields: Partial<Reminder>) => void;
+  onDraftPanelConfirm?: (draftMsgId: string, panelMsgId: string, fields: ModalFieldUpdates) => void;
+  // Real-time field changes from a panel (no static marking, no DB write — just state sync)
+  onDraftPanelChange?: (panelMsgId: string, fields: ModalFieldUpdates) => void;
+  onPushRepeatSettings?: (fields: { repeat?: string; date?: string | null }) => void;
+  onPushSubtasksSettings?: (fields: { subtasks?: any[] }) => void;
+  onPushNotificationSettings?: () => void;
 }) {
   const isUser = message.role === 'user';
 
@@ -111,6 +128,8 @@ function MessageBubble({
     tag_id: fields.tag_id,
     priority_id: fields.priority_id,
     notes: fields.notes,
+    subtasks: fields.subtasks,
+    notification_offsets: fields.notification_offsets,
   });
 
   if ((message.panelType === 'draft' || (message.panelType as any) === 'draft_update') && message.panelFields) {
@@ -138,9 +157,41 @@ function MessageBubble({
             reminder={draftReminder}
             index={0}
             onComplete={isStatic ? () => { } : () => onDraftConfirm?.(message.id, message.panelFields!)}
-            onEdit={isStatic ? () => { } : () => onDraftEdit?.(message.id, message.panelFields!)}
+            onEdit={isStatic ? () => { } : () => onToggleInlineEdit?.(message.id)}
             onDelete={isStatic ? undefined : () => onDraftDiscard?.(message.id)}
           />
+
+          {!isStatic && isEditingInline && (
+            <InlineEditChips
+              date={draftReminder.date ?? null}
+              time={draftReminder.time ?? null}
+              tag_id={draftReminder.tag_id ?? null}
+              priority_id={draftReminder.priority_id ?? null}
+              repeat={draftReminder.repeat}
+              subtasks={draftReminder.subtasks}
+              notification_offsets={draftReminder.notification_offsets}
+              onChange={(fields) => onDraftUpdateFields?.(message.id, fields)}
+              onOpenRepeat={() => {
+                // Close chips and spawn the repeat picker panel in the chat
+                onToggleInlineEdit?.(message.id);
+                onPushRepeatSettings?.({
+                  repeat: message.panelFields?.repeat,
+                  date: message.panelFields?.date,
+                });
+              }}
+              onOpenSubtasks={() => {
+                // Close chips and spawn the subtasks panel in the chat
+                onToggleInlineEdit?.(message.id);
+                onPushSubtasksSettings?.({
+                  subtasks: message.panelFields?.subtasks,
+                });
+              }}
+              onOpenNotifications={() => {
+                onToggleInlineEdit?.(message.id);
+                onPushNotificationSettings?.();
+              }}
+            />
+          )}
 
           {!isStatic && (
             <Text style={{ textAlign: 'center', marginTop: 8, color: colors.mutedForeground, fontSize: 11 }}>
@@ -154,68 +205,71 @@ function MessageBubble({
     );
   }
 
-  // Render search results as a list of standard ReminderCards
-  if (message.panelType === 'search' && message.panelSearchResults) {
+  // repeat_settings panel — injected when user taps the Repeat chip on a draft
+  if (message.panelType === 'repeat_settings') {
+    const isStatic = message.panelIsStatic;
     return (
-      <View style={[styles.messageContainer, { flexDirection: 'column', alignItems: 'flex-start', paddingHorizontal: spacing.lg, width: '100%', maxWidth: 360 }]}>
-        <View style={{ marginBottom: 8, marginLeft: 4 }}>
-          <Text style={{ fontFamily: typography.fontFamily.medium, fontSize: 13, color: colors.primary }}>Search Results</Text>
-        </View>
-        <View style={{ gap: spacing.sm, width: '100%' }}>
-          {message.panelSearchResults.map((reminder, idx) => (
-            <ReminderCard
-              key={reminder.id}
-              reminder={reminder}
-              index={idx}
-              onComplete={onDraftConfirm ? (_) => onDraftConfirm(message.id, { ...reminder }) : () => { }}
-              onEdit={onSelectSearchResult ? (_) => onSelectSearchResult(reminder) : () => { }}
-            />
-          ))}
-          <Text style={{ textAlign: 'center', marginTop: 8, color: colors.mutedForeground, fontSize: 11 }}>
-            Tap a card to pin it as context for updates.
-          </Text>
+      <View style={[styles.messageContainer]}>
+        <View style={{ width: '100%', maxWidth: 340 }}>
+          <InlineRepeatPicker
+            initialRepeat={message.panelFields?.repeat}
+            reminderDate={message.panelFields?.date || null}
+            onConfirm={(rrule) => {
+              if (!isStatic) {
+                onDraftPanelConfirm?.(message.id, message.id, { repeat: rrule });
+              }
+            }}
+            onCancel={() => {
+              if (!isStatic) {
+                onDraftDiscard?.(message.id);
+              }
+            }}
+          />
         </View>
       </View>
     );
   }
 
-  // Render after-action reminder list (e.g. remaining reminders after delete)
-  if (message.panelType === 'reminder_list') {
-    const hasCards = message.panelSearchResults && message.panelSearchResults.length > 0;
+  // subtasks_settings panel — injected when user taps the Subtasks chip
+  if ((message.panelType as any) === 'subtasks_settings') {
+    const isStatic = message.panelIsStatic;
     return (
-      <View style={[styles.messageContainer, { flexDirection: 'column', alignItems: 'flex-start', paddingHorizontal: spacing.lg, width: '100%', maxWidth: 360 }]}>
-        {/* AI confirmation text */}
-        {message.content ? (
-          <View style={[styles.messageBubble, styles.aiBubble, { backgroundColor: colors.card, borderColor: colors.border, marginBottom: hasCards ? spacing.md : 0 }]}>
-            <Text style={[styles.aiMessageText, { color: colors.foreground }]}>{message.content}</Text>
-          </View>
-        ) : null}
-        {/* Remaining reminder cards */}
-        {hasCards && (
-          <View style={{ gap: spacing.sm, width: '100%' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 4, marginBottom: 2 }}>
-              <Ionicons name="list" size={13} color={colors.mutedForeground} style={{ marginRight: 5 }} />
-              <Text style={{ fontFamily: typography.fontFamily.medium, fontSize: 12, color: colors.mutedForeground }}>Today's Reminders</Text>
-            </View>
-            {message.panelSearchResults!.map((reminder, idx) => (
-              <ReminderCard
-                key={reminder.id}
-                reminder={reminder}
-                index={idx}
-                onComplete={() => { }}
-                onEdit={onSelectSearchResult ? (_) => onSelectSearchResult(reminder) : () => { }}
-              />
-            ))}
-            <Text style={{ textAlign: 'center', marginTop: 4, color: colors.mutedForeground, fontSize: 11 }}>
-              Tap a card to pin it as context.
+      <View style={[styles.messageContainer]}>
+        <View style={{ width: '100%', maxWidth: 340 }}>
+          <InlineSubtaskList
+            subtasks={message.panelFields?.subtasks || []}
+            onChange={(updatedSubtasks) => {
+              // Real-time sync — update both panel message and draft message panelFields
+              onDraftPanelChange?.(message.id, { subtasks: updatedSubtasks });
+            }}
+            onSave={!isStatic ? (subtasks) => {
+              // onSave fires on unmount: do a final confirm to also mark the panel static
+              onDraftPanelConfirm?.(message.id, message.id, { subtasks });
+            } : undefined}
+            onCancel={() => {
+              if (!isStatic) {
+                onDraftDiscard?.(message.id);
+              }
+            }}
+          />
+        </View>
+      </View>
+    );
+  }
+
+  // day_overview panel — rendered inline after a reminder is confirmed
+  if ((message.panelType as any) === 'day_overview' && message.panelFields?.date) {
+    return (
+      <View style={[styles.messageContainer]}>
+        <View style={{ width: '100%', maxWidth: 340 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, marginLeft: 4 }}>
+            <Ionicons name="calendar-outline" size={16} color={colors.primary} style={{ marginRight: 6 }} />
+            <Text style={{ color: colors.mutedForeground, fontSize: 12, fontFamily: typography.fontFamily.medium }}>
+              Your day
             </Text>
           </View>
-        )}
-        {!hasCards && !message.content && (
-          <View style={[styles.messageBubble, styles.aiBubble, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.aiMessageText, { color: colors.foreground }]}>No remaining reminders for today.</Text>
-          </View>
-        )}
+          <DayOverviewModal date={message.panelFields.date as string} />
+        </View>
       </View>
     );
   }
@@ -280,8 +334,9 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
   const nova = useNovaAddChat();
   const {
     messages, setMessages, isThinking, inputText, setInputText,
-    selectedImage, setSelectedImage,
-    flatListRef, handleSend, handleDraftConfirm,
+    selectedImage, setSelectedImage, dayOverviewDate,
+    flatListRef, handleSend, handleDraftConfirm, handleDraftDiscard,
+    pushRepeatSettings, pushSubtasksSettings, pushNotificationSettings
   } = nova;
 
   const handleTranscript = (text: string) => {
@@ -290,8 +345,6 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
   const { isRecording, isTranscribing, toggleDictation } = useVoiceDictation(handleTranscript);
 
   const [isExpanded, setIsExpanded] = useState(false);
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const [draftReminder, setDraftReminder] = useState<any>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
@@ -383,7 +436,6 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
       setIsExpanded(false);
       onExpandedChange?.(false);
       nova.reset();
-      setDraftReminder(null);
       setEditingMessageId(null);
     });
   };
@@ -433,14 +485,27 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
           ]}
           pointerEvents="box-none"
         >
-          {/* Top Right Close Button */}
-          <TouchableOpacity
-            style={[styles.topRightCloseButton, { backgroundColor: colors.card, borderColor: colors.border }]}
-            onPress={collapse}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="close" size={20} color={colors.foreground} />
-          </TouchableOpacity>
+          {/* Top Right Buttons */}
+          <View style={[styles.topButtonsContainer, { right: spacing.xl }]}>
+            <TouchableOpacity
+              style={[styles.topActionButton, { backgroundColor: colors.primary, borderColor: colors.primary }]}
+              onPress={() => {
+                nova.reset();
+                setEditingMessageId(null);
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="add" size={20} color={colors.primaryForeground} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.topActionButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+              onPress={collapse}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close" size={20} color={colors.foreground} />
+            </TouchableOpacity>
+          </View>
 
           <FlatList
             ref={flatListRef}
@@ -452,25 +517,61 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
                 message={item}
                 colors={colors}
                 tags={tags}
+                isEditingInline={editingMessageId === item.id}
                 onDraftConfirm={(msgId) => {
                   const draftField = messages.find(m => m.id === msgId)?.panelFields;
                   if (draftField) {
                     handleDraftConfirm(msgId, draftField);
                   }
                 }}
-                onDraftEdit={(msgId, draft) => {
-                  setDraftReminder(draft);
-                  setEditingMessageId(msgId);
-                  setIsSheetOpen(true);
+                onToggleInlineEdit={(msgId) => {
+                  setEditingMessageId(prev => prev === msgId ? null : msgId);
+                }}
+                onDraftUpdateFields={(msgId, fields) => {
+                  setMessages(prev => prev.map(m => m.id === msgId && m.panelFields ? { ...m, panelFields: { ...m.panelFields, ...fields } } : m));
                 }}
                 onDraftDiscard={(msgId) => {
-                  setMessages(prev => prev.filter(m => m.id !== msgId));
+                  handleDraftDiscard(msgId);
                 }}
-                onSelectSearchResult={(r) => {
-                  // When we split completely, tapping a search result in the Add flow could open the EditReminderSheet 
-                  // instead of handling it inline. For now, we do nothing or could alert.
-                  Alert.alert("Edit", "Tap the card in the list to edit.");
+                // When a repeat/subtask panel confirms, find the most recent draft message and merge into its panelFields
+                onDraftPanelConfirm={(_panelMsgId, panelMsgId, fields) => {
+                  // Find the most recent unfinalised draft message to update
+                  const draftMsg = [...messages].reverse().find(m => (m.panelType === 'draft' || (m.panelType as any) === 'draft_update') && !m.panelIsStatic);
+                  if (draftMsg) {
+                    setMessages(prev => prev.map(m => {
+                      if (m.id === draftMsg.id && m.panelFields) {
+                        return { ...m, panelFields: { ...m.panelFields, ...fields } };
+                      }
+                      // Mark the panel message as static (consumed)
+                      if (m.id === panelMsgId) {
+                        return { ...m, panelIsStatic: true };
+                      }
+                      return m;
+                    }));
+                  }
                 }}
+                // Real-time change from a panel (e.g. each keystroke in subtask list) — syncs into both panel + draft without marking static
+                onDraftPanelChange={(panelMsgId, fields) => {
+                  setMessages(prev => {
+                    const draftMsg = [...prev].reverse().find(
+                      m => (m.panelType === 'draft' || (m.panelType as any) === 'draft_update') && !m.panelIsStatic
+                    );
+                    return prev.map(m => {
+                      // Update the panel message's own panelFields so it re-renders with current data
+                      if (m.id === panelMsgId && m.panelFields) {
+                        return { ...m, panelFields: { ...m.panelFields, ...fields } };
+                      }
+                      // Also propagate into the draft's panelFields so checkmark confirm picks them up
+                      if (draftMsg && m.id === draftMsg.id && m.panelFields) {
+                        return { ...m, panelFields: { ...m.panelFields, ...fields } };
+                      }
+                      return m;
+                    });
+                  });
+                }}
+                onPushRepeatSettings={(fields) => pushRepeatSettings(fields)}
+                onPushSubtasksSettings={(fields) => pushSubtasksSettings(fields)}
+                onPushNotificationSettings={() => pushNotificationSettings()}
               />
             )}
             contentContainerStyle={{ paddingBottom: spacing.lg }}
@@ -573,20 +674,7 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
         </Animated.View>
       </Animated.View>
 
-      <AddReminderSheet
-        isOpen={isSheetOpen}
-        onClose={() => setIsSheetOpen(false)}
-        onSave={async (data: any) => {
-          const result = await addReminder(data);
-          if (!result.error && editingMessageId) {
-            setMessages(prev => prev.map(m => m.id === editingMessageId ? { ...m, panelIsStatic: true, panelFields: { ...m.panelFields, ...data } } : m));
-            setEditingMessageId(null);
-            setIsSheetOpen(false);
-          }
-          return result;
-        }}
-        editReminder={draftReminder ? { id: 'draft', ...draftReminder, user_id: user?.id || '', completed: false, created_at: new Date().toISOString() } as any : undefined}
-      />
+      {/* AddReminderSheet removed - inline editing is now used instead */}
     </>
   );
 }
@@ -603,17 +691,20 @@ const styles = StyleSheet.create({
     zIndex: 999,
     justifyContent: 'flex-end', // stack items at the bottom
   },
-  topRightCloseButton: {
+  topButtonsContainer: {
     position: 'absolute',
     top: -10, // Moved down to avoid iOS status bar overlap
-    right: spacing.xl,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    zIndex: 1000,
+  },
+  topActionButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1000,
     ...shadows.soft,
   },
   morphContainer: {

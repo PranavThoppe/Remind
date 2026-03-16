@@ -1,6 +1,6 @@
 // AI Chat types for the conversational reminder creation flow
 
-import { Reminder } from './reminder';
+import { Reminder, Subtask } from './reminder';
 
 export interface ChatMessage {
   id: string;
@@ -8,7 +8,7 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   // Inline panel support
-  panelType?: 'create' | 'edit' | 'search' | 'draft' | 'draft_update' | 'reminder_list';
+  panelType?: 'create' | 'edit' | 'search' | 'draft' | 'draft_update' | 'reminder_list' | 'notification_settings' | 'subtasks_settings' | 'repeat_settings' | 'day_overview';
   panelFields?: ModalFieldUpdates;
   panelSearchResults?: Reminder[];
   panelReminderId?: string; // For editing
@@ -24,9 +24,11 @@ export interface ModalFieldUpdates {
   time?: string | null;  // HH:mm
   tag_id?: string | null;
   priority_id?: string | null;
-  repeat?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+  repeat?: string; // 'none' | RFC 5545 RRULE
   repeat_until?: string | null;
   notes?: string | null;
+  notification_offsets?: number[];
+  subtasks?: Subtask[];
 }
 
 export interface MockAIResponse {

@@ -18,9 +18,77 @@ import { useTheme } from '../hooks/useTheme';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { RemindersProvider, useRemindersContext } from '../contexts/RemindersContext';
 import { SettingsProvider } from '../contexts/SettingsContext';
-import { initializeNotifications, scheduleReminderNotification } from '../lib/notifications';
+import { initializeNotifications, scheduleReminderNotification, BACKGROUND_NOTIFICATION_TASK } from '../lib/notifications';
 import * as Notifications from 'expo-notifications';
+import * as TaskManager from 'expo-task-manager';
 import { format, addMinutes } from 'date-fns';
+import { handleCompleteBackground } from '../lib/reminders';
+
+// Define the background task for handling headless notifications
+TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async ({ data, error, executionInfo }) => {
+  if (error) {
+    console.error('[TaskManager] Background notification task error:', error);
+    return;
+  }
+  if (data) {
+    const { actionIdentifier, notification, userText } = data as any;
+    const { title, id } = notification?.request?.content?.data || {};
+
+    console.log('[TaskManager] Background Action:', actionIdentifier, 'Reminder ID:', id);
+
+    if (actionIdentifier === 'complete' && id) {
+      await handleCompleteBackground(id, title);
+    } else if (actionIdentifier?.startsWith('snooze-')) {
+      if (!title) {
+        console.error('[TaskManager] Cannot snooze: Title is missing from notification data');
+        return;
+      }
+
+      let minutes = 60; // Default 1 hour
+
+      if (actionIdentifier === 'snooze-15') {
+        minutes = 15;
+      } else if (actionIdentifier === 'snooze-60') {
+        minutes = 60;
+      } else if (actionIdentifier === 'snooze-custom') {
+        const text = userText;
+        if (text) {
+          const lowerText = text.toLowerCase().trim();
+
+          // Handle "tomorrow" or "tmw"
+          if (lowerText.includes('tomorrow') || lowerText.includes('tmw')) {
+            minutes = 24 * 60; // 24 hours
+          }
+          // Try parsing "1.5h" or "2h"
+          else if (lowerText.includes('h')) {
+            const hours = parseFloat(lowerText.replace('h', ''));
+            if (!isNaN(hours)) {
+              minutes = Math.round(hours * 60);
+            }
+          } else {
+            // Try parsing straight number as minutes
+            const parsed = parseInt(lowerText, 10);
+            if (!isNaN(parsed) && parsed > 0) {
+              minutes = parsed;
+            } else {
+              minutes = 60;
+              console.log(`[TaskManager] Invalid input "${text}", defaulting to 60m`);
+            }
+          }
+        }
+      }
+
+      const now = new Date();
+      const snoozeDate = addMinutes(now, minutes);
+
+      const newDate = format(snoozeDate, 'yyyy-MM-dd');
+      const newTime = format(snoozeDate, 'HH:mm');
+
+      await scheduleReminderNotification(title, newDate, newTime, 'none', id);
+      console.log(`[TaskManager] Snoozed "${title}" for ${minutes} minutes`);
+    }
+  }
+});
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();

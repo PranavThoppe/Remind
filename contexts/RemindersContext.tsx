@@ -3,8 +3,10 @@ import { createContext, useContext, useEffect, useState, useCallback } from 'rea
 import { addDays, addWeeks, addMonths, format, parseISO } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
-import { Reminder } from '../types/reminder';
+import { Reminder, Subtask } from '../types/reminder';
 import { cancelReminderNotifications } from '../lib/notifications';
+import { rrulestr } from 'rrule';
+import * as Crypto from 'expo-crypto';
 
 interface RemindersContextType {
   reminders: Reminder[];
@@ -15,6 +17,7 @@ interface RemindersContextType {
   deleteReminder: (id: string) => Promise<{ error: any }>;
   refreshReminders: () => Promise<void>;
   searchReminders: (query: string) => Promise<{ answer?: string; follow_up?: string; evidence?: Reminder[]; error?: any }>;
+  updateSubtasks: (reminderId: string, subtasks: Subtask[]) => Promise<{ error: any }>;
   hasFetched: boolean;
 }
 
@@ -39,18 +42,35 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       console.log('Fetching reminders for user:', user.id);
-      const { data, error } = await supabase
+
+      const { data: remindersData, error: remindersError } = await supabase
         .from('reminders')
-        .select('*')
+        .select(`
+          *,
+          subtasks (
+            id,
+            reminder_id,
+            title,
+            is_completed,
+            position
+          )
+        `)
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching reminders:', error);
+      if (remindersError) {
+        console.error('Error fetching reminders:', remindersError);
         setReminders([]);
       } else {
-        console.log(`Fetched ${data?.length || 0} reminders`);
-        setReminders(data || []);
+        console.log(`Fetched ${remindersData?.length || 0} reminders`);
+
+        // Sort subtasks by position client-side to ensure stable ordering
+        const formattedData = (remindersData || []).map(r => ({
+          ...r,
+          subtasks: r.subtasks ? r.subtasks.sort((a: any, b: any) => a.position - b.position) : []
+        }));
+
+        setReminders(formattedData);
       }
     } catch (error) {
       console.error('Unexpected error fetching reminders:', error);
@@ -65,15 +85,50 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
     fetchReminders();
   }, [fetchReminders]);
 
-  const getNextDate = (dateStr: string | undefined, repeat: 'daily' | 'weekly' | 'monthly' | 'yearly'): string | undefined => {
+  const getNextDate = (dateStr: string | undefined, repeatStr: string | undefined): string | undefined => {
     const now = new Date();
     const todayStr = format(now, 'yyyy-MM-dd');
 
-    // We use T00:00:00 to ensure it's parsed as local time
+    // Default baseDate to today if not provided
     let baseDate = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
 
     if (isNaN(baseDate.getTime())) return undefined;
 
+    if (!repeatStr || repeatStr === 'none') return undefined;
+
+    let repeat = 'none';
+    if (repeatStr) {
+      if (repeatStr.includes('FREQ=DAILY') || repeatStr === 'daily') repeat = 'daily';
+      else if (repeatStr.includes('FREQ=WEEKLY') || repeatStr === 'weekly') repeat = 'weekly';
+      else if (repeatStr.includes('FREQ=MONTHLY') || repeatStr === 'monthly') repeat = 'monthly';
+      else if (repeatStr.includes('FREQ=YEARLY') || repeatStr === 'yearly') repeat = 'yearly';
+    }
+
+    try {
+      // Check if it's a basic string, convert to rrule string representation
+      let ruleString = repeatStr;
+      if (repeatStr === 'daily') ruleString = 'FREQ=DAILY';
+      else if (repeatStr === 'weekly') ruleString = 'FREQ=WEEKLY';
+      else if (repeatStr === 'monthly') ruleString = 'FREQ=MONTHLY';
+      else if (repeatStr === 'yearly') ruleString = 'FREQ=YEARLY';
+
+      const dtstart = new Date(Date.UTC(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate()));
+      const rule = rrulestr(ruleString, { dtstart });
+
+      // We want the next occurrence that is strictly AFTER today
+      const endOfTodayUTC = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999));
+      const nextOccurrenceUTC = rule.after(endOfTodayUTC);
+
+      if (nextOccurrenceUTC) {
+        const nextLocal = new Date(nextOccurrenceUTC.getUTCFullYear(), nextOccurrenceUTC.getUTCMonth(), nextOccurrenceUTC.getUTCDate());
+        return format(nextLocal, 'yyyy-MM-dd');
+      }
+      return undefined;
+    } catch (e) {
+      console.error('[RemindersContext] Error parsing rrule:', e);
+    }
+
+    // Fallback logic for basic repeats
     let nextDate = baseDate;
 
     // Helper to add interval
@@ -93,7 +148,6 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
     };
 
     // Keep adding the interval until we hit a date strictly in the future relative to today
-    // If the user completes a reminder today, we want the next one to be at least tomorrow.
     do {
       nextDate = addInterval(nextDate, repeat);
     } while (format(nextDate, 'yyyy-MM-dd') <= todayStr);
@@ -226,7 +280,7 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
 
       if (!error && data) {
         setReminders((prev) =>
-          prev.map((r) => (r.id === id ? data : r))
+          prev.map((r) => (r.id === id ? { ...r, ...data } : r))
         );
       }
       return { data, error };
@@ -253,6 +307,73 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
       return { error };
     } catch (error) {
       console.error('Unexpected error deleting reminder:', error);
+      return { error };
+    }
+  };
+
+  const updateSubtasks = async (reminderId: string, newSubtasks: Subtask[]) => {
+    try {
+      if (!user) return { error: new Error('User not authenticated') };
+
+      // Ensure all objects have an `id` to prevent Supabase bulk insert schema mismatch
+      const toUpsert = newSubtasks.map(t => {
+        const payload: any = {
+          reminder_id: reminderId,
+          user_id: user.id,
+          title: t.title,
+          is_completed: t.is_completed,
+          position: t.position,
+          // If it's a new subtask (starts with 'temp-' or missing id), generate a valid UUID
+          id: (t.id && !t.id.startsWith('temp-')) ? t.id : Crypto.randomUUID(),
+        };
+        return payload;
+      });
+
+      // We need to sync locally too. 
+      // Instead of manual diffs, we can use the simplest approach for sync:
+      // Since supabase upsert requires passing the Primary Key, and deletes records that are absent? No, upsert doesn't delete missing.
+      // Easiest is to delete all existing subtasks for this reminder, then insert the new ones. 
+      // Wait, we can't easily do that without losing foreign keys or triggers if any, but it's safe for simple subtasks.
+
+      const { error: deleteError } = await supabase
+        .from('subtasks')
+        .delete()
+        .eq('reminder_id', reminderId);
+
+      if (deleteError) {
+        console.error('[RemindersContext] Error clearing old subtasks:', deleteError);
+        return { error: deleteError };
+      }
+
+      if (toUpsert.length > 0) {
+        const { data, error: insertError } = await supabase
+          .from('subtasks')
+          .insert(toUpsert)
+          .select();
+
+        if (insertError) {
+          console.error('[RemindersContext] Error inserting new subtasks:', insertError);
+          return { error: insertError };
+        }
+
+        // Update local state with the returned fresh UUIDs
+        setReminders((prev) =>
+          prev.map((r) =>
+            r.id === reminderId ? { ...r, subtasks: data as Subtask[] } : r
+          )
+        );
+      } else {
+        // Empty list
+        setReminders((prev) =>
+          prev.map((r) =>
+            r.id === reminderId ? { ...r, subtasks: [] } : r
+          )
+        );
+      }
+
+      return { error: null };
+    } catch (error) {
+      console.error('[RemindersContext] Unexpected error updating subtasks:', error);
       return { error };
     }
   };
@@ -305,6 +426,7 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
     deleteReminder,
     refreshReminders: fetchReminders,
     searchReminders,
+    updateSubtasks,
     hasFetched,
   };
 

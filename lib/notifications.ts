@@ -1,11 +1,20 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { CommonTimes } from '../types/settings';
+import { rrulestr } from 'rrule';
+
+export const BACKGROUND_NOTIFICATION_TASK = 'BACKGROUND-NOTIFICATION-TASK';
 
 /**
  * Request permissions and set up notification handler
  */
 export async function initializeNotifications() {
+  try {
+    await Notifications.registerTaskAsync(BACKGROUND_NOTIFICATION_TASK);
+  } catch (error) {
+    console.warn('Failed to register background task:', error);
+  }
+
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
 
@@ -35,7 +44,7 @@ export async function initializeNotifications() {
       identifier: 'complete',
       buttonTitle: '✅ Mark as Complete',
       options: {
-        opensAppToForeground: true, // Opens app to update UI state immediately
+        opensAppToForeground: false, // Update in background without interrupting the user
       },
     },
     {
@@ -91,7 +100,7 @@ export async function scheduleReminderNotification(
   title: string,
   date: string,
   time?: string,
-  repeat?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly',
+  repeat?: string,
   id?: string,
   commonTimes?: CommonTimes
 ): Promise<string | null> {
@@ -159,10 +168,70 @@ export async function scheduleReminderNotification(
 
     let trigger: Notifications.NotificationTriggerInput;
 
-    if (isRepeating) {
-      // For repeating notifications, Expo's CALENDAR trigger handles the "next occurrence" 
+    let isComplexRepeat = false;
+    let basicRepeat = 'none';
+    if (repeat) {
+      if (repeat.includes('INTERVAL=') || repeat.includes('BYDAY=') || repeat.includes('BYMONTH=') || repeat.includes('BYMONTHDAY=')) {
+        isComplexRepeat = true;
+      } else {
+        if (repeat.includes('FREQ=DAILY') || repeat === 'daily') basicRepeat = 'daily';
+        else if (repeat.includes('FREQ=WEEKLY') || repeat === 'weekly') basicRepeat = 'weekly';
+        else if (repeat.includes('FREQ=MONTHLY') || repeat === 'monthly') basicRepeat = 'monthly';
+        else if (repeat.includes('FREQ=YEARLY') || repeat === 'yearly') basicRepeat = 'yearly';
+      }
+    }
+
+    if (isRepeating && isComplexRepeat) {
+      let ruleString = repeat;
+      try {
+        const dtstart = new Date(Date.UTC(year, month - 1, day, hour, minute));
+        const rule = rrulestr(ruleString, { dtstart });
+
+        const now = new Date();
+        const nowUtc = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes()));
+
+        const sevenDaysFromNowUtc = new Date(nowUtc.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+        const occurrences = rule.between(nowUtc, sevenDaysFromNowUtc, true);
+
+        if (occurrences.length === 0) {
+          const nextOccurrence = rule.after(nowUtc, false);
+          if (nextOccurrence) occurrences.push(nextOccurrence);
+        }
+
+        let firstIdentifier: string | null = null;
+
+        for (const occUtc of occurrences) {
+          const occTriggerDate = new Date(occUtc.getUTCFullYear(), occUtc.getUTCMonth(), occUtc.getUTCDate(), occUtc.getUTCHours(), occUtc.getUTCMinutes());
+          if (occTriggerDate.getTime() > Date.now()) {
+            console.log(`[Notifications] Scheduling complex occurrence: "${title}" at ${occTriggerDate.toLocaleString()}`);
+            const identifier = await Notifications.scheduleNotificationAsync({
+              content: {
+                title: title,
+                body: 'Long-press for options',
+                sound: true,
+                priority: Notifications.AndroidNotificationPriority.HIGH,
+                categoryIdentifier: 'reminder-snooze-v1',
+                data: { title, date, time, repeat, id },
+                ...(Platform.OS === 'android' ? { channelId: 'default' } : {}),
+              },
+              trigger: {
+                type: Notifications.SchedulableTriggerInputTypes.DATE,
+                date: occTriggerDate,
+              }
+            });
+            if (!firstIdentifier) firstIdentifier = identifier;
+          }
+        }
+        return firstIdentifier;
+      } catch (e) {
+        console.error('[Notifications] rrule parse error', e);
+        return null;
+      }
+    } else if (isRepeating) {
+      // For basic repeating notifications, Expo's CALENDAR trigger handles the "next occurrence" 
       // automatically based on the components provided.
-      switch (repeat) {
+      switch (basicRepeat) {
         case 'daily':
           trigger = {
             type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
@@ -212,7 +281,7 @@ export async function scheduleReminderNotification(
       };
     }
 
-    console.log(`[Notifications] Scheduling notification: "${title}" at ${triggerDate.toLocaleString()} (Repeat: ${repeat || 'none'})`);
+    console.log(`[Notifications] Scheduling basic notification: "${title}" at ${triggerDate.toLocaleString()} (Repeat: ${repeat || 'none'})`);
 
     const identifier = await Notifications.scheduleNotificationAsync({
       content: {
@@ -282,5 +351,39 @@ export async function cancelReminderNotifications(reminderId: string) {
     }
   } catch (error) {
     console.error('Error cancelling reminder notifications:', error);
+  }
+}
+
+/**
+ * Sync notifications with existing reminders
+ * @param reminders List of active reminders
+ * @param commonTimes Optional common times for default logic
+ */
+export async function syncNotifications(reminders: any[], commonTimes?: CommonTimes) {
+  try {
+    console.log('[Notifications] Starting resync of all notifications...');
+    await cancelAllNotifications();
+
+    let scheduledCount = 0;
+    for (const reminder of reminders) {
+      if (!reminder.completed && reminder.date) {
+        const id = await scheduleReminderNotification(
+          reminder.title,
+          reminder.date,
+          reminder.time || undefined,
+          reminder.repeat || undefined,
+          reminder.id,
+          commonTimes
+        );
+        if (id) {
+          scheduledCount++;
+        }
+      }
+    }
+    console.log(`[Notifications] Sync complete. Scheduled ${scheduledCount} notifications.`);
+    return scheduledCount;
+  } catch (error) {
+    console.error('[Notifications] Error syncing notifications:', error);
+    return 0;
   }
 }
