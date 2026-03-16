@@ -223,6 +223,35 @@ function MessageBubble({
         );
     }
 
+    if ((message.panelType as any) === 'repeat_settings') {
+        const isStatic = message.panelIsStatic;
+        return (
+            <TouchableWithoutFeedback onPress={onOverlayPress}>
+                <View style={[localStyles.messageContainer]}>
+                    <TouchableWithoutFeedback onPress={() => { }}>
+                        <View style={{ width: '100%', maxWidth: 340 }}>
+                            <InlineRepeatPicker
+                                initialRepeat={message.panelFields?.repeat || 'none'}
+                                reminderDate={reminder?.date}
+                                onConfirm={(rrule) => {
+                                    if (!isStatic) {
+                                        onDraftConfirm?.(message.id, { repeat: rrule });
+                                    }
+                                }}
+                                onCancel={() => {
+                                    if (!isStatic) {
+                                        onDraftConfirm?.(message.id, { repeat: 'none' });
+                                        onDraftDiscard?.(message.id);
+                                    }
+                                }}
+                            />
+                        </View>
+                    </TouchableWithoutFeedback>
+                </View>
+            </TouchableWithoutFeedback>
+        );
+    }
+
     return (
         <TouchableWithoutFeedback onPress={onOverlayPress}>
             <View style={[localStyles.messageContainer, isUser && localStyles.userMessageContainer]}>

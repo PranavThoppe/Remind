@@ -504,10 +504,10 @@ export default function HomeScreen() {
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.lg, zIndex: 100 }]}>
         <View style={styles.headerTop}>
-          <View style={{ flex: 1 }}>
+          <Animated.View style={{ flex: 1, opacity: searchExpandAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) }}>
             <Text style={styles.dateText}>{formatDate()}</Text>
             <Text style={styles.greeting}>{greeting()}</Text>
-          </View>
+          </Animated.View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
             <View style={{ width: 40, height: 40 }} />
@@ -515,7 +515,7 @@ export default function HomeScreen() {
           </View>
 
           {/* Search Blur Overlay that breaks out of Header */}
-          {isSearching && (
+          {isSearching && !searchQuery.trim() && (
             <TouchableWithoutFeedback onPress={toggleSearch}>
               <Animated.View style={[{
                 position: 'absolute',
@@ -555,6 +555,8 @@ export default function HomeScreen() {
                   style={styles.searchInput}
                   placeholder="Ask or search reminders..."
                   placeholderTextColor={colors.mutedForeground}
+                  autoCorrect={false}
+                  spellCheck={false}
                   value={searchQuery}
                   onChangeText={handleSearchTextChange}
                   returnKeyType="search"
@@ -864,7 +866,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.base,
     color: colors.foreground,
-    height: '100%',
+    paddingVertical: Platform.OS === 'ios' ? 0 : 4,
   },
   closeSearchButton: {
     paddingHorizontal: spacing.sm,
