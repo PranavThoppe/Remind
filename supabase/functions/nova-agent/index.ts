@@ -14,79 +14,8 @@ const corsHeaders = {
 // TOOL DEFINITIONS
 // ============================================================
 
-const createReminderTool = {
-    name: "create_reminder",
-    description: "Creates a new reminder immediately WITHOUT asking for review. ONLY use this when the user explicitly says 'create immediately', 'book it now', 'do it now', 'confirm', or similar bypass phrases. In all other cases, use draft_reminder.",
-    inputSchema: {
-        json: {
-            type: "object",
-            properties: {
-                title: {
-                    type: "string",
-                    description: "Brief reminder title (max 6 words). Extract the main task from the user's request."
-                },
-                date: {
-                    type: "string",
-                    description: "Date in YYYY-MM-DD format. Calculate the actual date from relative references like 'tomorrow', 'next Friday', etc."
-                },
-                time: {
-                    type: "string",
-                    description: "Time in HH:mm 24-hour format (e.g., '14:30' for 2:30pm). Only include if user specifies a time."
-                },
-                repeat: {
-                    type: "string",
-                    description: "Recurrence pattern using RFC 5545 RRULE (e.g., 'FREQ=DAILY', 'FREQ=WEEKLY;BYDAY=MO,WE'). Default is 'none'."
-                },
-                repeat_until: {
-                    type: "string",
-                    description: "End date for recurring reminders in YYYY-MM-DD format. Only set when user specifies a time-limited repeat (e.g., 'every Monday for 2 months'). Omit for indefinite repeats."
-                },
-                tag_name: {
-                    type: "string",
-                    description: "Name of the tag/category to assign. Must match one of the user's available tags. Only include if the user mentions a category."
-                },
-                priority_name: {
-                    type: "string",
-                    description: "Name of the priority level to assign. Must match one of the user's available priorities. Only include if the user mentions a priority."
-                },
-                notes: {
-                    type: "string",
-                    description: "Contextual notes or details about the reminder."
-                },
-                subtasks: {
-                    type: "array",
-                    items: {
-                        type: "string"
-                    },
-                    description: "List of subtasks if the user asks to break down the task or asks for a checklist."
-                },
-                notification_offsets: {
-                    type: "array",
-                    items: { type: "number" },
-                    description: "Minutes before the reminder time to send a notification (e.g., [15] = 15 mins before, [60] = 1 hour before, [1440] = 1 day before). Only include if the user explicitly asks to be alerted."
-                }
-            },
-            required: ["title", "date"]
-        }
-    }
-}
 
-const commentOnDayTool = {
-    name: "comment_on_day",
-    description: "Called ONLY after the user has just confirmed and saved a new reminder. Fetches the full schedule for that day so you can make a warm, personalized comment about their day.",
-    inputSchema: {
-        json: {
-            type: "object",
-            properties: {
-                date: {
-                    type: "string",
-                    description: "The date to fetch the schedule for, in YYYY-MM-DD format."
-                }
-            },
-            required: ["date"]
-        }
-    }
-}
+// (comment_on_day tool removed)
 
 const draftReminderTool = {
     name: "draft_reminder",
@@ -163,117 +92,6 @@ function formatTime(timeStr: string | null, format: '12h' | '24h' = '12h') {
 // TOOL HANDLERS
 // ============================================================
 
-async function handleCreateReminder(toolInput: any, userId: string, supabase: any) {
-    console.log('[DB] create_reminder:', JSON.stringify(toolInput, null, 2))
-
-    // Resolve tag_name to tag_id if provided
-    let tagId = null
-    if (toolInput.tag_name) {
-        const { data: tagData } = await supabase
-            .from('tags')
-            .select('id')
-            .eq('user_id', userId)
-            .ilike('name', toolInput.tag_name)
-            .limit(1)
-            .single()
-        tagId = tagData?.id || null
-        if (!tagId) console.warn('[DB] Tag not found:', toolInput.tag_name)
-    }
-
-    // Resolve priority_name to priority_id if provided
-    let priorityId = null
-    if (toolInput.priority_name) {
-        const { data: priorityData } = await supabase
-            .from('priorities')
-            .select('id')
-            .eq('user_id', userId)
-            .ilike('name', toolInput.priority_name)
-            .limit(1)
-            .single()
-        priorityId = priorityData?.id || null
-        if (!priorityId) console.warn('[DB] Priority not found:', toolInput.priority_name)
-    }
-
-    const { data, error } = await supabase
-        .from('reminders')
-        .insert({
-            user_id: userId,
-            title: toolInput.title,
-            date: toolInput.date,
-            time: toolInput.time || null,
-            repeat: toolInput.repeat || 'none',
-            repeat_until: toolInput.repeat_until || null,
-            tag_id: tagId,
-            priority_id: priorityId,
-            completed: false,
-            notes: toolInput.notes || null
-        })
-        .select()
-        .single()
-
-    if (error) {
-        console.error('[DB Error] create_reminder:', error)
-        return { success: false, error: error.message }
-    }
-
-    // Persist notification offsets if provided
-    if (toolInput.notification_offsets && Array.isArray(toolInput.notification_offsets) && toolInput.notification_offsets.length > 0) {
-        const { error: offsetError } = await supabase
-            .from('reminders')
-            .update({ notification_offsets: toolInput.notification_offsets })
-            .eq('id', data.id)
-        if (offsetError) {
-            console.warn('[DB] Could not save notification_offsets:', offsetError)
-        }
-    }
-
-    // Insert subtasks if provided
-    if (toolInput.subtasks && Array.isArray(toolInput.subtasks) && toolInput.subtasks.length > 0) {
-        const subtasksToInsert = toolInput.subtasks.map((title: string, index: number) => ({
-            reminder_id: data.id,
-            title: title,
-            is_completed: false,
-            position: index
-        }));
-        const { error: subtaskError } = await supabase
-            .from('subtasks')
-            .insert(subtasksToInsert);
-        if (subtaskError) {
-            console.error('[DB Error] create_reminder subtasks:', subtaskError);
-        }
-    }
-
-    // Fetch existing schedule for context
-    const { data: dayReminders } = await supabase
-        .from('reminders')
-        .select('title, time')
-        .eq('user_id', userId)
-        .eq('date', toolInput.date)
-        .neq('id', data.id) // exclude the one we just made
-        .order('time', { ascending: true })
-
-    const existing_schedule = dayReminders && dayReminders.length > 0
-        ? dayReminders.map((r: any) => `${formatTime(r.time, toolInput.time_format || '12h')} - ${r.title}`).join('\n')
-        : "No other reminders today."
-
-    return {
-        success: true,
-        reminder: {
-            id: data.id,
-            title: data.title,
-            date: data.date,
-            time: data.time,
-            repeat: data.repeat,
-            repeat_until: data.repeat_until || null,
-            tag: toolInput.tag_name || null,
-            priority: toolInput.priority_name || null,
-            notes: data.notes || null
-        },
-        existing_schedule,
-        is_empty_day: !dayReminders || dayReminders.length === 0,
-        message: "Reminder created successfully"
-    }
-}
 
 async function handleDraftReminder(toolInput: any, userId: string, supabase: any) {
     console.log('[Agent] draft_reminder:', JSON.stringify(toolInput, null, 2))
@@ -301,27 +119,7 @@ async function handleDraftReminder(toolInput: any, userId: string, supabase: any
     }
 }
 
-async function handleCommentOnDay(toolInput: any, userId: string, supabase: any) {
-    console.log('[Agent] comment_on_day:', JSON.stringify(toolInput, null, 2))
-
-    const { data: dayReminders } = await supabase
-        .from('reminders')
-        .select('title, time')
-        .eq('user_id', userId)
-        .eq('date', toolInput.date)
-        .order('time', { ascending: true })
-
-    const day_schedule = dayReminders && dayReminders.length > 0
-        ? dayReminders.map((r: any) => `${formatTime(r.time, toolInput.time_format || '12h')} - ${r.title}`).join('\n')
-        : "No other reminders for this day."
-
-    return {
-        success: true,
-        date: toolInput.date,
-        day_schedule,
-        reminder_count: dayReminders?.length || 0
-    }
-}
+// (handleCommentOnDay removed)
 
 // ============================================================
 // MAIN SERVER
@@ -491,11 +289,9 @@ serve(async (req) => {
 
         const tools = [
             { toolSpec: draftReminderTool },
-            { toolSpec: createReminderTool },
-            { toolSpec: commentOnDayTool },
         ]
 
-        const systemPrompt = `You are Nova, a friendly and focused reminder creation assistant. Your ONE job is to help the user create new reminders. Today is ${fullToday}.
+        const systemPrompt = `You are Nova, a friendly and focused reminder creation assistant. Your ONLY job is to help the user create new reminders. If a user is talking to you, assume with 100% certainty that they want to create or refine a reminder. Today is ${fullToday}.
 
 ${next7DaysContext}
 
@@ -503,84 +299,40 @@ ${tagsContext}
 ${prioritiesContext}
 ${commonTimesContext}
 
-## How to Create Reminders
+## The "Reminder-First" Mindset
 
-When the user mentions a task with a date or time, ALWAYS call draft_reminder immediately — do not ask follow-up questions for clear requests. This shows them a preview card they can review before saving.
+1. **Assume Intent**: Every message from the user is an attempt to create a reminder. Never ask "How can I help you?" or "Would you like to create a reminder?". Instead, do your best to figure out WHAT they want to be reminded of and WHEN.
+2. **Subject Neutrality**: Treat all topics as valid reminder titles. Whether it's "Check ChatGPT subscription", "Laundry", "Buy milk", or "Meeting with CEO", your job is simply to record it. Never refuse a request based on the subject matter.
+3. **Proactive Drafting**: If the user provides even a partial task (e.g., just "Netflix" or just "Tomorrow"), IMMEDIATELY call draft_reminder. It is better to show a draft review card with missing info than to ask a follow-up question. The user can then tap fields in the UI to fill them in.
+4. **Contextual Intelligence**: Always look at the conversation history. If a user says "Tomorrow" as a follow-up to "Remind me to check the mail", immediately call draft_reminder with the title "Check the mail" and the date for tomorrow.
 
-ONLY use create_reminder if the user explicitly says "create immediately", "book it now", "do it now", or "confirm" — this skips the review step.
+## How to Create/Update Drafts
 
-## Redrafting Corrections
-
-If the user asks to change a field on a just-drafted reminder (e.g., "actually make it 4pm", "change the day to Friday", "add a subtask for X"), call draft_reminder again with ALL the corrected fields. 
-
-Crucially, some assistant messages in your history contain a \`[CURRENT DRAFT CONTEXT]\` block. This block represents the state of a reminder you just proposed but which hasn't been saved to the database yet. When the user asks for a change, use the most recent \`[CURRENT DRAFT CONTEXT]\` as your base — apply only the changed field and keep everything else identical from that context.
+- **New Reminders**: Call draft_reminder immediately for any new task mention.
+- **Redrafting Corrections**: If the user asks to change a field on a just-drafted reminder, call draft_reminder again with ALL the corrected fields. Use the \`[CURRENT DRAFT CONTEXT]\` block from history as your base.
 
 ## Reminder Fields
 
-**Title:** Keep it concise, max 6 words. Extract the core task.
+**Title:** Concise, max 6 words. If the user's intent is unclear, use their exact phrasing as the title.
+**Date:** Calculate YYYY-MM-DD. Use the Upcoming Dates list.
+- If no date is mentioned, use Today (${todayStr}) as a placeholder rather than asking for one.
+**Time:** Use HH:mm 24-hour format. Use Common Times (morning, etc.) if specified.
+**Repeat:** Use RFC 5545 RRULE.
+**Subtasks:** Include if the user asks for a checklist or mentions multiple steps.
+**Notes:** Capture extra context here.
 
-**Date:** Calculate the actual YYYY-MM-DD date from relative terms. Use the Upcoming Dates list above.
-- If the user specifies a day or month without a year (e.g., "the 15th", "October 4th"), assume the current month and/or year. HOWEVER, if that date has already passed in the current month/year, assume it refers to the NEXT month or year.
-- "tomorrow" → ${tomorrowStr}
-- "this Monday" or just "Monday" → the nearest upcoming Monday
-- "next Monday" → the Monday after the coming one
+## Forbidden Behavior
 
-**Time:** Use HH:mm 24-hour format for tools.
-- If the user DOES NOT specify a time (e.g., just says "tomorrow"), DO NOT guess a time. Leave the time field empty/omitted.
-- If the user uses time-specific words like "tonight", "morning", "afternoon", "evening", or "night", DO NOT ask follow-up questions. Immediately use the user's Common Times mapping:
-- "morning" → ${commonTimes.morning}
-- "afternoon" → ${commonTimes.afternoon}
-- "evening" / "tonight" → ${commonTimes.evening}
-- "night" → ${commonTimes.night}
-
-**Repeat (RRULE examples):**
-- Every day: \`FREQ=DAILY\`
-- Every weekday: \`FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR\`
-- Every week: \`FREQ=WEEKLY\`
-- Every other week: \`FREQ=WEEKLY;INTERVAL=2\`
-- Every Monday and Thursday: \`FREQ=WEEKLY;BYDAY=MO,TH\`
-- Monthly on the 1st: \`FREQ=MONTHLY;BYMONTHDAY=1\`
-- Monthly on first Monday: \`FREQ=MONTHLY;BYDAY=1MO\`
-- Yearly: \`FREQ=YEARLY\`
-- No repeat: \`none\` (default)
-
-**repeat_until:** Only set when the user limits the repeat duration (e.g., "every Monday for 2 months" → calculate the end date in YYYY-MM-DD). Leave unset for indefinite repeats.
-
-**notification_offsets:** Array of minutes before reminder time to alert the user. Only set when user explicitly asks:
-- "15 minutes before" → [15]
-- "1 hour before" → [60]
-- "remind me the day before" → [1440]
-- "at the time and 30 mins before" → [0, 30]
-
-**Tags:** Only assign a tag if it genuinely fits. Use the exact name from the Available Tags list.
-
-**Subtasks:** Include when user asks to break down a task or requests a checklist (e.g., "pack for my trip with a checklist", "make a plan for my presentation").
-
-**Notes:** Capture supporting context in notes (e.g., "call mom about the party" → title: "Call Mom", notes: "About the party").
-
-## What This Agent Cannot Do
-
-If the user asks to search their existing reminders, update an ALREADY SAVED reminder, or delete a reminder from their database, respond ONLY in plain text — do NOT call any tool. Tell them warmly: "I can only create new reminders here! To update or delete a saved reminder, please tap on it in your reminder list."
-(Note: Modifying a DRAFT you just proposed in this chat is perfectly fine—do that by calling draft_reminder again. But modifying a reminder that is already saved is not allowed here.)
+- DO NOT say "I cannot assist with...", "I don't have access to...", or "I'm just a reminder assistant".
+- DO NOT ask "What would you like to check?" or "Can you provide more details?" if you can instead just draft a reminder with what you already have.
+- **CRITICAL**: DO NOT output any text when you call a tool. Your response should contain ONLY the tool call. No confirmation, no friendly message, no text at all. Stop immediately after the tool call.
+- **Confirmation Handling**: If the user's message starts with "Reminder confirmed:", it means they just saved a draft you provided. Respond with "Done!" and DO NOT call ANY tools.
+- Never wrap responses in XML tags like <thinking> or <response>.
 
 ## Rules
 
-- After calling draft_reminder, output a short friendly confirmation message and STOP. Wait for the user to respond. Do not call any other tool after draft_reminder.
-- Do NOT ask follow-up questions for simple, clear requests (e.g., "Remind me to buy milk tomorrow").
-- When info is genuinely missing (e.g., no date at all), ask the user to clarify in one friendly sentence.
-- If a term is ambiguous (acronym, unusual category), ask what it means before drafting.
-- Assign tags only when the reminder clearly fits a tag's description. Never guess.
-The user's preferred time format is ${time_format}. When speaking, use 12h or 24h accordingly.
-- TIME FORMAT FOR TOOLS: Always use HH:mm 24-hour format in tool calls.
-- Keep reminder titles under 6 words.
-- Be warm and encouraging. Short affirmations ("Sure!", "Got it!", "No problem!") work great for simple requests.
-
-## After Reminder Confirmation
-
-When the user confirms a reminder and the system sends you a message like "Reminder confirmed: ...", you MUST immediately call comment_on_day with the reminder's date. Do not output any text before calling this tool.
-After comment_on_day returns the \`day_schedule\`, write a warm, personalized comment about the user's day — as if you're looking at their planner together with them. Mention specific reminders by name. If it's an empty day, note how nice it is to have breathing room. Keep it natural and brief (2-3 sentences max).
-
-- Never wrap responses in XML tags like <thinking> or <response>.`
+- After calling draft_reminder, you MUST NOT provide any text output.
+- The user's preferred time format is ${time_format}. Use this when speaking (if ever needed), but ALWAYS use 24h format for tool calls.`
 
         // ============================================================
         // BUILD CONVERSATION
@@ -700,10 +452,7 @@ After comment_on_day returns the \`day_schedule\`, write a warm, personalized co
                     let toolResult: any
                     if (toolName === "draft_reminder") {
                         toolResult = await handleDraftReminder(toolInput, userId, supabaseClient)
-                    } else if (toolName === "create_reminder") {
-                        toolResult = await handleCreateReminder({ ...toolInput, time_format }, userId, supabaseClient)
-                    } else if (toolName === "comment_on_day") {
-                        toolResult = await handleCommentOnDay({ ...toolInput, time_format }, userId, supabaseClient)
+                        // (comment_on_day handling removed)
                     } else {
                         toolResult = { error: `Unknown tool: ${toolName}` }
                     }

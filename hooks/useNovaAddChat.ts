@@ -166,10 +166,7 @@ export function useNovaAddChat() {
                 panelFields: { date: dateStr },
             }]);
 
-            // Ask the agent to comment on the day
-            setIsThinking(true);
-            const confirmPrompt = `Reminder confirmed: "${fields.title}" on ${dateStr}${fields.time ? ' at ' + fields.time : ''}. Please call comment_on_day.`;
-            await processMessage(confirmPrompt, messagesRef.current);
+            // Agent no longer needs to comment on the day, so we stop here.
         }
     }, [addReminder, updateSubtasks, processMessage, syncedSetMessages]);
 
