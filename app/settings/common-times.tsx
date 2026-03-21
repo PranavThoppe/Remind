@@ -51,6 +51,10 @@ export default function CommonTimesScreen() {
     const [tempTime, setTempTime] = useState(new Date());
 
     const handleTimePress = (timeOfDay: TimeOfDay) => {
+        if (showTimePicker === timeOfDay) {
+            setShowTimePicker(null);
+            return;
+        }
         // Parse current time to Date object
         const [hours, minutes] = currentTimes[timeOfDay].split(':').map(Number);
         const date = new Date();
@@ -79,23 +83,35 @@ export default function CommonTimesScreen() {
         const displayDate = new Date();
         displayDate.setHours(h, m);
         const displayTime = format(displayDate, 'h:mm a');
+        const isExpanded = showTimePicker === timeOfDay;
 
         return (
-            <TouchableOpacity
-                key={timeOfDay}
-                style={styles.timeCard}
-                onPress={() => handleTimePress(timeOfDay)}
-                activeOpacity={0.7}
-            >
-                <View style={styles.timeIconContainer}>
-                    <Ionicons name={TIME_ICONS[timeOfDay]} size={24} color={colors.primary} />
-                </View>
-                <View style={styles.timeInfo}>
-                    <Text style={styles.timeName}>{TIME_LABELS[timeOfDay]}</Text>
-                    <Text style={styles.timeValue}>{displayTime}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={colors.mutedForeground} />
-            </TouchableOpacity>
+            <View key={timeOfDay} style={{ marginBottom: spacing.sm }}>
+                <TouchableOpacity
+                    style={[styles.timeCard, { marginBottom: 0 }]}
+                    onPress={() => handleTimePress(timeOfDay)}
+                    activeOpacity={0.7}
+                >
+                    <View style={styles.timeIconContainer}>
+                        <Ionicons name={TIME_ICONS[timeOfDay]} size={24} color={colors.primary} />
+                    </View>
+                    <View style={styles.timeInfo}>
+                        <Text style={styles.timeName}>{TIME_LABELS[timeOfDay]}</Text>
+                        <Text style={styles.timeValue}>{displayTime}</Text>
+                    </View>
+                    <Ionicons name={isExpanded ? "chevron-down" : "chevron-forward"} size={20} color={colors.mutedForeground} />
+                </TouchableOpacity>
+
+                {isExpanded && (
+                    <DateTimePicker
+                        value={tempTime}
+                        mode="time"
+                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                        onChange={handleTimeChange}
+                        style={Platform.OS === 'ios' ? styles.iosTimePicker : undefined}
+                    />
+                )}
+            </View>
         );
     };
 
@@ -122,16 +138,6 @@ export default function CommonTimesScreen() {
                 </Text>
 
                 {(Object.keys(TIME_LABELS) as TimeOfDay[]).map(renderTimeCard)}
-
-                {showTimePicker && (
-                    <DateTimePicker
-                        value={tempTime}
-                        mode="time"
-                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                        onChange={handleTimeChange}
-                        style={Platform.OS === 'ios' ? styles.iosTimePicker : undefined}
-                    />
-                )}
             </ScrollView>
         </View>
     );
