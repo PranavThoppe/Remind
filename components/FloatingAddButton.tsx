@@ -36,6 +36,7 @@ import { InlineRepeatPicker } from './InlineRepeatPicker';
 import { InlineSubtaskList } from './InlineSubtaskList';
 import { InlineEditChips } from './InlineEditChips';
 import { DayOverviewModal } from './DayOverviewModal';
+import { ManualAddReminder } from './ManualAddReminder';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const FAB_SIZE = 56;
@@ -331,7 +332,13 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
   const { addReminder } = useReminders();
   const insets = useSafeAreaInsets();
 
-  const nova = useNovaAddChat();
+  const nova = useNovaAddChat({
+    onNetworkError: (failedText: string) => {
+      collapse();
+      setManualInitialTitle(failedText);
+      setTimeout(() => setIsManualOpen(true), 400); // wait for collapse
+    }
+  });
   const {
     messages, setMessages, isThinking, inputText, setInputText,
     selectedImage, setSelectedImage, dayOverviewDate,
@@ -347,6 +354,8 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
   const [isExpanded, setIsExpanded] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [isManualOpen, setIsManualOpen] = useState(false);
+  const [manualInitialTitle, setManualInitialTitle] = useState('');
 
   const inputRef = useRef<TextInput>(null);
 
@@ -605,6 +614,37 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
         </Animated.View>
       )}
 
+      {/* Manual Entry Button — above the pill on the right */}
+      {isExpanded && (
+        <Animated.View
+          style={[
+            styles.manualEntryButton,
+            {
+              bottom: Animated.add(pillBottom, new Animated.Value(PILL_HEIGHT + spacing.sm)) as any,
+              opacity: overlayOpacity,
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center' }}
+            onPress={() => {
+              collapse();
+              setManualInitialTitle('');
+              setTimeout(() => setIsManualOpen(true), 400);
+            }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="create-outline" size={16} color={colors.primary} />
+            <Text style={{ fontFamily: typography.fontFamily.medium, fontSize: 12, color: colors.mutedForeground, marginLeft: 4 }}>
+              Manual
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
       <Animated.View
         style={[
           styles.morphContainer,
@@ -675,6 +715,15 @@ export function FloatingAddButton({ onExpandedChange }: FloatingAddButtonProps) 
       </Animated.View>
 
       {/* AddReminderSheet removed - inline editing is now used instead */}
+
+      {/* Manual Add Reminder (offline / non-AI) */}
+      {isManualOpen && (
+        <ManualAddReminder
+          visible={isManualOpen}
+          onClose={() => setIsManualOpen(false)}
+          initialTitle={manualInitialTitle}
+        />
+      )}
     </>
   );
 }
@@ -832,6 +881,18 @@ const styles = StyleSheet.create({
   contextPillClose: {
     justifyContent: 'center',
     alignItems: 'center',
-  }
+  },
+  manualEntryButton: {
+    position: 'absolute',
+    right: PILL_HORIZONTAL_MARGIN,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    zIndex: 1000,
+    ...shadows.soft,
+  },
 });
 

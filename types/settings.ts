@@ -29,7 +29,7 @@ export const PRESET_COLORS = [
 export const DEFAULT_TAGS: Tag[] = [
   { id: '1', name: 'Personal', color: '#3B82F6' },
   { id: '2', name: 'Work', color: '#F59E0B' },
-  { id: '3', name: 'Urgent', color: '#EC4899' },
+  { id: '3', name: 'Home', color: '#EC4899' },
 ];
 
 export interface CommonTimes {

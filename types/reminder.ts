@@ -21,6 +21,7 @@ export interface Reminder {
   notes?: string | null;
   notification_offsets?: number[];
   isGhost?: boolean; // UI-only flag for virtual occurrences
+  isOffline?: boolean; // UI-only flag for offline queued reminders
   subtasks?: Subtask[]; // Optional subtasks loaded client-side
 }
 

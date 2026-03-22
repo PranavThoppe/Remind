@@ -7,6 +7,32 @@ import { Reminder, Subtask } from '../types/reminder';
 import { cancelReminderNotifications } from '../lib/notifications';
 import { rrulestr } from 'rrule';
 import * as Crypto from 'expo-crypto';
+import { getQueuedReminders, QueuedReminder } from '../utils/offlineQueue';
+
+// Helper to map offline QueuedReminder to Reminder
+const mapQueuedToReminder = (queued: QueuedReminder, userId: string = 'offline-user'): Reminder => ({
+  id: queued.localId,
+  user_id: userId,
+  title: queued.title,
+  date: queued.date || null,
+  time: queued.time || null,
+  repeat: queued.repeat || 'none',
+  repeat_until: queued.repeat_until || null,
+  completed: false,
+  created_at: queued.createdAt,
+  tag_id: queued.tag_id || null,
+  priority_id: queued.priority_id || null,
+  notes: queued.notes || null,
+  notification_offsets: queued.notification_offsets || [],
+  isOffline: true,
+  subtasks: queued.subtasks ? queued.subtasks.map((s, i) => ({
+    id: Crypto.randomUUID(),
+    reminder_id: queued.localId,
+    title: s.title,
+    is_completed: s.is_completed,
+    position: s.position,
+  })) : [],
+});
 
 interface RemindersContextType {
   reminders: Reminder[];
@@ -18,6 +44,7 @@ interface RemindersContextType {
   refreshReminders: () => Promise<void>;
   searchReminders: (query: string) => Promise<{ answer?: string; follow_up?: string; evidence?: Reminder[]; error?: any }>;
   updateSubtasks: (reminderId: string, subtasks: Subtask[]) => Promise<{ error: any }>;
+  addOfflineReminderToState: (reminder: Reminder) => void;
   hasFetched: boolean;
 }
 
@@ -70,7 +97,11 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
           subtasks: r.subtasks ? r.subtasks.sort((a: any, b: any) => a.position - b.position) : []
         }));
 
-        setReminders(formattedData);
+        // Fetch offline queued reminders and merge
+        const queued = await getQueuedReminders();
+        const mappedQueued = queued.map(q => mapQueuedToReminder(q, user.id));
+
+        setReminders([...mappedQueued, ...formattedData]);
       }
     } catch (error) {
       console.error('Unexpected error fetching reminders:', error);
@@ -417,6 +448,10 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const addOfflineReminderToState = useCallback((reminder: Reminder) => {
+    setReminders((prev) => [reminder, ...prev]);
+  }, []);
+
   const value = {
     reminders,
     loading,
@@ -427,6 +462,7 @@ export function RemindersProvider({ children }: { children: React.ReactNode }) {
     refreshReminders: fetchReminders,
     searchReminders,
     updateSubtasks,
+    addOfflineReminderToState,
     hasFetched,
   };
 

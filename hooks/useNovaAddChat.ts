@@ -7,7 +7,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useReminders } from './useReminders';
 import { scheduleReminderNotification } from '../lib/notifications';
 
-export function useNovaAddChat() {
+export function useNovaAddChat(options?: { onNetworkError?: (failedText: string) => void }) {
     const { user } = useAuth();
     const { tags, priorities } = useSettings();
     const { addReminder, updateSubtasks } = useReminders();
@@ -107,14 +107,19 @@ export function useNovaAddChat() {
                 }]);
             }
         } catch (error: any) {
-            syncedSetMessages(prev => [...prev, {
-                id: (Date.now() + 1).toString(), role: 'assistant',
-                content: error.message || "An error occurred.", timestamp: new Date(),
-            }]);
+            const isNetworkError = error.message?.includes('Network request failed') || error.message?.includes('Failed to fetch') || error.name === 'TypeError';
+            if (isNetworkError && options?.onNetworkError) {
+                options.onNetworkError(input);
+            } else {
+                syncedSetMessages(prev => [...prev, {
+                    id: (Date.now() + 1).toString(), role: 'assistant',
+                    content: error.message || "An error occurred.", timestamp: new Date(),
+                }]);
+            }
         } finally {
             setIsThinking(false);
         }
-    }, [user, tags, priorities]);
+    }, [user, tags, priorities, options?.onNetworkError]);
 
     const handleSend = useCallback(async (overrideText?: string) => {
         const trimmed = overrideText ? overrideText.trim() : inputText.trim();
