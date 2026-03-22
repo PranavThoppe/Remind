@@ -8,8 +8,10 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { OnboardingShell } from '../../components/OnboardingShell';
 import { borderRadius, spacing, typography } from '../../constants/theme';
+import { useAuth } from '../../contexts/AuthContext';
 import { useOnboarding } from '../../contexts/OnboardingContext';
 import { useTheme } from '../../hooks/useTheme';
 
@@ -17,6 +19,8 @@ export default function CompleteScreen() {
     const { colors } = useTheme();
     const styles = createStyles(colors);
     const { totalSteps } = useOnboarding();
+    const { updateProfile } = useAuth();
+    const router = useRouter();
 
     // Checkmark circle scale animation
     const scaleAnim = useRef(new Animated.Value(0)).current;
@@ -93,9 +97,9 @@ export default function CompleteScreen() {
         Animated.parallel(confettiAnims).start();
     }, []);
 
-    const handleGoToHome = () => {
-        // TODO: Navigate to the main Re-Mind app home screen once integrated.
-        // router.replace('/(tabs)');
+    const handleGoToHome = async () => {
+        await updateProfile({ has_onboarded: true });
+        router.replace('/(tabs)');
     };
 
     const DOT_COLORS = [
@@ -121,6 +125,7 @@ export default function CompleteScreen() {
             currentStep={8}
             totalSteps={totalSteps}
             showNext={false}
+            hideActionBar
         >
             <View style={styles.container}>
                 {/* Confetti burst */}
