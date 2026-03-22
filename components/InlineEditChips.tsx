@@ -117,11 +117,7 @@ export function InlineEditChips({
     return (
         <View style={styles.container}>
             <View style={styles.chipsContainer}>
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.chipsScroll}
-                >
+                <View style={styles.chipsWrap}>
                     {/* Date Chip */}
                     <TouchableOpacity
                         style={[styles.chip, { backgroundColor: colors.card, borderColor: colors.border }]}
@@ -311,7 +307,7 @@ export function InlineEditChips({
                             )}
                         </TouchableOpacity>
                     )}
-                </ScrollView>
+                </View>
             </View>
 
             {/* Inline Pickers */}
@@ -503,14 +499,13 @@ const styles = StyleSheet.create({
         marginBottom: spacing.xs,
     },
     chipsContainer: {
-        height: 36,
         width: '100%',
     },
-    chipsScroll: {
-        flexGrow: 0,
-        alignItems: 'center',
-        paddingRight: spacing.xl,
-        paddingLeft: spacing.xs,
+    chipsWrap: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        paddingHorizontal: spacing.xs,
     },
     chip: {
         flexDirection: 'row',
@@ -519,7 +514,6 @@ const styles = StyleSheet.create({
         height: 32,
         borderRadius: 16,
         borderWidth: 1,
-        marginRight: 8,
         gap: 6,
     },
     chipText: {

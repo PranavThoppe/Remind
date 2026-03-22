@@ -327,7 +327,6 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
         pinnedReminder, setPinnedReminder,
         suggestions, isGeneratingSuggestions,
         flatListRef, handleSend, handleDraftUpdateConfirm,
-        triggerInitialAnalysis,
     } = nova;
 
     const handleTranscript = (text: string) => {
@@ -427,16 +426,6 @@ export function EditReminderSheet({ reminder, sourceLayout, onClose, onSave }: E
         }
     }, [reminder, sourceLayout]);
 
-    // Trigger initial analysis when ready
-    useEffect(() => {
-        if (isVisible && reminder) {
-            // Small buffer to ensure everything is settled after animation starts
-            const timer = setTimeout(() => {
-                triggerInitialAnalysis();
-            }, 600);
-            return () => clearTimeout(timer);
-        }
-    }, [isVisible, !!reminder, triggerInitialAnalysis]);
 
     const handleClose = () => {
         Keyboard.dismiss();
