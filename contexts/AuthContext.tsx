@@ -113,7 +113,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           id: user.id,
           email: user.email,
           full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
-          pro: false
+          pro: false,
+          has_onboarded: false
         }])
         .select()
         .single();

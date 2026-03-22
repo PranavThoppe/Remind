@@ -180,7 +180,7 @@ function NotificationHandler() {
 
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
@@ -188,15 +188,25 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     if (loading) return;
 
     const isPublicRoute = segments[0] === undefined || segments[0] === 'index';
+    const isOnboardingRoute = segments[0] === '(onboarding)';
 
     if (!user && !isPublicRoute) {
       // Redirect to the sign-in page if user is not authenticated and trying to access a private route
       router.replace('/');
-    } else if (user && isPublicRoute) {
-      // Redirect to the home page if user is authenticated and trying to access an auth screen
-      router.replace('/(tabs)');
+    } else if (user) {
+      // User is authenticated, check if they need to onboard
+      if (profile && !profile.has_onboarded) {
+        if (!isOnboardingRoute) {
+          router.replace('/(onboarding)');
+        }
+      } else {
+        // User has already onboarded
+        if (isPublicRoute || isOnboardingRoute) {
+          router.replace('/(tabs)');
+        }
+      }
     }
-  }, [user, loading, segments]);
+  }, [user, profile, loading, segments]);
 
   if (loading) {
     return null;

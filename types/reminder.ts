@@ -32,6 +32,7 @@ export interface Profile {
   avatar_url?: string;
   updated_at?: string;
   pro?: boolean;
+  has_onboarded: boolean;
 }
 
 export interface User {
