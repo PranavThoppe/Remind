@@ -15,6 +15,7 @@ import { DaySection } from '../../components/DaySection';
 import { EmptyState } from '../../components/EmptyState';
 import { SortSelector } from '../../components/SortSelector';
 import { MainHeader } from '../../components/MainHeader';
+import { SearchResults } from '../../components/SearchResults';
 import { spacing, typography } from '../../constants/theme';
 import { Reminder } from '../../types/reminder';
 import { useReminders } from '../../hooks/useReminders';
@@ -79,10 +80,6 @@ export default function ListScreen() {
     }, [sortMode]);
 
     const activeReminders = useMemo(() => {
-        if (isSearching && searchQuery.trim().length > 0) {
-            return searchResults;
-        }
-
         return reminders.filter(r => {
             if (!r.completed) {
                 const isBirthday = r.title.toLowerCase().includes('birthday');
@@ -103,7 +100,7 @@ export default function ListScreen() {
             }
             return false;
         });
-    }, [reminders, recentlyCompletedIds, historyWeeks, isSearching, searchQuery, searchResults]);
+    }, [reminders, recentlyCompletedIds, historyWeeks]);
 
     const groupedReminders = useMemo(() => {
         interface Group {
@@ -112,15 +109,6 @@ export default function ListScreen() {
             headerColor?: string;
             date?: Date;
             reminders: Reminder[];
-        }
-
-        if (isSearching && searchQuery.trim().length > 0) {
-            return [{
-                id: 'results',
-                title: 'RESULTS',
-                headerColor: colors.primary,
-                reminders: activeReminders
-            }];
         }
 
         if (sortMode === 'tag') {
@@ -241,7 +229,7 @@ export default function ListScreen() {
             groups.push({ id: 'anytime', title: 'Anytime', reminders: [...withoutDate].sort((a, b) => (a.time && b.time) ? a.time.localeCompare(b.time) : 0) });
         }
         return groups;
-    }, [activeReminders, sortMode, tags, priorities, colors.mutedForeground, isSearching, searchQuery, colors.primary]);
+    }, [activeReminders, sortMode, tags, priorities, colors.mutedForeground, colors.primary]);
 
     const toggleSearch = () => {
         if (isSearching) {
@@ -302,19 +290,6 @@ export default function ListScreen() {
         }
     };
 
-    const renderAnswer = () => {
-        if (!isSearching || !searchAnswer) return null;
-        return (
-            <View style={styles.answerContainer}>
-                <View style={styles.answerHeader}>
-                    <Ionicons name="sparkles" size={16} color={colors.primary} />
-                    <Text style={styles.answerTitle}>AI Answer</Text>
-                </View>
-                <Text style={styles.answerText}>{searchAnswer}</Text>
-            </View>
-        );
-    };
-
     return (
         <View style={styles.container}>
             <MainHeader
@@ -331,22 +306,21 @@ export default function ListScreen() {
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color={colors.primary} />
                 </View>
+            ) : isSearching && searchQuery.trim().length > 0 ? (
+                <SearchResults
+                    isSearching={isSearching}
+                    searchQuery={searchQuery}
+                    searchResults={searchResults}
+                    searchAnswer={searchAnswer}
+                    onComplete={handleComplete}
+                    onEdit={openEditSheet}
+                    onDelete={handleDelete as any}
+                />
             ) : (
                 <View style={{ flex: 1 }}>
                     {activeReminders.length === 0 ? (
                         <View style={{ flex: 1 }}>
-                            {isSearching ? (
-                                <ScrollView contentContainerStyle={styles.emptySearchContainer}>
-                                    {renderAnswer()}
-                                    <View style={{ alignItems: 'center', marginTop: spacing.xl }}>
-                                        <Ionicons name="search-outline" size={48} color={colors.mutedForeground} />
-                                        <Text style={styles.emptyText}>No results found</Text>
-                                        <Text style={styles.emptySubtext}>Try searching for something else</Text>
-                                    </View>
-                                </ScrollView>
-                            ) : (
-                                <EmptyState type="active" />
-                            )}
+                            <EmptyState type="active" />
                             <FlatList
                                 data={[]}
                                 renderItem={null}
@@ -365,7 +339,6 @@ export default function ListScreen() {
                     ) : (
                         <FlatList
                             ref={flatListRef}
-                            ListHeaderComponent={renderAnswer()}
                             data={groupedReminders}
                             keyExtractor={(item) => item.id}
                             renderItem={({ item, index: groupIndex }) => {
@@ -440,11 +413,4 @@ const createStyles = (colors: any) => StyleSheet.create({
     anytimeSection: { marginBottom: spacing.xl },
     remindersList: { gap: spacing.md },
     headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
-    answerContainer: { backgroundColor: `${colors.primary}15`, borderRadius: 12, padding: spacing.md, marginBottom: spacing.md, marginHorizontal: spacing.md, marginTop: spacing.sm, borderWidth: 1, borderColor: `${colors.primary}30` },
-    answerHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.xs, gap: spacing.xs },
-    answerTitle: { fontFamily: typography.fontFamily.semibold, fontSize: 12, color: colors.primary, textTransform: 'uppercase', letterSpacing: 0.5 },
-    answerText: { fontFamily: typography.fontFamily.title, fontSize: 18, color: colors.foreground, lineHeight: 24 },
-    emptySearchContainer: { padding: spacing.xl, alignItems: 'stretch' },
-    emptyText: { fontFamily: typography.fontFamily.medium, fontSize: 18, color: colors.foreground, marginTop: spacing.md, marginBottom: spacing.xs, textAlign: 'center' },
-    emptySubtext: { fontFamily: typography.fontFamily.regular, fontSize: 16, color: colors.mutedForeground, textAlign: 'center', lineHeight: 22 },
 });

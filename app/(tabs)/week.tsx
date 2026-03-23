@@ -14,6 +14,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { useUI } from '../../contexts/UIContext';
 import { WeekForecast } from '../../components/WeekForecast';
 import { MainHeader } from '../../components/MainHeader';
+import { SearchResults } from '../../components/SearchResults';
 import { spacing } from '../../constants/theme';
 
 export default function WeekScreen() {
@@ -30,13 +31,6 @@ export default function WeekScreen() {
     const [searchAnswer, setSearchAnswer] = useState<string | null>(null);
     const [isSearchLoading, setIsSearchLoading] = useState(false);
     const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
-
-    const activeReminders = useMemo(() => {
-        if (isSearching && searchQuery.trim().length > 0) {
-            return searchResults;
-        }
-        return reminders;
-    }, [reminders, isSearching, searchQuery, searchResults]);
 
     const toggleSearch = () => {
         if (isSearching) {
@@ -89,6 +83,19 @@ export default function WeekScreen() {
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color={colors.primary} />
                 </View>
+            ) : isSearching && searchQuery.trim().length > 0 ? (
+                <SearchResults
+                    isSearching={isSearching}
+                    searchQuery={searchQuery}
+                    searchResults={searchResults}
+                    searchAnswer={searchAnswer}
+                    onComplete={(id) => {
+                        const r = reminders.find(rem => rem.id === id);
+                        if (r) toggleComplete(id, r.completed);
+                    }}
+                    onEdit={openEditSheet}
+                    onDelete={deleteReminder}
+                />
             ) : (
                 <ScrollView
                     contentContainerStyle={styles.content}
@@ -102,7 +109,7 @@ export default function WeekScreen() {
                     }
                 >
                     <WeekForecast
-                        reminders={activeReminders}
+                        reminders={reminders}
                         onReminderClick={openEditSheet}
                         onComplete={(id) => {
                             const r = reminders.find(rem => rem.id === id);

@@ -195,13 +195,17 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
       router.replace('/');
     } else if (user) {
       // User is authenticated, check if they need to onboard
-      if (profile && !profile.has_onboarded) {
+      // CRITICAL: If profile is not yet loaded, we wait (handled by loading check above)
+      // If profile is missing (null) or has_onboarded is false, they need onboarding
+      if (!profile || !profile.has_onboarded) {
         if (!isOnboardingRoute) {
+          console.log('[AuthGuard] Profile is missing or not onboarded, redirecting to onboarding');
           router.replace('/(onboarding)');
         }
       } else {
-        // User has already onboarded
+        // User has the profile and has already onboarded
         if (isPublicRoute || isOnboardingRoute) {
+          console.log('[AuthGuard] User has already onboarded, redirecting to tabs');
           router.replace('/(tabs)');
         }
       }

@@ -158,7 +158,20 @@ export default function AuthScreen() {
 
       if (error) {
         console.error('Supabase Sign-Up error:', error);
-        Alert.alert('Error', error.message);
+
+        // Handle common email existence errors
+        if (error.message.includes('already registered')) {
+          Alert.alert(
+            'Account Exists',
+            'This email is already associated with an account. Would you like to sign in instead?',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Sign In', onPress: () => setIsSignInMode(true) }
+            ]
+          );
+        } else {
+          Alert.alert('Error', error.message);
+        }
         return;
       }
 
