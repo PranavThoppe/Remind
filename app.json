@@ -18,7 +18,13 @@
       "bundleIdentifier": "com.pranavthoppe.remind",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSMicrophoneUsageDescription": "This app needs access to your microphone for voice mode interactions."
+        "NSMicrophoneUsageDescription": "This app needs access to your microphone for voice mode interactions.",
+        "NSPhotoLibraryUsageDescription": "Remind uses your photo library to let you set a profile picture and attach images to your reminders, such as a photo of a receipt or a task you need to remember."
+      },
+      "entitlements": {
+        "com.apple.developer.applesignin": [
+          "Default"
+        ]
       }
     },
     "android": {
