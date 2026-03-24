@@ -11,6 +11,7 @@ import {
   Switch,
   Alert,
   Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,6 +22,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useTheme } from '../hooks/useTheme';
 import { ThemeType } from '../types/settings';
+import * as AppleAuthentication from 'expo-apple-authentication';
 
 interface SettingItemProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -82,6 +84,7 @@ export default function SettingsScreen() {
   const { user, profile, signOut, refreshProfile } = useAuth();
   const { notificationsEnabled, setNotificationsEnabled, theme, setTheme } = useSettings();
   const [showThemeSelector, setShowThemeSelector] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     Animated.parallel([
@@ -104,6 +107,91 @@ export default function SettingsScreen() {
       router.replace('/');
     } catch (error: any) {
       console.error('Error signing out:', error.message);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    console.log('[handleDeleteAccount] Delete Account triggered');
+
+    const performDeletion = async () => {
+      console.log('[handleDeleteAccount] Deletion process initiated...');
+      setIsDeleting(true);
+      try {
+        // If the user signed in with Apple, Apple requires we revoke their tokens
+        // when deleting the account. We get a fresh authorizationCode to exchange.
+        const body: Record<string, string> = {};
+        const provider = user?.app_metadata?.provider;
+        const providers: string[] = user?.app_metadata?.providers ?? [];
+        const isAppleUser = provider === 'apple' || providers.includes('apple');
+
+        if (Platform.OS === 'ios' && isAppleUser) {
+          console.log('[handleDeleteAccount] Apple user detected, requesting fresh authorization code for revocation...');
+          try {
+            const credential = await AppleAuthentication.signInAsync({
+              requestedScopes: [
+                AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+                AppleAuthentication.AppleAuthenticationScope.EMAIL,
+              ],
+            });
+            if (credential.authorizationCode) {
+              body.appleAuthorizationCode = credential.authorizationCode;
+              console.log('[handleDeleteAccount] Apple authorization code obtained');
+            }
+          } catch (appleError: any) {
+            if (appleError.code === 'ERR_REQUEST_CANCELED') {
+              console.log('[handleDeleteAccount] Apple re-auth cancelled by user, aborting deletion');
+              setIsDeleting(false);
+              return;
+            }
+            // Non-cancellation Apple errors: proceed with deletion anyway,
+            // revocation will be skipped server-side.
+            console.warn('[handleDeleteAccount] Could not get Apple auth code, proceeding without revocation:', appleError.message);
+          }
+        }
+
+        console.log('[handleDeleteAccount] Invoking supabase function: delete-user');
+        const { data, error } = await supabase.functions.invoke('delete-user', {
+          body: Object.keys(body).length > 0 ? body : undefined,
+        });
+        
+        if (error) {
+          console.error('[handleDeleteAccount] Supabase function error:', error);
+          throw error;
+        }
+
+        console.log('[handleDeleteAccount] Supabase function success. Response:', data);
+
+        // If successful, sign out and redirect
+        console.log('[handleDeleteAccount] Initiating signOut...');
+        await signOut();
+        console.log('[handleDeleteAccount] signOut complete, redirecting to /');
+        router.replace('/');
+      } catch (error: any) {
+        console.error('[handleDeleteAccount] Unexpected Error:', error.message, error);
+        if (Platform.OS !== 'web') {
+          Alert.alert('Error', `Failed to delete account: ${error.message || 'Unknown error'}. Please try again.`);
+        }
+      } finally {
+        setIsDeleting(false);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      console.log('[handleDeleteAccount] Platform is web, skipping confirmation alert');
+      performDeletion();
+    } else {
+      Alert.alert(
+        'Delete Account',
+        'Are you sure you want to permanently delete your account? This action cannot be undone and all your data will be lost.',
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => console.log('[handleDeleteAccount] Deletion canceled by user (Mobile)') },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: performDeletion,
+          },
+        ]
+      );
     }
   };
 
@@ -280,6 +368,7 @@ export default function SettingsScreen() {
             style={styles.signOutButton}
             onPress={handleSignOut}
             activeOpacity={0.8}
+            disabled={isDeleting}
           >
             <Ionicons
               name="log-out-outline"
@@ -288,6 +377,27 @@ export default function SettingsScreen() {
               style={styles.signOutIcon}
             />
             <Text style={styles.signOutText}>Sign Out</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.signOutButton, { marginTop: spacing.md, borderColor: colors.destructive, borderWidth: 0 }]}
+            onPress={handleDeleteAccount}
+            activeOpacity={0.8}
+            disabled={isDeleting}
+          >
+            {isDeleting ? (
+              <ActivityIndicator color={colors.destructive} size="small" />
+            ) : (
+              <>
+                <Ionicons
+                  name="trash-outline"
+                  size={22}
+                  color={colors.destructive}
+                  style={styles.signOutIcon}
+                />
+                <Text style={styles.signOutText}>Delete Account</Text>
+              </>
+            )}
           </TouchableOpacity>
 
           {/* Version info */}

@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import * as AuthSession from 'expo-auth-session';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
@@ -14,7 +15,7 @@ import { supabase } from '../../lib/supabase';
 WebBrowser.maybeCompleteAuthSession();
 
 export default function WelcomeScreen() {
-    const { colors } = useTheme();
+    const { colors, isDark } = useTheme();
     const styles = createStyles(colors);
 
     const [showEmailLogin, setShowEmailLogin] = useState(false);
@@ -158,6 +159,49 @@ export default function WelcomeScreen() {
         }
     };
 
+    // ─── Apple Sign-In ─────────────────────────────────────────────────────────
+    const handleAppleLogin = async () => {
+        try {
+            const credential = await AppleAuthentication.signInAsync({
+                requestedScopes: [
+                    AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+                    AppleAuthentication.AppleAuthenticationScope.EMAIL,
+                ],
+            });
+
+            if (credential.identityToken) {
+                setLoading(true);
+                const { data, error } = await supabase.auth.signInWithIdToken({
+                    provider: 'apple',
+                    token: credential.identityToken,
+                });
+
+                if (error) throw error;
+
+                if (data?.user) {
+                    // Apple only provides fullName on the very first sign-in -- persist it immediately.
+                    const givenName = credential.fullName?.givenName;
+                    const familyName = credential.fullName?.familyName;
+                    const fullName = [givenName, familyName].filter(Boolean).join(' ');
+                    if (fullName) {
+                        await supabase.auth.updateUser({ data: { full_name: fullName } });
+                        data.user.user_metadata = { ...data.user.user_metadata, full_name: fullName };
+                    }
+                    await onAuthSuccess(data.user);
+                }
+            }
+        } catch (error: any) {
+            if (error.code === 'ERR_REQUEST_CANCELED') {
+                // User dismissed -- no action needed
+            } else {
+                console.error('[Auth] Apple sign-in error:', error.message);
+                Alert.alert('Error', 'Failed to sign in with Apple. Please try again.');
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // ─── Email Sign-Up ─────────────────────────────────────────────────────────
     const handleSignUp = async () => {
         setLoading(true);
@@ -253,6 +297,16 @@ export default function WelcomeScreen() {
                                         {loading ? 'Signing in…' : 'Continue with Google'}
                                     </Text>
                                 </TouchableOpacity>
+
+                                {Platform.OS === 'ios' && (
+                                    <AppleAuthentication.AppleAuthenticationButton
+                                        buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                                        buttonStyle={isDark ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                                        cornerRadius={borderRadius.lg}
+                                        style={styles.appleButton}
+                                        onPress={handleAppleLogin}
+                                    />
+                                )}
 
                                 <View style={styles.divider}>
                                     <View style={styles.dividerLine} />
@@ -403,6 +457,11 @@ const createStyles = (colors: any) => StyleSheet.create({
         width: 20,
         height: 20,
         marginRight: spacing.md,
+    },
+    appleButton: {
+        width: '100%',
+        height: 48,
+        marginTop: spacing.md,
     },
     googleButtonText: {
         fontFamily: typography.fontFamily.medium,

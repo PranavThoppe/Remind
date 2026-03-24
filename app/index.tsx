@@ -20,6 +20,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth } from '../contexts/AuthContext';
+import * as AppleAuthentication from 'expo-apple-authentication';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -140,8 +141,56 @@ export default function AuthScreen() {
           }
         }
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAppleLogin = async () => {
+    console.log('Apple login button pressed');
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      console.log('Apple credential received');
+
+      if (credential.identityToken) {
+        setLoading(true);
+        const { data, error } = await supabase.auth.signInWithIdToken({
+          provider: 'apple',
+          token: credential.identityToken,
+        });
+
+        if (error) {
+          console.error('Supabase Apple Auth error:', error);
+          throw error;
+        }
+
+        console.log('Apple Sign-In successful!');
+        if (data?.user) {
+          // Apple only provides fullName on the very first sign-in.
+          // Persist it to user metadata immediately so createProfile can use it.
+          const givenName = credential.fullName?.givenName;
+          const familyName = credential.fullName?.familyName;
+          const fullName = [givenName, familyName].filter(Boolean).join(' ');
+          if (fullName) {
+            console.log('Apple full name received, updating user metadata:', fullName);
+            await supabase.auth.updateUser({ data: { full_name: fullName } });
+          }
+          await createProfile(data.user);
+        }
+      }
     } catch (error: any) {
-      console.error('Error signing in:', error.message);
+      if (error.code === 'ERR_REQUEST_CANCELED') {
+        console.log('Apple Sign-In cancelled by user');
+      } else {
+        console.error('Error signing in with Apple:', error.message);
+        Alert.alert('Error', 'Failed to sign in with Apple. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -278,6 +327,17 @@ export default function AuthScreen() {
               {loading && !showEmailLogin ? 'Connecting...' : 'Continue with Google'}
             </Text>
           </TouchableOpacity>
+
+          {/* Apple Sign In */}
+          {Platform.OS === 'ios' && (
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+              buttonStyle={isDark ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              cornerRadius={borderRadius.lg}
+              style={styles.appleButton}
+              onPress={handleAppleLogin}
+            />
+          )}
 
           {/* Divider */}
           <View style={styles.divider}>
@@ -484,6 +544,11 @@ const createStyles = (colors: any) => StyleSheet.create({
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.lg,
     color: colors.foreground,
+  },
+  appleButton: {
+    width: '100%',
+    height: 48,
+    marginTop: spacing.md,
   },
   divider: {
     flexDirection: 'row',
