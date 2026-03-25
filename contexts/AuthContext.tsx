@@ -25,28 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
-
-    async function initializeAuth() {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!mounted) return;
-
-        setSession(session);
-        setUser(session?.user ?? null);
-
-        if (session?.user) {
-          await fetchProfile(session.user);
-        }
-      } catch (error) {
-        console.error('Error initializing auth:', error);
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
-    }
-
-    initializeAuth();
+    let initialLoadDone = false;
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -57,11 +36,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(session?.user ?? null);
 
       if (session?.user) {
-        // Ensure we fetch the profile immediately on any login/refresh
-        setLoading(true);
         await fetchProfile(session.user);
       } else {
         setProfile(null);
+      }
+
+      // INITIAL_SESSION is the source of truth for startup auth state.
+      if (!initialLoadDone) {
+        initialLoadDone = true;
         setLoading(false);
       }
     });
@@ -92,8 +74,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Unexpected error fetching profile:', error);
       setProfile(null);
-    } finally {
-      setLoading(false);
     }
   };
 
