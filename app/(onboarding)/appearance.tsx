@@ -1,16 +1,25 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { OnboardingShell } from '../../components/OnboardingShell';
 import { borderRadius, shadows, spacing, typography } from '../../constants/theme';
 import { ThemeType, useOnboarding } from '../../contexts/OnboardingContext';
+import { useSettings } from '../../contexts/SettingsContext';
 import { useTheme } from '../../hooks/useTheme';
 
 export default function AppearanceScreen() {
     const { colors, isDark } = useTheme();
     const styles = createStyles(colors);
     const { draft, updateDraft, saveStep } = useOnboarding();
+    const { setTheme } = useSettings();
+
+    useEffect(() => {
+        // Keep the live app theme aligned with any previously saved onboarding choice.
+        setTheme(draft.theme).catch((error) => {
+            console.error('Failed to sync onboarding theme:', error);
+        });
+    }, [draft.theme, setTheme]);
 
     const handleNext = async () => {
         await saveStep(4);
@@ -27,6 +36,15 @@ export default function AppearanceScreen() {
 
     const handleSkip = () => {
         router.push('/(onboarding)/common-times');
+    };
+
+    const handleSelectTheme = async (selectedTheme: ThemeType) => {
+        updateDraft({ theme: selectedTheme });
+        try {
+            await setTheme(selectedTheme);
+        } catch (error) {
+            console.error('Failed to apply theme from onboarding:', error);
+        }
     };
 
     const options: { label: string; value: ThemeType; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -60,7 +78,7 @@ export default function AppearanceScreen() {
                                     styles.card,
                                     isActive && styles.cardActive,
                                 ]}
-                                onPress={() => updateDraft({ theme: option.value })}
+                                onPress={() => handleSelectTheme(option.value)}
                                 activeOpacity={0.8}
                             >
                                 <View style={[styles.iconContainer, isActive && styles.iconContainerActive]}>

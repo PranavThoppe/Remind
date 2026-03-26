@@ -8,7 +8,6 @@ const corsHeaders = {
 
 // Revoke Apple tokens using the authorization code from the client.
 // Apple requires this when a user deletes their account (App Store guideline 5.1.1(v)).
-// We use the pre-generated client secret JWT stored as APPLE_PRIVATE_KEY.
 async function revokeAppleTokens(authorizationCode: string): Promise<void> {
     const clientId = Deno.env.get('APPLE_SERVICE_ID')
     const clientSecret = Deno.env.get('APPLE_PRIVATE_KEY')
@@ -18,8 +17,6 @@ async function revokeAppleTokens(authorizationCode: string): Promise<void> {
         return;
     }
 
-    // Step 1: Exchange the authorization code for a refresh token
-    console.log('[delete-user] Exchanging Apple authorization code for refresh token...');
     const tokenParams = new URLSearchParams({
         client_id: clientId,
         client_secret: clientSecret,
@@ -47,8 +44,6 @@ async function revokeAppleTokens(authorizationCode: string): Promise<void> {
         return;
     }
 
-    // Step 2: Revoke the refresh token
-    console.log('[delete-user] Revoking Apple refresh token...');
     const revokeParams = new URLSearchParams({
         client_id: clientId,
         client_secret: clientSecret,
@@ -71,34 +66,35 @@ async function revokeAppleTokens(authorizationCode: string): Promise<void> {
 }
 
 serve(async (req) => {
-    // Handle CORS
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
     }
 
     try {
         console.log('[delete-user] Function invoked');
+
         const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
         const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-        // 1. Get the JWT from Authorization header
+        // 1. Extract the raw JWT from the Authorization header
         const authHeader = req.headers.get('Authorization')
         if (!authHeader) {
-            console.error('[delete-user] No authorization header found');
             return new Response(JSON.stringify({ error: 'No authorization header' }), {
                 status: 401,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             })
         }
+        const jwt = authHeader.replace('Bearer ', '')
 
-        console.log('[delete-user] Authorization header present, verifying token...');
-
-        // 2. Initialize a client with the user's JWT to verify them
-        const userClient = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY')!, {
-            global: { headers: { Authorization: authHeader } }
+        // 2. Admin client — used for both user verification and deletion
+        const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+            auth: { autoRefreshToken: false, persistSession: false }
         })
 
-        const { data: { user }, error: userError } = await userClient.auth.getUser()
+        // 3. Verify the JWT and extract the user ID using the admin client.
+        // adminClient.auth.getUser(jwt) validates the token server-side without
+        // needing a separate anon-key client, avoiding the gateway JWT issue.
+        const { data: { user }, error: userError } = await adminClient.auth.getUser(jwt)
 
         if (userError || !user) {
             console.error('[delete-user] Token verification failed:', userError?.message || 'No user found');
@@ -109,9 +105,9 @@ serve(async (req) => {
         }
 
         const userId = user.id
-        console.log(`[delete-user] Token verified for user: ${userId}`);
+        console.log(`[delete-user] Verified user: ${userId}`);
 
-        // 3. Parse request body for optional Apple authorization code
+        // 4. Parse request body for optional Apple authorization code
         let appleAuthorizationCode: string | undefined;
         try {
             const body = await req.json();
@@ -120,60 +116,41 @@ serve(async (req) => {
             // No body or non-JSON body is fine
         }
 
-        // 4. Initialize Admin client to perform deletion
-        console.log('[delete-user] Initializing Admin client...');
-        const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-          auth: {
-            autoRefreshToken: false,
-            persistSession: false
-          }
-        })
-
-        // 5. Delete user data from public.profiles
-        console.log(`[delete-user] Deleting profile for user: ${userId}...`);
+        // 5. Delete profile row
+        console.log(`[delete-user] Deleting profile for user: ${userId}`);
         const { error: profileError } = await adminClient
             .from('profiles')
             .delete()
             .eq('id', userId)
 
         if (profileError) {
-            console.warn(`[delete-user] Warning deleting profile: ${profileError.message}`);
-        } else {
-            console.log(`[delete-user] Profile deleted successfully for user: ${userId}`);
+            console.warn(`[delete-user] Warning deleting profile (non-fatal): ${profileError.message}`);
         }
 
-        // 6. Delete user from auth.users
-        console.log(`[delete-user] Deleting user from auth.users: ${userId}...`);
+        // 6. Delete auth.users row — this is the authoritative deletion
+        console.log(`[delete-user] Deleting auth user: ${userId}`);
         const { error: deleteError } = await adminClient.auth.admin.deleteUser(userId)
 
         if (deleteError) {
-            console.error(`[delete-user] Error deleting user from auth: ${deleteError.message}`);
-            throw new Error(`Failed to delete user from auth: ${deleteError.message}`);
+            console.error(`[delete-user] Failed to delete auth user: ${deleteError.message}`);
+            throw new Error(`Failed to delete user: ${deleteError.message}`);
         }
 
         console.log(`[delete-user] Successfully deleted user: ${userId}`);
 
-        // 7. Revoke Apple tokens if an authorization code was provided.
-        // This is done after deletion so a failure here doesn't block account removal.
+        // 7. Revoke Apple tokens after deletion so a failure here never blocks account removal
         if (appleAuthorizationCode) {
-            console.log('[delete-user] Apple authorization code present, revoking tokens...');
             await revokeAppleTokens(appleAuthorizationCode);
         }
 
-        return new Response(JSON.stringify({ 
-            message: 'User deleted successfully',
-            userId: userId
-        }), {
+        return new Response(JSON.stringify({ message: 'User deleted successfully', userId }), {
             status: 200,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
 
     } catch (error: any) {
-        console.error('[delete-user] Unexpected Error:', error);
-        return new Response(JSON.stringify({ 
-            error: error.message,
-            stack: error.stack
-        }), {
+        console.error('[delete-user] Unexpected error:', error);
+        return new Response(JSON.stringify({ error: error.message }), {
             status: 500,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })

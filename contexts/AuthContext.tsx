@@ -35,6 +35,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
 
+      // Token refresh should not retrigger heavy profile loading or UI loading states.
+      // Keep existing profile and just update auth session/user in memory.
+      if (event === 'TOKEN_REFRESHED') {
+        if (!initialLoadDone) {
+          initialLoadDone = true;
+          setLoading(false);
+        }
+        return;
+      }
+
       if (session?.user) {
         await fetchProfile(session.user);
       } else {

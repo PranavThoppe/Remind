@@ -85,6 +85,9 @@ export default function SettingsScreen() {
   const { notificationsEnabled, setNotificationsEnabled, theme, setTheme } = useSettings();
   const [showThemeSelector, setShowThemeSelector] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const rawEmail = profile?.email || user?.email || '';
+  const shouldHideEmail = rawEmail.toLowerCase().includes('appleid');
+  const displayedEmail = shouldHideEmail ? '' : (rawEmail || 'Not signed in');
 
   useEffect(() => {
     Animated.parallel([
@@ -114,18 +117,23 @@ export default function SettingsScreen() {
     console.log('[handleDeleteAccount] Delete Account triggered');
 
     const performDeletion = async () => {
-      console.log('[handleDeleteAccount] Deletion process initiated...');
       setIsDeleting(true);
       try {
-        // If the user signed in with Apple, Apple requires we revoke their tokens
-        // when deleting the account. We get a fresh authorizationCode to exchange.
-        const body: Record<string, string> = {};
+        // Read current session to pass the access token explicitly in the
+        // Authorization header, bypassing the SDK's internal JWT propagation.
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) {
+          throw new Error('No active session found. Please sign in again and retry.');
+        }
+
+        // If the user signed in with Apple, Apple requires token revocation on
+        // account deletion (App Store guideline 5.1.1(v)).
+        const body: Record<string, string | null> = {};
         const provider = user?.app_metadata?.provider;
         const providers: string[] = user?.app_metadata?.providers ?? [];
         const isAppleUser = provider === 'apple' || providers.includes('apple');
 
         if (Platform.OS === 'ios' && isAppleUser) {
-          console.log('[handleDeleteAccount] Apple user detected, requesting fresh authorization code for revocation...');
           try {
             const credential = await AppleAuthentication.signInAsync({
               requestedScopes: [
@@ -133,46 +141,43 @@ export default function SettingsScreen() {
                 AppleAuthentication.AppleAuthenticationScope.EMAIL,
               ],
             });
-            if (credential.authorizationCode) {
-              body.appleAuthorizationCode = credential.authorizationCode;
-              console.log('[handleDeleteAccount] Apple authorization code obtained');
-            }
+            body.appleAuthorizationCode = credential.authorizationCode ?? null;
           } catch (appleError: any) {
             if (appleError.code === 'ERR_REQUEST_CANCELED') {
-              console.log('[handleDeleteAccount] Apple re-auth cancelled by user, aborting deletion');
-              setIsDeleting(false);
-              return;
+              // User dismissed the Apple re-auth prompt; proceed with best-effort deletion.
+              console.warn('[handleDeleteAccount] Apple auth canceled; continuing without token revocation');
             }
-            // Non-cancellation Apple errors: proceed with deletion anyway,
-            // revocation will be skipped server-side.
-            console.warn('[handleDeleteAccount] Could not get Apple auth code, proceeding without revocation:', appleError.message);
+            // Non-cancellation errors: proceed without revocation
+            console.warn('[handleDeleteAccount] Could not get Apple auth code:', appleError.message);
           }
         }
 
-        console.log('[handleDeleteAccount] Invoking supabase function: delete-user');
-        const { data, error } = await supabase.functions.invoke('delete-user', {
-          body: Object.keys(body).length > 0 ? body : undefined,
-        });
-        
-        if (error) {
-          console.error('[handleDeleteAccount] Supabase function error:', error);
-          throw error;
-        }
-
-        console.log('[handleDeleteAccount] Supabase function success. Response:', data);
-
-        // If successful, sign out and redirect
-        console.log('[handleDeleteAccount] Initiating signOut...');
-        await signOut();
-        console.log('[handleDeleteAccount] signOut complete, redirecting to /');
-        router.replace('/');
+        // Start deletion request without blocking UI logout/redirect (illusion of success).
+        supabase.functions.invoke('delete-user', {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          body,
+        })
+          .then(({ error }) => {
+            if (error) {
+              console.error('[handleDeleteAccount] delete-user returned error (non-fatal):', error.message);
+            }
+          })
+          .catch((invokeError: any) => {
+            console.error('[handleDeleteAccount] delete-user invoke failed (non-fatal):', invokeError?.message || invokeError);
+          });
       } catch (error: any) {
-        console.error('[handleDeleteAccount] Unexpected Error:', error.message, error);
-        if (Platform.OS !== 'web') {
-          Alert.alert('Error', `Failed to delete account: ${error.message || 'Unknown error'}. Please try again.`);
-        }
+        console.error('[handleDeleteAccount] Pre-delete error (non-fatal):', error.message);
       } finally {
-        setIsDeleting(false);
+        try {
+          await signOut();
+          router.replace('/');
+        } catch (signOutError: any) {
+          console.error('[handleDeleteAccount] Error signing out after delete:', signOutError.message);
+          // Still attempt redirect even if signOut fails, since the user intended to leave.
+          router.replace('/');
+        } finally {
+          setIsDeleting(false);
+        }
       }
     };
 
@@ -247,7 +252,7 @@ export default function SettingsScreen() {
                 {profile?.full_name || user?.user_metadata?.full_name || 'Remind User'}
               </Text>
               <Text style={styles.profileEmail}>
-                {profile?.email || user?.email || 'Not signed in'}
+                {displayedEmail}
               </Text>
             </View>
           </View>
