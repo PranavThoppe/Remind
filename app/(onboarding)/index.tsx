@@ -54,34 +54,50 @@ export default function WelcomeScreen() {
     useEffect(() => {
         if (session?.user && !loading && !hasAutoRouted.current) {
             hasAutoRouted.current = true;
-            let nextStep = 2; // Default to profile
 
-            if (savedSteps.size > 0) {
-                nextStep = Math.max(...Array.from(savedSteps)) + 1;
-            }
+            (async () => {
+                let nextStep = 2; // Default to profile
 
-            // Pre-populate draft with Google metadata if it's empty (e.g. fresh reload)
-            if (!draft.fullName && session.user.user_metadata?.full_name) {
-                updateDraft({
-                    fullName: session.user.user_metadata.full_name,
-                    avatarUrl: session.user.user_metadata.avatar_url || null,
-                });
-            }
-
-            setTimeout(() => {
-                switch (nextStep) {
-                    case 2: router.replace('/(onboarding)/profile'); break;
-                    case 3: router.replace('/(onboarding)/notifications'); break;
-                    case 4: router.replace('/(onboarding)/appearance'); break;
-                    case 5: router.replace('/(onboarding)/common-times'); break;
-                    case 6: router.replace('/(onboarding)/tags'); break;
-                    case 7: router.replace('/(onboarding)/priorities'); break;
-                    case 8: router.replace('/(onboarding)/complete'); break;
-                    default: router.replace('/(onboarding)/profile'); break;
+                if (savedSteps.size > 0) {
+                    nextStep = Math.max(...Array.from(savedSteps)) + 1;
                 }
-            }, 50);
+
+                const meta = session.user.app_metadata as { provider?: string; providers?: string[] } | undefined;
+                const provider = meta?.provider;
+                const providers = meta?.providers ?? [];
+                const isAppleUser = provider === 'apple' || providers.includes('apple');
+
+                // Signed in with Apple from root auth (/) — never landed on Welcome's onAuthSuccess;
+                // savedSteps is empty so we'd default to profile. Skip profile for App Store compliance.
+                if (isAppleUser && nextStep === 2) {
+                    await saveStep(1);
+                    await saveStep(2);
+                    nextStep = 3;
+                }
+
+                // Pre-populate draft with OAuth metadata if it's empty (e.g. fresh reload)
+                if (!draft.fullName && session.user.user_metadata?.full_name) {
+                    updateDraft({
+                        fullName: session.user.user_metadata.full_name,
+                        avatarUrl: session.user.user_metadata.avatar_url || null,
+                    });
+                }
+
+                setTimeout(() => {
+                    switch (nextStep) {
+                        case 2: router.replace('/(onboarding)/profile'); break;
+                        case 3: router.replace('/(onboarding)/notifications'); break;
+                        case 4: router.replace('/(onboarding)/appearance'); break;
+                        case 5: router.replace('/(onboarding)/common-times'); break;
+                        case 6: router.replace('/(onboarding)/tags'); break;
+                        case 7: router.replace('/(onboarding)/priorities'); break;
+                        case 8: router.replace('/(onboarding)/complete'); break;
+                        default: router.replace('/(onboarding)/profile'); break;
+                    }
+                }, 50);
+            })();
         }
-    }, [session, savedSteps, loading, draft.fullName]);
+    }, [session, savedSteps, loading, draft.fullName, saveStep, updateDraft]);
 
     // Helper: extract a URL param from the OAuth callback URL
     const extractParam = (url: string, param: string): string | null => {
@@ -92,14 +108,23 @@ export default function WelcomeScreen() {
         return search.get(param);
     };
 
-    // Called after any successful auth to mark step 1 done and navigate
-    const onAuthSuccess = async (authUser: any) => {
+    // Called after successful auth to mark progress and navigate.
+    const onAuthSuccess = async (authUser: any, provider: 'apple' | 'google' | 'email' = 'email') => {
         await createProfile(authUser);
         updateDraft({
             fullName: authUser.user_metadata?.full_name || '',
             avatarUrl: authUser.user_metadata?.avatar_url || null,
         });
         await saveStep(1);
+
+        // App Store review compliance:
+        // Skip name-entry profile step for Apple Sign In users.
+        if (provider === 'apple') {
+            await saveStep(2);
+            router.push('/(onboarding)/notifications');
+            return;
+        }
+
         router.push('/(onboarding)/profile');
     };
 
@@ -140,7 +165,7 @@ export default function WelcomeScreen() {
                         if (sessionError) throw sessionError;
 
                         if (sessionData?.user) {
-                            await onAuthSuccess(sessionData.user);
+                            await onAuthSuccess(sessionData.user, 'google');
                         }
                     } else {
                         console.error('[Auth] Missing tokens in redirect URL');
@@ -187,7 +212,7 @@ export default function WelcomeScreen() {
                         await supabase.auth.updateUser({ data: { full_name: fullName } });
                         data.user.user_metadata = { ...data.user.user_metadata, full_name: fullName };
                     }
-                    await onAuthSuccess(data.user);
+                    await onAuthSuccess(data.user, 'apple');
                 }
             }
         } catch (error: any) {
@@ -222,7 +247,7 @@ export default function WelcomeScreen() {
                     setIsSignInMode(true);
                     return;
                 }
-                await onAuthSuccess(data.user);
+                await onAuthSuccess(data.user, 'email');
             }
         } catch (err: any) {
             console.error('[Auth] Sign-up error:', err);
@@ -243,7 +268,7 @@ export default function WelcomeScreen() {
             if (error) { Alert.alert('Error', error.message); return; }
 
             if (data?.user) {
-                await onAuthSuccess(data.user);
+                await onAuthSuccess(data.user, 'email');
             }
         } catch (err: any) {
             console.error('[Auth] Sign-in error:', err);
