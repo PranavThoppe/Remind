@@ -1,6 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+    ActivityIndicator,
+    Alert,
     Animated,
     Easing,
     StyleSheet,
@@ -8,7 +10,6 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { OnboardingShell } from '../../components/OnboardingShell';
 import { borderRadius, spacing, typography } from '../../constants/theme';
 import { useAuth } from '../../contexts/AuthContext';
@@ -20,7 +21,7 @@ export default function CompleteScreen() {
     const styles = createStyles(colors);
     const { totalSteps } = useOnboarding();
     const { updateProfile } = useAuth();
-    const router = useRouter();
+    const [navigating, setNavigating] = useState(false);
 
     // Checkmark circle scale animation
     const scaleAnim = useRef(new Animated.Value(0)).current;
@@ -98,8 +99,18 @@ export default function CompleteScreen() {
     }, []);
 
     const handleGoToHome = async () => {
-        await updateProfile({ has_onboarded: true });
-        router.replace('/(tabs)');
+        if (navigating) return;
+        setNavigating(true);
+        const success = await updateProfile({ has_onboarded: true });
+        if (!success) {
+            setNavigating(false);
+            Alert.alert(
+                'Something went wrong',
+                'Please check your connection and try again.',
+                [{ text: 'OK' }]
+            );
+        }
+        // On success: AuthGuard detects has_onboarded=true and auto-navigates to /(tabs)
     };
 
     const DOT_COLORS = [
@@ -172,12 +183,19 @@ export default function CompleteScreen() {
                 </Text>
 
                 <TouchableOpacity
-                    style={styles.ctaButton}
+                    style={[styles.ctaButton, navigating && styles.ctaButtonDisabled]}
                     onPress={handleGoToHome}
                     activeOpacity={0.85}
+                    disabled={navigating}
                 >
-                    <Text style={styles.ctaText}>Go to Home</Text>
-                    <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+                    {navigating ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                        <>
+                            <Text style={styles.ctaText}>Go to Home</Text>
+                            <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+                        </>
+                    )}
                 </TouchableOpacity>
             </View>
         </OnboardingShell>
@@ -255,5 +273,8 @@ const createStyles = (colors: any) =>
             fontFamily: typography.fontFamily.semibold,
             fontSize: typography.fontSize.lg,
             color: '#FFFFFF',
+        },
+        ctaButtonDisabled: {
+            opacity: 0.6,
         },
     });
